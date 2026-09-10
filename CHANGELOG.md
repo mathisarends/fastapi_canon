@@ -15,6 +15,9 @@ All notable changes to `fastapi-canon` are documented in this file.
 - Renamed the `CanonRouter` registry parameter from `errors=` to
   `error_registry=` to distinguish the available error catalog from the
   router-level and operation-level errors declared through `raises=`.
+- `Feature` now collects error registries from its direct `CanonRouter`
+  contributions when `errors=` is omitted. Identical registry contributions
+  across features are merged once.
 
 ### Fixed
 

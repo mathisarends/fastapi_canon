@@ -11,6 +11,7 @@ from starlette.types import ExceptionHandler, Lifespan
 
 from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
 from fastapi_canon.openapi import install_openapi_contracts
+from fastapi_canon.router import CanonRouter
 
 type FeatureLifespan = Lifespan[FastAPI]
 type ProviderFactory = Callable[[], Provider]
@@ -88,10 +89,17 @@ class Feature:
             msg = f"feature {normalized_name!r} lifespan must be callable or None"
             raise FeatureConfigurationError(msg)
 
+        resolved_errors = errors
+        if resolved_errors is None:
+            resolved_errors = _collect_router_errors(
+                normalized_routers,
+                feature_name=normalized_name,
+            )
+
         object.__setattr__(self, "name", normalized_name)
         object.__setattr__(self, "routers", normalized_routers)
         object.__setattr__(self, "providers", normalized_providers)
-        object.__setattr__(self, "errors", errors)
+        object.__setattr__(self, "errors", resolved_errors)
         object.__setattr__(self, "exception_handlers", normalized_handlers)
         object.__setattr__(self, "lifespan", lifespan)
 
@@ -299,6 +307,25 @@ def _unique_instances[ItemT](
     return tuple(result)
 
 
+def _collect_router_errors(
+    routers: tuple[APIRouter, ...], *, feature_name: str
+) -> ErrorRegistry | None:
+    registries: list[tuple[str, ErrorRegistry]] = []
+    seen: set[int] = set()
+    for router in routers:
+        if not isinstance(router, CanonRouter) or router.error_registry is None:
+            continue
+        if id(router.error_registry) in seen:
+            continue
+        seen.add(id(router.error_registry))
+        registries.append((feature_name, router.error_registry))
+    return _merge_errors(
+        tuple(registries),
+        name=f"{feature_name}-routers" if len(registries) > 1 else None,
+        type_base=None,
+    )
+
+
 def _validate_optional_string(value: object, parameter: str) -> None:
     if value is not None and not isinstance(value, str):
         msg = f"{parameter} must be a string or None"
@@ -493,6 +520,14 @@ def _merge_errors(
 ) -> ErrorRegistry | None:
     if not registries:
         return None
+    distinct: list[tuple[str, ErrorRegistry]] = []
+    seen: set[int] = set()
+    for contribution in registries:
+        if id(contribution[1]) in seen:
+            continue
+        seen.add(id(contribution[1]))
+        distinct.append(contribution)
+    registries = tuple(distinct)
     inferred_base = type_base
     registry_bases = {registry.type_base for _, registry in registries}
     if inferred_base is None and len(registry_bases) == 1:

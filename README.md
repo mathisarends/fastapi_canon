@@ -70,6 +70,12 @@ feature = Feature(
 )
 ```
 
+When `errors=` is omitted, a feature collects the registries referenced by its
+direct `CanonRouter` contributions. Supplying `errors=` remains available when
+ownership must be explicit, such as a registry used by routers in another
+feature. Repeated contributions of the same definitions are merged once at the
+application boundary.
+
 Mutable sequences passed to `Feature` are copied to tuples. Installing features
 preserves declaration order for routes and startup. Shutdown runs in reverse
 order, including cleanup of features that started before a later feature failed.
@@ -172,7 +178,6 @@ projects = CanonRouter(
 project_feature = Feature(
     name="projects",
     routers=[projects],
-    errors=project_errors,
 )
 
 app = Composition(
