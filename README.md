@@ -12,6 +12,25 @@ Dishka providers, and the composition builds and owns one shared Dishka
 container. Applications that choose another dependency-injection framework are
 outside the library's intended architecture.
 
+## Contents
+
+- [Quick start](#quick-start)
+- [Feature composition](#feature-composition)
+  - [Shared API router](#shared-api-router)
+  - [Dishka](#dishka)
+- [Error contracts](#error-contracts)
+  - [OpenAPI representation](#openapi-representation)
+- [Success response contracts](#success-response-contracts)
+  - [Server-sent events](#server-sent-events)
+  - [Binary and PDF streams](#binary-and-pdf-streams)
+  - [Streaming boundary](#streaming-boundary)
+- [Installation guarantees](#installation-guarantees)
+- [Requirements](#requirements)
+- [Development](#development)
+- [Showcase](#showcase)
+
+## Quick start
+
 ```python
 from fastapi import APIRouter, FastAPI
 from fastapi_canon import Composition, Feature
@@ -29,7 +48,7 @@ project_feature = Feature(name="projects", routers=[projects])
 app = Composition(project_feature).apply(FastAPI())
 ```
 
-## Contributions
+## Feature composition
 
 Every contribution is optional:
 
@@ -104,7 +123,7 @@ it during application shutdown. Existing application lifespans are composed
 automatically. Applications should treat the exposed container as
 composition-owned and not close it independently.
 
-### Errors
+## Error contracts
 
 Error contracts are implemented directly by `fastapi-canon`; no separate error
 library is required. Each feature may expose one `ErrorRegistry`. Registries are
@@ -173,9 +192,8 @@ generic HTTP problem may share a status; the generated response then uses the
 same discriminated `oneOf` representation.
 
 FastAPI `responses={...}` entries without canon error declarations require no
-additional metadata. Success contracts and other media types such as SSE or PDF
-can be declared alongside problem responses. See
-[`STREAM_API.md`](STREAM_API.md) for complete streaming examples.
+additional metadata. Success contracts and other media types can be declared
+alongside problem responses.
 
 #### OpenAPI representation
 
@@ -245,6 +263,138 @@ for API exposure. Exception text can be used as detail when it is itself a
 reviewed public contract. Domain registries should use specific exception types;
 broad built-ins such as `Exception`, `ValueError`, and `RuntimeError` can also
 match unrelated programming failures.
+
+## Success response contracts
+
+`Response` describes one successful response using the same `responses()` call
+as domain and HTTP errors:
+
+```python
+from fastapi_canon import Response
+
+
+@router.get(
+    "/events",
+    responses=api_errors.responses(
+        http_statuses=[401, 403],
+        success=Response.sse(),
+    ),
+)
+async def events() -> StreamingResponse: ...
+```
+
+The generic form accepts a status, media type, OpenAPI schema, description, and
+response headers:
+
+```python
+success = Response(
+    status=200,
+    media_type="application/example+json",
+    schema={"type": "object"},
+    description="Example document",
+    headers=["X-Request-ID"],
+)
+```
+
+The available constructors are:
+
+| Constructor | Default contract |
+| --- | --- |
+| `Response.json()` | `application/json` with status 200 |
+| `Response.empty()` | No response content with status 204 |
+| `Response.stream(media_type)` | String stream with status 200 |
+| `Response.binary(media_type)` | Binary string stream with status 200 |
+| `Response.sse()` | `Response.stream("text/event-stream")` |
+
+Schemas and header definitions are copied into immutable mappings. Header names
+may be supplied as a list for standard string-valued header schemas or as a
+mapping containing complete OpenAPI header definitions. When a success status
+is not 200, set the same `status_code` on the FastAPI route.
+
+### Server-sent events
+
+```python
+from collections.abc import AsyncIterator
+
+from fastapi.responses import StreamingResponse
+from fastapi_canon import Response
+
+
+async def event_chunks() -> AsyncIterator[str]:
+    yield "event: ready\ndata: {}\n\n"
+    yield 'event: message\ndata: {"id": 1}\n\n'
+
+
+@router.get(
+    "/events",
+    responses=api_errors.responses(
+        http_statuses=[401, 403],
+        success=Response.sse(),
+    ),
+)
+async def events() -> StreamingResponse:
+    return StreamingResponse(
+        event_chunks(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+```
+
+### Binary and PDF streams
+
+```python
+from collections.abc import Iterator
+from pathlib import Path
+from uuid import UUID
+
+from fastapi.responses import StreamingResponse
+from fastapi_canon import Response
+
+
+def pdf_chunks(path: Path) -> Iterator[bytes]:
+    with path.open("rb") as source:
+        while chunk := source.read(64 * 1024):
+            yield chunk
+
+
+@router.get(
+    "/documents/{document_id}",
+    responses=api_errors.responses(
+        document_missing,
+        http_statuses=[401, 403],
+        success=Response.binary(
+            "application/pdf",
+            headers=["Content-Disposition"],
+        ),
+    ),
+)
+async def document(document_id: UUID) -> StreamingResponse:
+    path = Path("documents") / f"{document_id}.pdf"
+    if not path.is_file():
+        raise DocumentMissing
+    return StreamingResponse(
+        pdf_chunks(path),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{document_id}.pdf"',
+        },
+    )
+```
+
+The generated operation documents only `text/event-stream` or
+`application/pdf` for the successful response. Error responses continue to use
+`application/problem+json`.
+
+### Streaming boundary
+
+Authentication, authorization, validation, and resource lookup should complete
+before returning `StreamingResponse`. Once response headers have been sent, an
+exception inside the iterator cannot be converted into another HTTP response.
+SSE protocols can define an application-specific failure event; a failed binary
+iterator produces an incomplete download.
 
 ## Installation guarantees
 
