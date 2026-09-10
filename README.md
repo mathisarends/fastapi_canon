@@ -1,9 +1,16 @@
 # fastapi-canon
 
-`fastapi-canon` is a small composition library for feature-oriented FastAPI
-applications. A feature groups its routers, Dishka providers, error contracts,
-exception handlers, and lifespan into one immutable value. The application
-installs an explicitly ordered set of those values at its composition root.
+`fastapi-canon` is an opinionated composition library for feature-oriented
+FastAPI applications. A feature groups its routers, Dishka providers, error
+contracts, exception handlers, and lifespan into one immutable value. The
+application installs an explicitly ordered set of those values at its
+composition root.
+
+Dishka is a deliberate part of this canon, not an optional integration.
+`fastapi-canon` defines one dependency-injection approach: features contribute
+Dishka providers, and the composition builds and owns one shared Dishka
+container. Applications that choose another dependency-injection framework are
+outside the library's intended architecture.
 
 ```python
 from fastapi import APIRouter, FastAPI
@@ -42,10 +49,11 @@ order, including cleanup of features that started before a later feature failed.
 
 ### Dishka
 
-Provider instances from every feature are validated together and used to build
-one `AsyncContainer`. Applying the composition configures Dishka's FastAPI
-middleware and closes the container during application shutdown. Dishka exposes
-the container as `app.state.dishka_container`.
+Dishka is a required runtime dependency and the canonical dependency-injection
+mechanism. Provider instances from every feature are validated together and
+used to build one `AsyncContainer`. Applying the composition configures
+Dishka's FastAPI middleware and closes the container during application
+shutdown. Dishka exposes the container as `app.state.dishka_container`.
 
 ### Errors
 
@@ -98,6 +106,52 @@ Declare endpoint responses from the same registry used at runtime:
 async def get_project(project_id: str) -> dict[str, str]:
     raise ProjectNotFound(project_id)
 ```
+
+#### OpenAPI representation
+
+Every declared error becomes a reusable schema in `components.schemas`. The
+corresponding operation references it as an `application/problem+json`
+response:
+
+```yaml
+paths:
+  /projects/{project_id}:
+    get:
+      responses:
+        "404":
+          description: Project not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProjectNotFoundProblem"
+
+components:
+  schemas:
+    ProjectNotFoundProblem:
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type:
+          type: string
+          const: https://api.example.com/problems/project_not_found
+        title:
+          type: string
+          const: Project not found
+        status:
+          type: integer
+          const: 404
+        code:
+          type: string
+          const: project_not_found
+        detail:
+          type: [string, "null"]
+```
+
+Typed extension fields and documented response headers are added to that same
+schema and response. If multiple errors share one status code, the response
+uses `oneOf` with `code` as its discriminator. When validation normalization is
+enabled, FastAPI's default `422` response is replaced by
+`RequestValidationProblem` using the same media type.
 
 When all local registries already share a `type_base`, it is inferred. The
 `ErrorOptions` settings `include_validation_error`,

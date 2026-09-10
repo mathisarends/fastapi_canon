@@ -1,4 +1,4 @@
-"""Feature-oriented composition for FastAPI applications."""
+"""Opinionated FastAPI feature composition with Dishka and Problem Details."""
 
 from .error import Error, ErrorConfigurationError, ErrorRegistry, Problem
 from .feature import (
