@@ -65,8 +65,7 @@ class ApplicationRouter(APIRouter):
     pass
 
 
-async def require_request_id() -> None:
-    ...
+async def require_request_id() -> None: ...
 
 
 composition = Composition(
@@ -165,8 +164,7 @@ Normalized `HTTPException` responses use the same declaration path:
     "/private",
     responses=project_errors.responses(http_statuses=[401, 403]),
 )
-async def private_project() -> dict[str, str]:
-    ...
+async def private_project() -> dict[str, str]: ...
 ```
 
 These contracts document the normalized runtime codes (`http_401`,

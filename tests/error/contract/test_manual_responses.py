@@ -14,9 +14,7 @@ from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
         {
             "description": "PDF document",
             "content": {
-                "application/pdf": {
-                    "schema": {"type": "string", "format": "binary"}
-                }
+                "application/pdf": {"schema": {"type": "string", "format": "binary"}}
             },
         },
         {"description": "Service is ready"},
