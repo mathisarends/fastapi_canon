@@ -8,8 +8,6 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 - Added `validate_openapi_contracts(app)` and `Composition.validate(app)` as
   intention-revealing OpenAPI contract validation entry points.
-- Added `CanonRouterGroup` for creating sibling routers with one shared error
-  registry and shared router-level `raises=` contracts.
 - Added `install_openapi_contracts(app)` for low-level success-only
   applications. `Composition` installs the compiler automatically even when no
   error registry exists.
