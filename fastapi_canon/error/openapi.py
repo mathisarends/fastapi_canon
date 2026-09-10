@@ -5,15 +5,14 @@ from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import FastAPI
-from fastapi.routing import APIRoute
 from pydantic import ValidationError
 
 from fastapi_canon.error.contracts import (
     ERRORS_EXTENSION,
     HTTP_STATUSES_EXTENSION,
-    INSTALLED_REGISTRY_STATE_KEY,
     SUCCESS_EXTENSION,
-    iter_http_contracts,
+    contracts_from_responses,
+    iter_operations,
 )
 from fastapi_canon.error.problem import Problem
 from fastapi_canon.error.types import (
@@ -26,12 +25,9 @@ from fastapi_canon.error.types import (
 
 if TYPE_CHECKING:
     from fastapi_canon.error.registry import AnyError, ErrorRegistry
-    from fastapi_canon.response import Response
+    from fastapi_canon.response import CanonResponse
 
 _PROBLEM_MEDIA_TYPE = "application/problem+json"
-_HTTP_METHODS = frozenset(
-    {"get", "put", "post", "delete", "options", "head", "patch", "trace"}
-)
 _MISSING = object()
 
 
@@ -48,9 +44,11 @@ def install_openapi(
         if app.openapi_schema is not None:
             return app.openapi_schema
         document = previous_openapi()
+        # FastAPI caches its document before our validation. Do not retain an
+        # uncompiled schema if compilation fails.
+        app.openapi_schema = None
         compiled = compile_document(
             registry,
-            app,
             document,
             include_validation_error=include_validation_error,
             include_http_exceptions=include_http_exceptions,
@@ -63,7 +61,6 @@ def install_openapi(
 
 def compile_document(
     registry: ErrorRegistry,
-    app: FastAPI,
     document: dict[str, Any],
     *,
     include_validation_error: bool,
@@ -87,38 +84,30 @@ def compile_document(
             _request_validation_schema(registry),
         )
 
-    contracts = effective_http_contracts(app, registry)
-    declared_http_statuses = {
-        status for _, _, _, statuses, _ in contracts for status in statuses
-    }
-    if declared_http_statuses and not include_http_exceptions:
-        msg = "normalized HTTP responses require HTTP exception normalization"
-        raise ErrorConfigurationError(msg)
-    for status in sorted(declared_http_statuses):
-        _add_component(
-            components,
-            _http_component_name(status),
-            _http_problem_schema(status),
+    for path, operation in iter_operations(result):
+        responses = operation.setdefault("responses", {})
+        _errors, http_statuses, _success = contracts_from_responses(
+            path, responses, registry
         )
-
-    for path, methods, _errors, _http_statuses, _success in contracts:
-        path_item = cast(dict[str, Any] | None, result.get("paths", {}).get(path))
-        if path_item is None:
-            continue
-        for method in methods:
-            operation = cast(dict[str, Any] | None, path_item.get(method.lower()))
-            if operation is None or method.lower() not in _HTTP_METHODS:
-                continue
-            responses = operation.setdefault("responses", {})
-            for response in responses.values():
-                if isinstance(response, dict):
-                    response.pop(ERRORS_EXTENSION, None)
-                    response.pop(HTTP_STATUSES_EXTENSION, None)
-                    success_media_type = response.pop(SUCCESS_EXTENSION, _MISSING)
-                    if success_media_type is not _MISSING:
-                        _retain_success_content(response, success_media_type)
-            if include_validation_error:
-                _replace_default_validation_response(responses)
+        if http_statuses and not include_http_exceptions:
+            msg = (
+                f"route {path!r} declares normalized HTTP responses, "
+                "but HTTP exception normalization is disabled"
+            )
+            raise ErrorConfigurationError(msg)
+        for status in http_statuses:
+            _add_component(
+                components, _http_component_name(status), _http_problem_schema(status)
+            )
+        for response in responses.values():
+            if isinstance(response, dict):
+                response.pop(ERRORS_EXTENSION, None)
+                response.pop(HTTP_STATUSES_EXTENSION, None)
+                success_media_type = response.pop(SUCCESS_EXTENSION, _MISSING)
+                if success_media_type is not _MISSING:
+                    _retain_success_content(response, success_media_type)
+        if include_validation_error:
+            _replace_default_validation_response(responses)
 
     return result
 
@@ -128,7 +117,7 @@ def compile_responses(
     errors: Sequence[AnyError],
     *,
     http_statuses: Sequence[int] = (),
-    success: Response | None = None,
+    success: CanonResponse | None = None,
 ) -> OpenAPIResponses:
     grouped: dict[int, list[AnyError]] = {}
     for error in errors:
@@ -177,14 +166,12 @@ def compile_responses(
         if success.status in result:
             msg = f"success response conflicts with error status {success.status}"
             raise ErrorConfigurationError(msg)
-        compiled_success = success.as_openapi()
-        compiled_success[SUCCESS_EXTENSION] = success.media_type
-        return {success.status: compiled_success, **result}
+        return {**success.responses(), **result}
     return result
 
 
 def _retain_success_content(response: dict[str, Any], media_type: object) -> None:
-    if media_type is None:
+    if media_type is None or media_type == "":
         response.pop("content", None)
         return
     if not isinstance(media_type, str):
@@ -427,66 +414,6 @@ def _request_validation_schema(registry: ErrorRegistry) -> dict[str, Any]:
     cast(list[str], schema["required"]).append("errors")
     schema["title"] = "RequestValidationProblem"
     return schema
-
-
-def effective_http_contracts(
-    app: FastAPI, registry: ErrorRegistry | None = None
-) -> list[
-    tuple[
-        str,
-        set[str],
-        tuple[AnyError, ...],
-        tuple[int, ...],
-        tuple[int, str | None] | None,
-    ]
-]:
-    if registry is None:
-        from fastapi_canon.error.registry import ErrorRegistry
-
-        candidate = getattr(app.state, INSTALLED_REGISTRY_STATE_KEY, None)
-        if not isinstance(candidate, ErrorRegistry):
-            msg = "install an ErrorRegistry before reading route contracts"
-            raise ErrorConfigurationError(msg)
-        registry = candidate
-    contracts = list(iter_http_contracts(app.router, registry))
-    contexts = _effective_api_routes(app)
-    if len(contracts) != len(contexts):
-        msg = "FastAPI route traversal changed; cannot compile error contracts safely"
-        raise ErrorConfigurationError(msg)
-    result: list[
-        tuple[
-            str,
-            set[str],
-            tuple[AnyError, ...],
-            tuple[int, ...],
-            tuple[int, str | None] | None,
-        ]
-    ] = []
-    for (route, errors, http_statuses, success), context in zip(
-        contracts, contexts, strict=True
-    ):
-        original = getattr(context, "original_route", context)
-        if original is not route:
-            msg = "FastAPI route order changed; cannot compile error contracts safely"
-            raise ErrorConfigurationError(msg)
-        path = cast(str, getattr(context, "path", route.path))
-        methods = set(
-            cast(set[str] | None, getattr(context, "methods", route.methods)) or ()
-        )
-        result.append((path, methods, errors, http_statuses, success))
-    return result
-
-
-def _effective_api_routes(app: FastAPI) -> list[object]:
-    try:
-        from fastapi.routing import iter_route_contexts
-    except ImportError:
-        return [route for route in app.routes if isinstance(route, APIRoute)]
-    return [
-        context
-        for context in iter_route_contexts(app.routes)
-        if isinstance(getattr(context, "original_route", None), APIRoute)
-    ]
 
 
 def _add_component(

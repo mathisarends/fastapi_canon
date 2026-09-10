@@ -268,7 +268,7 @@ def test_install_rejects_custom_framework_handler(
         make_registry().install(app)
 
 
-def test_install_rejects_error_response_missing_from_application_registry() -> None:
+def test_openapi_rejects_error_response_missing_from_application_registry() -> None:
     missing = make_error()
     feature_registry = ErrorRegistry(errors=[missing], name="sessions")
     router = APIRouter()
@@ -283,11 +283,12 @@ def test_install_rejects_error_response_missing_from_application_registry() -> N
         errors=[], type_base="https://example.test/problems"
     )
 
+    application_registry.install(app)
     with pytest.raises(
         ErrorConfigurationError,
         match="exact definition is missing",
     ):
-        application_registry.install(app)
+        app.openapi()
 
 
 def test_install_accepts_route_from_merged_feature_registry() -> None:

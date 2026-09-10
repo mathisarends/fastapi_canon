@@ -122,8 +122,9 @@ def test_declared_http_response_requires_runtime_normalization() -> None:
     app = FastAPI()
     app.include_router(router)
 
+    registry.install(app, include_http_exceptions=False)
     with pytest.raises(ErrorConfigurationError, match="normalization is disabled"):
-        registry.install(app, include_http_exceptions=False)
+        app.openapi()
 
 
 def test_generic_http_response_rejects_a_conflicting_domain_code() -> None:

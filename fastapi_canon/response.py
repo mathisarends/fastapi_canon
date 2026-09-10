@@ -12,6 +12,7 @@ from fastapi_canon.error.types import (
     JsonValue,
     OpenAPIHeader,
     OpenAPIResponse,
+    OpenAPIResponses,
 )
 
 type ResponseHeaders = Sequence[str] | Mapping[str, OpenAPIHeader]
@@ -22,8 +23,12 @@ _MEDIA_TYPE_PATTERN = re.compile(
 _NO_CONTENT_STATUSES = frozenset({204, 304})
 
 
+class ResponseConfigurationError(ErrorConfigurationError):
+    """Raised when a Canon response conflicts with its FastAPI route."""
+
+
 @dataclass(frozen=True, slots=True, init=False)
-class Response:
+class CanonResponse:
     """An immutable OpenAPI contract for one successful HTTP response."""
 
     status: int
@@ -157,6 +162,15 @@ class Response:
                 name: _thaw(definition) for name, definition in self.headers.items()
             }
         return result
+
+    def responses(self) -> OpenAPIResponses:
+        """Compile this contract for a FastAPI route's ``responses`` argument."""
+        from fastapi_canon.error.contracts import SUCCESS_EXTENSION
+
+        response = self.as_openapi()
+        # FastAPI omits null extension values when serializing OpenAPI.
+        response[SUCCESS_EXTENSION] = self.media_type or ""
+        return {self.status: response}
 
 
 def _validate_status(value: object) -> int:

@@ -535,7 +535,6 @@ def _validate_error_installation(
         raise FeatureConfigurationError(msg)
     validation_app = FastAPI()
     validation_app.exception_handlers.update(app.exception_handlers)
-    validation_app.router.routes = list(app.router.routes)
     for router in routers:
         validation_app.include_router(router)
     for spec in handler_specs:

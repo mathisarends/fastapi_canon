@@ -17,7 +17,7 @@ from fastapi_canon.error.types import (
     is_absolute_uri,
 )
 from fastapi_canon.error.validation import unique_instances
-from fastapi_canon.response import Response
+from fastapi_canon.response import CanonResponse
 
 type AnyError = Error[Any]
 
@@ -165,12 +165,12 @@ class ErrorRegistry:
         self,
         *errors: AnyError,
         http_statuses: Sequence[int] = (),
-        success: Response | None = None,
+        success: CanonResponse | None = None,
     ) -> OpenAPIResponses:
         """Compile domain and normalized HTTP responses for FastAPI routes."""
         raw_success: object = success
-        if raw_success is not None and not isinstance(raw_success, Response):
-            msg = "success must be a fastapi_canon.Response instance or None"
+        if raw_success is not None and not isinstance(raw_success, CanonResponse):
+            msg = "success must be a fastapi_canon.CanonResponse instance or None"
             raise ErrorConfigurationError(msg)
         return compile_responses(
             self,

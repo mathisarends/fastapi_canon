@@ -11,9 +11,12 @@ from .feature import (
     ProviderSource,
     RouterFactory,
 )
-from .response import Response, ResponseHeaders
+from .response import CanonResponse, ResponseConfigurationError, ResponseHeaders
+from .router import CanonRouter
 
 __all__ = [
+    "CanonResponse",
+    "CanonRouter",
     "Composition",
     "Error",
     "ErrorConfigurationError",
@@ -25,7 +28,7 @@ __all__ = [
     "Problem",
     "ProviderFactory",
     "ProviderSource",
-    "Response",
+    "ResponseConfigurationError",
     "ResponseHeaders",
     "RouterFactory",
 ]

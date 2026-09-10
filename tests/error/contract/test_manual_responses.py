@@ -50,7 +50,7 @@ def test_explicit_malformed_canon_metadata_is_still_rejected() -> None:
         responses={
             200: {
                 "description": "Invalid metadata",
-                "x-fastapi-canon-errors": (),
+                "x-fastapi-canon-errors": "invalid",
             }
         },
     )(lambda: None)
@@ -61,5 +61,6 @@ def test_explicit_malformed_canon_metadata_is_still_rejected() -> None:
         type_base="https://example.test/problems",
     )
 
+    registry.install(app)
     with pytest.raises(ErrorConfigurationError, match="invalid fastapi-canon"):
-        registry.install(app)
+        app.openapi()
