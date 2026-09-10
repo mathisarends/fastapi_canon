@@ -142,6 +142,8 @@ Install the development dependencies and run the quality gates:
 
 ```console
 uv sync --all-groups
+uv run pre-commit install --config .pre-commit-config.yml
+uv run pre-commit run --config .pre-commit-config.yml --all-files
 uv run ruff format --check .
 uv run ruff check .
 uv run mypy

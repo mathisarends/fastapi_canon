@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+          python-version: "3.14"
+      - run: uv sync --frozen --all-groups
+      - run: >-
+          uv run pre-commit run
+          --config .pre-commit-config.yml
+          --all-files
+          --show-diff-on-failure
+      - run: uv run mypy
+
+  test:
+    name: Test (${{ matrix.os }}, Python ${{ matrix.python }}, ${{ matrix.resolution }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: "3.12"
+            resolution: locked
+          - os: ubuntu-latest
+            python: "3.13"
+            resolution: locked
+          - os: ubuntu-latest
+            python: "3.14"
+            resolution: locked
+          - os: ubuntu-latest
+            python: "3.12"
+            resolution: lowest-direct
+          - os: ubuntu-latest
+            python: "3.14"
+            resolution: latest
+          - os: windows-latest
+            python: "3.14"
+            resolution: locked
+          - os: macos-latest
+            python: "3.14"
+            resolution: locked
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python }}
+      - if: matrix.resolution == 'locked'
+        run: uv sync --frozen --all-groups
+      - if: matrix.resolution == 'lowest-direct'
+        run: >-
+          uv run --isolated --no-project --python 3.12
+          --with .
+          --with "dishka==1.10.0"
+          --with "fastapi==0.115.0"
+          --with "pydantic==2.9.0"
+          --with "httpx==0.27.0"
+          --with "httpx2>=2.12.0"
+          --with "pytest>=8.3"
+          --with "jsonschema>=4.23"
+          --with "openapi-spec-validator>=0.7.1"
+          pytest
+      - if: matrix.resolution == 'latest'
+        run: >-
+          uv run --isolated --no-project --python 3.14
+          --with .
+          --with httpx
+          --with httpx2
+          --with pytest
+          --with jsonschema
+          --with openapi-spec-validator
+          pytest
+      - if: matrix.resolution == 'locked'
+        run: uv run pytest
+
+  package:
+    name: Build and clean-wheel import
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+          python-version: "3.14"
+      - run: uv build
+      - run: uv venv --python 3.14 .wheel-venv
+      - run: uv pip install --python .wheel-venv/bin/python dist/*.whl
+      - run: >-
+          .wheel-venv/bin/python -I -c
+          "from fastapi_canon import Composition, Error, ErrorConfigurationError,
+          ErrorOptions, ErrorRegistry, Feature, Problem;
+          assert all((Composition, Error, ErrorConfigurationError,
+          ErrorOptions, ErrorRegistry, Feature, Problem))"
