@@ -52,7 +52,7 @@ SESSION_ERRORS = ErrorRegistry(
 def test_router_composes_shared_and_operation_contracts() -> None:
     router = CanonRouter(
         prefix="/sessions",
-        errors=SESSION_ERRORS,
+        error_registry=SESSION_ERRORS,
         raises=[AUTHENTICATION_REQUIRED, SESSION_NOT_FOUND],
     )
 
@@ -124,7 +124,10 @@ def test_all_http_decorators_accept_canon_contracts(method: str, verb: str) -> N
 
 
 def test_api_route_accepts_canon_contracts_for_custom_method_sets() -> None:
-    router = CanonRouter(errors=SESSION_ERRORS, raises=[SESSION_NOT_FOUND])
+    router = CanonRouter(
+        error_registry=SESSION_ERRORS,
+        raises=[SESSION_NOT_FOUND],
+    )
     router.api_route(
         "/resource",
         methods=["GET", "POST"],
@@ -139,13 +142,18 @@ def test_api_route_accepts_canon_contracts_for_custom_method_sets() -> None:
 
 
 def test_raises_requires_a_registry() -> None:
-    with pytest.raises(ErrorConfigurationError, match="requires an errors registry"):
+    with pytest.raises(ErrorConfigurationError, match="requires an error registry"):
         CanonRouter(raises=[SESSION_NOT_FOUND])
+
+
+def test_error_registry_rejects_invalid_value() -> None:
+    with pytest.raises(ErrorConfigurationError, match="error_registry must be"):
+        CanonRouter(error_registry=object())  # type: ignore[arg-type]
 
 
 def test_raises_rejects_foreign_errors_at_declaration_time() -> None:
     foreign = error(SessionNotFound, 404, "foreign_session")
-    router = CanonRouter(errors=SESSION_ERRORS)
+    router = CanonRouter(error_registry=SESSION_ERRORS)
 
     with pytest.raises(ErrorConfigurationError, match="does not belong"):
         router.get("/session", raises=[foreign])
@@ -185,7 +193,10 @@ def test_canon_contract_rejects_conflicting_fastapi_response() -> None:
 
 
 def test_nested_reused_router_preserves_contracts_and_streaming_runtime() -> None:
-    router = CanonRouter(errors=SESSION_ERRORS, raises=[SESSION_NOT_FOUND])
+    router = CanonRouter(
+        error_registry=SESSION_ERRORS,
+        raises=[SESSION_NOT_FOUND],
+    )
 
     @router.get("/{session_id}", response=CanonResponse.sse())
     async def events(session_id: str) -> StreamingResponse:

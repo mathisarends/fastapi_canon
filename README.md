@@ -166,7 +166,7 @@ project_errors = ErrorRegistry(
 projects = CanonRouter(
     prefix="/projects",
     tags=["projects"],
-    errors=project_errors,
+    error_registry=project_errors,
 )
 
 project_feature = Feature(
@@ -275,8 +275,8 @@ match unrelated programming failures.
 ### Canon routers
 
 `CanonRouter` separates errors shared by a router context from the errors that
-belong to one operation. Give the router its registry through `errors=` and
-declare shared contracts once with `raises=`:
+belong to one operation. Give the router its registry through
+`error_registry=` and declare shared contracts once with `raises=`:
 
 ```python
 from fastapi.responses import StreamingResponse
@@ -284,7 +284,7 @@ from fastapi_canon import CanonResponse, CanonRouter
 
 router = CanonRouter(
     prefix="/sessions",
-    errors=SESSION_ERRORS,
+    error_registry=SESSION_ERRORS,
     raises=[
         AUTHENTICATION_REQUIRED_ERROR,
         SESSION_NOT_FOUND_ERROR,
@@ -417,7 +417,7 @@ from fastapi_canon import CanonResponse, CanonRouter
 
 
 router = CanonRouter(
-    errors=api_errors,
+    error_registry=api_errors,
     raises=[AUTHENTICATION_REQUIRED_ERROR, ACCESS_DENIED_ERROR],
 )
 
@@ -454,7 +454,7 @@ from fastapi_canon import CanonResponse, CanonRouter
 
 
 router = CanonRouter(
-    errors=document_errors,
+    error_registry=document_errors,
     raises=[AUTHENTICATION_REQUIRED_ERROR, ACCESS_DENIED_ERROR],
 )
 

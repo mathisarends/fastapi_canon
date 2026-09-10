@@ -18,18 +18,20 @@ class CanonRouter(APIRouter):
     def __init__(
         self,
         *,
-        errors: ErrorRegistry | None = None,
+        error_registry: ErrorRegistry | None = None,
         raises: Sequence[AnyError] = (),
         **kwargs: Any,
     ) -> None:
-        raw_errors: object = errors
-        if raw_errors is not None and not isinstance(raw_errors, ErrorRegistry):
-            msg = "errors must be an ErrorRegistry instance or None"
+        raw_error_registry: object = error_registry
+        if raw_error_registry is not None and not isinstance(
+            raw_error_registry, ErrorRegistry
+        ):
+            msg = "error_registry must be an ErrorRegistry instance or None"
             raise ErrorConfigurationError(msg)
-        self.error_registry = errors
+        self.error_registry = error_registry
         self.raises = _normalize_raises(
             raises,
-            registry=errors,
+            registry=error_registry,
             parameter="raises",
         )
         super().__init__(**kwargs)
@@ -215,7 +217,7 @@ def _normalize_raises(
         raise ErrorConfigurationError(msg)
     normalized = tuple(unique_instances(values, Error, parameter=parameter))
     if normalized and registry is None:
-        msg = f"{parameter} requires an errors registry"
+        msg = f"{parameter} requires an error registry"
         raise ErrorConfigurationError(msg)
     if registry is not None:
         for error in normalized:

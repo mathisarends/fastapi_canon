@@ -7,7 +7,11 @@ from .errors import product_not_found, product_unavailable, registry
 from .models import Product, Reservation
 from .service import CatalogService
 
-router = CanonRouter(prefix="/products", tags=["catalog"], errors=registry)
+router = CanonRouter(
+    prefix="/products",
+    tags=["catalog"],
+    error_registry=registry,
+)
 
 
 @router.get("/{product_id}", raises=[product_not_found])
