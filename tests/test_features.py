@@ -11,6 +11,8 @@ from fastapi.testclient import TestClient
 from starlette.responses import Response
 
 from fastapi_canon import (
+    CanonResponse,
+    CanonRouter,
     Composition,
     ErrorOptions,
     ExceptionHandlerSpec,
@@ -374,6 +376,74 @@ def test_error_registries_are_merged_for_runtime_and_openapi() -> None:
         app.openapi()["paths"]["/items/{item_id}"]["get"]["responses"]["404"]
         is not None
     )
+
+
+def test_feature_collects_error_registry_from_canon_router() -> None:
+    error = Error(
+        NotFoundError,
+        status=404,
+        code="item_not_found",
+        title="Item not found",
+    )
+    errors = ErrorRegistry(name="items", errors=[error])
+    router = CanonRouter(error_registry=errors)
+
+    @router.get("/items/{item_id}", raises=[error])
+    async def get_item(item_id: str) -> None:
+        del item_id
+        raise NotFoundError
+
+    feature = Feature(name="items", routers=[router])
+    app = Composition(
+        feature,
+        errors=ErrorOptions(type_base="https://example.test/problems"),
+    ).apply(FastAPI())
+
+    assert feature.errors is not None
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.get("/items/missing")
+    assert response.status_code == 404
+    assert response.json()["code"] == "item_not_found"
+
+
+def test_shared_router_registry_is_contributed_only_once() -> None:
+    error = Error(
+        NotFoundError,
+        status=404,
+        code="item_not_found",
+        title="Item not found",
+    )
+    errors = ErrorRegistry(name="items", errors=[error])
+    first = CanonRouter(error_registry=errors)
+    second = CanonRouter(error_registry=errors)
+    first.get("/first", raises=[error])(lambda: None)
+    second.get("/second", raises=[error])(lambda: None)
+
+    app = Composition(
+        Feature(name="first", routers=[first]),
+        Feature(name="second", routers=[second]),
+        errors=ErrorOptions(type_base="https://example.test/problems"),
+    ).apply(FastAPI())
+
+    assert "404" in app.openapi()["paths"]["/first"]["get"]["responses"]
+    assert "404" in app.openapi()["paths"]["/second"]["get"]["responses"]
+
+
+def test_composition_installs_success_openapi_without_an_error_registry() -> None:
+    router = APIRouter()
+    router.get(
+        "/ready",
+        status_code=307,
+        responses=CanonResponse.empty(status=307).responses(),
+    )(lambda: None)
+    app = Composition(Feature(name="health", routers=[router])).apply(FastAPI())
+
+    schema = app.openapi()
+
+    assert schema["paths"]["/ready"]["get"]["responses"] == {
+        "307": {"description": "No content"}
+    }
+    assert "x-fastapi-canon" not in str(schema)
 
 
 def test_error_collision_does_not_install_routers() -> None:

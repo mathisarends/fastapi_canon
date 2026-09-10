@@ -70,6 +70,12 @@ feature = Feature(
 )
 ```
 
+When `errors=` is omitted, a feature collects the registries referenced by its
+direct `CanonRouter` contributions. Supplying `errors=` remains available when
+ownership must be explicit, such as a registry used by routers in another
+feature. Repeated contributions of the same definitions are merged once at the
+application boundary.
+
 Mutable sequences passed to `Feature` are copied to tuples. Installing features
 preserves declaration order for routes and startup. Shutdown runs in reverse
 order, including cleanup of features that started before a later feature failed.
@@ -166,13 +172,12 @@ project_errors = ErrorRegistry(
 projects = CanonRouter(
     prefix="/projects",
     tags=["projects"],
-    errors=project_errors,
+    error_registry=project_errors,
 )
 
 project_feature = Feature(
     name="projects",
     routers=[projects],
-    errors=project_errors,
 )
 
 app = Composition(
@@ -275,8 +280,8 @@ match unrelated programming failures.
 ### Canon routers
 
 `CanonRouter` separates errors shared by a router context from the errors that
-belong to one operation. Give the router its registry through `errors=` and
-declare shared contracts once with `raises=`:
+belong to one operation. Give the router its registry through
+`error_registry=` and declare shared contracts once with `raises=`:
 
 ```python
 from fastapi.responses import StreamingResponse
@@ -284,7 +289,7 @@ from fastapi_canon import CanonResponse, CanonRouter
 
 router = CanonRouter(
     prefix="/sessions",
-    errors=SESSION_ERRORS,
+    error_registry=SESSION_ERRORS,
     raises=[
         AUTHENTICATION_REQUIRED_ERROR,
         SESSION_NOT_FOUND_ERROR,
@@ -324,13 +329,14 @@ Canon rejects mismatched status codes, bodyless responses with an explicit
 declarations at route declaration time. Other FastAPI decorator options continue
 to pass through unchanged.
 
-Application-registry membership and HTTP-normalization checks run when
-`app.openapi()` is generated. Call it after registering all routes in a startup
-check or test to catch configuration errors early. Compilation failures are not
-cached. Routes excluded with `include_in_schema=False` are outside this
-document-level validation; `CanonRouter` still validates their explicit
-declarations when they are registered. Router-level `raises=` applies to
-operations declared on that router, not to separately included child routers.
+Application-registry membership and HTTP-normalization checks run when OpenAPI
+is generated. Call `composition.validate(app)` after applying a composition, or
+`validate_openapi_contracts(app)` for a manually assembled application, to make
+that validation intent explicit. Compilation failures are not cached. Routes
+excluded with `include_in_schema=False` are outside document-level validation;
+`CanonRouter` still validates their explicit declarations when they are
+registered. Router-level `raises=` applies to operations declared on that
+router, not to separately included child routers.
 
 ## Success response contracts
 
@@ -348,6 +354,9 @@ from fastapi_canon import CanonResponse
 )
 async def events() -> StreamingResponse: ...
 ```
+
+These declarations are self-contained: a success-only `CanonRouter` produces
+clean OpenAPI without installing an `ErrorRegistry` or another OpenAPI hook.
 
 The generic form accepts a status, media type, OpenAPI schema, description, and
 response headers:
@@ -417,7 +426,7 @@ from fastapi_canon import CanonResponse, CanonRouter
 
 
 router = CanonRouter(
-    errors=api_errors,
+    error_registry=api_errors,
     raises=[AUTHENTICATION_REQUIRED_ERROR, ACCESS_DENIED_ERROR],
 )
 
@@ -454,7 +463,7 @@ from fastapi_canon import CanonResponse, CanonRouter
 
 
 router = CanonRouter(
-    errors=document_errors,
+    error_registry=document_errors,
     raises=[AUTHENTICATION_REQUIRED_ERROR, ACCESS_DENIED_ERROR],
 )
 
@@ -506,7 +515,7 @@ incremental migrations:
 
 ```python
 from fastapi import APIRouter
-from fastapi_canon import CanonResponse
+from fastapi_canon import CanonResponse, install_openapi_contracts
 
 legacy_router = APIRouter()
 
@@ -520,13 +529,19 @@ legacy_router = APIRouter()
     ),
 )
 async def private_project() -> dict[str, str]: ...
+
+
+install_openapi_contracts(app)
 ```
 
 `ErrorRegistry.responses()` still combines domain errors, normalized
 `HTTPException` statuses, and an optional success contract.
 `CanonResponse.responses()` still supports success-only declarations. Because
 these primitives populate FastAPI's `responses={...}` mapping directly, they do
-not provide all declaration-time consistency checks of `CanonRouter`.
+not provide all declaration-time consistency checks of `CanonRouter`. A
+manually assembled application using low-level success contracts must call
+`install_openapi_contracts(app)` before generating OpenAPI. `Composition`
+installs that compiler automatically, including when no error registry exists.
 
 ## Installation guarantees
 

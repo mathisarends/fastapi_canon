@@ -11,6 +11,7 @@ from .feature import (
     ProviderSource,
     RouterFactory,
 )
+from .openapi import install_openapi_contracts, validate_openapi_contracts
 from .response import CanonResponse, ResponseConfigurationError, ResponseHeaders
 from .router import CanonRouter
 
@@ -31,4 +32,6 @@ __all__ = [
     "ResponseConfigurationError",
     "ResponseHeaders",
     "RouterFactory",
+    "install_openapi_contracts",
+    "validate_openapi_contracts",
 ]

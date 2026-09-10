@@ -12,6 +12,7 @@ ERRORS_EXTENSION = "x-fastapi-canon-errors"
 HTTP_STATUSES_EXTENSION = "x-fastapi-canon-http-statuses"
 SUCCESS_EXTENSION = "x-fastapi-canon-success"
 INSTALLED_REGISTRY_STATE_KEY = "_fastapi_canon_error_registry"
+INSTALLED_OPENAPI_STATE_KEY = "_fastapi_canon_openapi"
 
 
 HTTP_METHODS = frozenset(
@@ -33,13 +34,17 @@ def iter_operations(
 
 
 def contracts_from_responses(
-    path: str, responses: Mapping[str, Any], registry: ErrorRegistry
+    path: str, responses: Mapping[str, Any], registry: ErrorRegistry | None
 ) -> tuple[
     tuple[AnyError, ...],
     tuple[int, ...],
     tuple[int, str | None] | None,
 ]:
-    by_identity = {str(id(error)): error for error in registry.errors}
+    by_identity = (
+        {str(id(error)): error for error in registry.errors}
+        if registry is not None
+        else {}
+    )
     result: list[AnyError] = []
     seen: set[int] = set()
     http_statuses: list[int] = []

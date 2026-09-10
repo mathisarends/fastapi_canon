@@ -9,6 +9,7 @@ from starlette.responses import RedirectResponse
 from fastapi_canon import (
     CanonResponse,
     ErrorRegistry,
+    install_openapi_contracts,
 )
 from fastapi_canon.error import ErrorConfigurationError
 from fastapi_canon.error.types import JsonValue, OpenAPIHeader
@@ -146,6 +147,25 @@ def test_success_only_route_does_not_require_an_error_registry_declaration() -> 
         "description": "Service health",
         "content": {"application/json": {"schema": {"type": "object"}}},
     }
+
+
+def test_success_only_openapi_installer_is_self_contained() -> None:
+    router = APIRouter()
+    router.get(
+        "/elsewhere",
+        status_code=307,
+        responses=CanonResponse.empty(status=307).responses(),
+    )(lambda: RedirectResponse("/target"))
+    app = FastAPI()
+    app.include_router(router)
+
+    install_openapi_contracts(app)
+
+    schema = app.openapi()
+    assert schema["paths"]["/elsewhere"]["get"]["responses"] == {
+        "307": {"description": "No content"}
+    }
+    assert "x-fastapi-canon" not in str(schema)
 
 
 def test_empty_success_contract_matches_endpoint_status() -> None:

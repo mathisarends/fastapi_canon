@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import FastAPI
@@ -10,6 +11,7 @@ from pydantic import ValidationError
 from fastapi_canon.error.contracts import (
     ERRORS_EXTENSION,
     HTTP_STATUSES_EXTENSION,
+    INSTALLED_OPENAPI_STATE_KEY,
     SUCCESS_EXTENSION,
     contracts_from_responses,
     iter_operations,
@@ -32,13 +34,35 @@ _MISSING = object()
 
 
 def install_openapi(
-    registry: ErrorRegistry,
+    registry: ErrorRegistry | None,
     app: FastAPI,
     *,
     include_validation_error: bool,
     include_http_exceptions: bool,
 ) -> None:
+    installed = getattr(app.state, INSTALLED_OPENAPI_STATE_KEY, None)
+    configuration = _OpenAPIConfiguration(
+        registry=registry,
+        include_validation_error=include_validation_error,
+        include_http_exceptions=include_http_exceptions,
+    )
+    if installed is not None:
+        if not isinstance(installed, _OpenAPIInstallation):
+            msg = "application contains invalid fastapi-canon OpenAPI state"
+            raise ErrorConfigurationError(msg)
+        if registry is None or installed.configuration == configuration:
+            return
+        if installed.configuration.registry is not None:
+            msg = "a different fastapi-canon OpenAPI compiler is already installed"
+            raise ErrorConfigurationError(msg)
+        if app.openapi_schema is not None:
+            msg = "install ErrorRegistry before generating or caching OpenAPI"
+            raise ErrorConfigurationError(msg)
+        installed.configuration = configuration
+        return
+
     previous_openapi = app.openapi
+    installation = _OpenAPIInstallation(configuration)
 
     def openapi() -> dict[str, Any]:
         if app.openapi_schema is not None:
@@ -47,20 +71,34 @@ def install_openapi(
         # FastAPI caches its document before our validation. Do not retain an
         # uncompiled schema if compilation fails.
         app.openapi_schema = None
+        current = installation.configuration
         compiled = compile_document(
-            registry,
+            current.registry,
             document,
-            include_validation_error=include_validation_error,
-            include_http_exceptions=include_http_exceptions,
+            include_validation_error=current.include_validation_error,
+            include_http_exceptions=current.include_http_exceptions,
         )
         app.openapi_schema = compiled
         return compiled
 
     cast(Any, app).openapi = openapi
+    setattr(app.state, INSTALLED_OPENAPI_STATE_KEY, installation)
+
+
+@dataclass(frozen=True, slots=True)
+class _OpenAPIConfiguration:
+    registry: ErrorRegistry | None
+    include_validation_error: bool
+    include_http_exceptions: bool
+
+
+@dataclass(slots=True)
+class _OpenAPIInstallation:
+    configuration: _OpenAPIConfiguration
 
 
 def compile_document(
-    registry: ErrorRegistry,
+    registry: ErrorRegistry | None,
     document: dict[str, Any],
     *,
     include_validation_error: bool,
@@ -68,16 +106,20 @@ def compile_document(
 ) -> dict[str, Any]:
     result = copy.deepcopy(document)
     components = result.setdefault("components", {}).setdefault("schemas", {})
-    _add_component(components, "Problem", _base_problem_schema())
+    if registry is not None:
+        _add_component(components, "Problem", _base_problem_schema())
 
-    for error in registry.errors:
-        _add_component(
-            components,
-            error.effective_schema_name,
-            compile_error_schema(registry, error),
-        )
+        for error in registry.errors:
+            _add_component(
+                components,
+                error.effective_schema_name,
+                compile_error_schema(registry, error),
+            )
 
     if include_validation_error:
+        if registry is None:
+            msg = "validation error normalization requires an error registry"
+            raise ErrorConfigurationError(msg)
         _add_component(
             components,
             "RequestValidationProblem",

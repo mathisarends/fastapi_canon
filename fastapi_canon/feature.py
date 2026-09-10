@@ -10,6 +10,11 @@ from fastapi import APIRouter, FastAPI
 from starlette.types import ExceptionHandler, Lifespan
 
 from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
+from fastapi_canon.openapi import (
+    install_openapi_contracts,
+    validate_openapi_contracts,
+)
+from fastapi_canon.router import CanonRouter
 
 type FeatureLifespan = Lifespan[FastAPI]
 type ProviderFactory = Callable[[], Provider]
@@ -87,10 +92,17 @@ class Feature:
             msg = f"feature {normalized_name!r} lifespan must be callable or None"
             raise FeatureConfigurationError(msg)
 
+        resolved_errors = errors
+        if resolved_errors is None:
+            resolved_errors = _collect_router_errors(
+                normalized_routers,
+                feature_name=normalized_name,
+            )
+
         object.__setattr__(self, "name", normalized_name)
         object.__setattr__(self, "routers", normalized_routers)
         object.__setattr__(self, "providers", normalized_providers)
-        object.__setattr__(self, "errors", errors)
+        object.__setattr__(self, "errors", resolved_errors)
         object.__setattr__(self, "exception_handlers", normalized_handlers)
         object.__setattr__(self, "lifespan", lifespan)
 
@@ -162,6 +174,11 @@ class Composition:
         """Apply this composition to *app* exactly once and return the app."""
         _apply_composition(app, self)
         return app
+
+    def validate(self, app: FastAPI) -> None:
+        """Validate the OpenAPI contracts of this applied composition."""
+        _validate_applied_composition(app, self)
+        validate_openapi_contracts(app)
 
 
 @dataclass(frozen=True, slots=True)
@@ -259,6 +276,8 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
             include_http_exceptions=composition.errors.include_http_exceptions,
             include_unhandled_error=composition.errors.include_unhandled_error,
         )
+    else:
+        install_openapi_contracts(app)
     if container is not None:
         setup_dishka(container, app)
     if lifespans or container is not None:
@@ -294,6 +313,44 @@ def _unique_instances[ItemT](
         seen.add(id(value))
         result.append(value)
     return tuple(result)
+
+
+def _validate_applied_composition(app: object, composition: Composition) -> None:
+    if not isinstance(app, FastAPI):
+        msg = "app must be a FastAPI instance"
+        raise FeatureConfigurationError(msg)
+    installed = getattr(app.state, _INSTALLATION_STATE_KEY, None)
+    expected_router_factory_id = (
+        id(composition.router_factory)
+        if composition.router_factory is not None
+        else None
+    )
+    if not isinstance(installed, _Installation) or (
+        installed.feature_ids != tuple(id(feature) for feature in composition.features)
+        or installed.errors != composition.errors
+        or installed.router_factory_id != expected_router_factory_id
+    ):
+        msg = "composition must be applied to the application before validation"
+        raise FeatureConfigurationError(msg)
+
+
+def _collect_router_errors(
+    routers: tuple[APIRouter, ...], *, feature_name: str
+) -> ErrorRegistry | None:
+    registries: list[tuple[str, ErrorRegistry]] = []
+    seen: set[int] = set()
+    for router in routers:
+        if not isinstance(router, CanonRouter) or router.error_registry is None:
+            continue
+        if id(router.error_registry) in seen:
+            continue
+        seen.add(id(router.error_registry))
+        registries.append((feature_name, router.error_registry))
+    return _merge_errors(
+        tuple(registries),
+        name=f"{feature_name}-routers" if len(registries) > 1 else None,
+        type_base=None,
+    )
 
 
 def _validate_optional_string(value: object, parameter: str) -> None:
@@ -490,6 +547,14 @@ def _merge_errors(
 ) -> ErrorRegistry | None:
     if not registries:
         return None
+    distinct: list[tuple[str, ErrorRegistry]] = []
+    seen: set[int] = set()
+    for contribution in registries:
+        if id(contribution[1]) in seen:
+            continue
+        seen.add(id(contribution[1]))
+        distinct.append(contribution)
+    registries = tuple(distinct)
     inferred_base = type_base
     registry_bases = {registry.type_base for _, registry in registries}
     if inferred_base is None and len(registry_bases) == 1:
@@ -528,11 +593,11 @@ def _validate_error_installation(
     include_http_exceptions: bool,
     include_unhandled_error: bool,
 ) -> None:
-    if registry is None:
-        return
     if app.openapi_schema is not None:
         msg = "install features before generating or caching OpenAPI"
         raise FeatureConfigurationError(msg)
+    if registry is None:
+        return
     validation_app = FastAPI()
     validation_app.exception_handlers.update(app.exception_handlers)
     for router in routers:
