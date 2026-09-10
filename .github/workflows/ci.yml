@@ -47,6 +47,18 @@ jobs:
           - os: ubuntu-latest
             python: "3.14"
             resolution: latest
+          - os: ubuntu-latest
+            python: "3.12"
+            resolution: router-transition
+            fastapi: "0.137.0"
+          - os: ubuntu-latest
+            python: "3.12"
+            resolution: router-transition
+            fastapi: "0.137.1"
+          - os: ubuntu-latest
+            python: "3.12"
+            resolution: router-transition
+            fastapi: "0.137.2"
           - os: windows-latest
             python: "3.14"
             resolution: locked
@@ -78,6 +90,17 @@ jobs:
         run: >-
           uv run --isolated --no-project --python 3.14
           --with .
+          --with httpx
+          --with httpx2
+          --with pytest
+          --with jsonschema
+          --with openapi-spec-validator
+          pytest
+      - if: matrix.resolution == 'router-transition'
+        run: >-
+          uv run --isolated --no-project --python 3.12
+          --with .
+          --with "fastapi==${{ matrix.fastapi }}"
           --with httpx
           --with httpx2
           --with pytest

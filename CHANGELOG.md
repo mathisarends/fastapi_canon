@@ -6,12 +6,24 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Added
 
+- Added `CanonRouter` as the canonical route declaration API, with composable
+  router-level and operation-level `raises=` declarations plus a first-class
+  `response=` success contract. The lower-level response compilers remain
+  supported for ordinary FastAPI routers and migrations.
 - Added `CanonResponse.responses()` so success-only routes can declare and
   compile response contracts without an empty `ErrorRegistry`.
 - Added `ResponseConfigurationError` for FastAPI `response_model` declarations
   that conflict with a bodyless `CanonResponse`.
 
 ### Changed
+
+- Compile response contracts from generated OpenAPI operations through the
+  documented `app.openapi` hook, removing internal route-tree traversal and
+  route-list copying during installation preflight.
+- Validate application-level operation contracts at OpenAPI generation time.
+  Plain `APIRouter` declarations no longer inspect runtime status or response
+  models; use `CanonRouter` for explicit declaration checks. Hidden routes are
+  outside document-level validation.
 
 - Renamed the public success contract from `Response` to `CanonResponse` to
   avoid collisions with response classes commonly used in FastAPI routers.

@@ -17,7 +17,6 @@ from starlette.types import ExceptionHandler
 
 from fastapi_canon.error.contracts import (
     INSTALLED_REGISTRY_STATE_KEY,
-    iter_http_contracts,
 )
 from fastapi_canon.error.openapi import install_openapi
 from fastapi_canon.error.rendering import render_problem
@@ -53,11 +52,6 @@ def install_handlers(
         raise ErrorConfigurationError(msg)
 
     registry.require_resolved()
-    _validate_route_contracts(
-        registry,
-        app,
-        include_http_exceptions=include_http_exceptions,
-    )
     if (
         include_validation_error or include_unhandled_error
     ) and registry.type_base is None:
@@ -102,29 +96,6 @@ def install_handlers(
         include_http_exceptions=include_http_exceptions,
     )
     setattr(app.state, INSTALLED_REGISTRY_STATE_KEY, registry)
-
-
-def _validate_route_contracts(
-    registry: ErrorRegistry, app: FastAPI, *, include_http_exceptions: bool = True
-) -> None:
-    for http_route, http_errors, http_statuses, _success in iter_http_contracts(
-        app.router, registry
-    ):
-        for http_error in http_errors:
-            if not registry.contains(http_error):
-                msg = (
-                    f"route {http_route.path!r} declares error "
-                    f"{http_error.code!r}, but the "
-                    "installed registry does not contain that exact definition"
-                )
-                raise ErrorConfigurationError(msg)
-        if http_statuses and not include_http_exceptions:
-            statuses = ", ".join(str(status) for status in http_statuses)
-            msg = (
-                f"route {http_route.path!r} declares normalized HTTP responses "
-                f"for {statuses}, but HTTP exception normalization is disabled"
-            )
-            raise ErrorConfigurationError(msg)
 
 
 def _domain_handler(registry: ErrorRegistry) -> ExceptionHandler:

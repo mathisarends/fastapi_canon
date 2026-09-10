@@ -11,7 +11,7 @@ showcase/
   features/
     catalog/
       __init__.py                # public `feature` export
-      router.py                  # HTTP layer
+      router.py                  # CanonRouter HTTP layer
       models.py                  # request and response models
       exceptions.py              # domain exceptions, without HTTP concerns
       errors.py                  # Error / ErrorRegistry contracts
@@ -19,7 +19,7 @@ showcase/
       providers.py               # Dishka bindings contributed by the feature
     status/
       __init__.py
-      router.py
+      router.py                  # CanonRouter health endpoint
 ```
 
 Run it from the repository root:
@@ -51,9 +51,11 @@ engine:
 `catalog/errors.py` deliberately has no application-wide problem-type URL. Its
 `ErrorRegistry` is local to the feature. `Composition` merges that registry
 and `ErrorOptions(type_base=...)` resolves every feature error type to the
-same public namespace. The `responses=errors.responses(...)` declarations use
-the very same contracts as runtime handling, so `/openapi.json` documents the
-`404` and `409` responses without duplicating schemas.
+same public namespace. The catalog's canonical `CanonRouter` declares contracts
+with `raises=[...]`, so `/openapi.json` documents the `404` and `409` responses
+without duplicating schemas. The lower-level
+`ErrorRegistry.responses()` API remains supported for ordinary FastAPI routers
+and incremental migrations.
 
 The router only validates HTTP input and calls `CatalogService`; it receives
 that service through Dishka. `catalog/__init__.py` contributes the provider,

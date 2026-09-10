@@ -1,11 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping, Sequence
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
-
-from fastapi import APIRouter
-from fastapi.routing import APIRoute
-from starlette.routing import BaseRoute
+from collections.abc import Iterator, Mapping
+from typing import TYPE_CHECKING, Any
 
 from fastapi_canon.error.types import ErrorConfigurationError
 
@@ -18,46 +14,26 @@ SUCCESS_EXTENSION = "x-fastapi-canon-success"
 INSTALLED_REGISTRY_STATE_KEY = "_fastapi_canon_error_registry"
 
 
-@runtime_checkable
-class _IncludedRouterRoute(Protocol):
-    original_router: APIRouter
+HTTP_METHODS = frozenset(
+    {"get", "put", "post", "delete", "options", "head", "patch", "trace"}
+)
 
 
-def iter_http_contracts(
-    router: APIRouter, registry: ErrorRegistry
-) -> Iterator[
-    tuple[
-        APIRoute,
-        tuple[AnyError, ...],
-        tuple[int, ...],
-        tuple[int, str | None] | None,
-    ]
-]:
-    """Yield standard FastAPI routes and errors declared through responses=."""
-    yield from _walk_http_contracts(router.routes, registry)
+def iter_operations(
+    document: Mapping[str, Any],
+) -> Iterator[tuple[str, dict[str, Any]]]:
+    """Read operations from the generated OpenAPI document, never router objects."""
+    for section in ("paths", "webhooks"):
+        for path, item in document.get(section, {}).items():
+            if not isinstance(item, dict):
+                continue
+            for method, operation in item.items():
+                if method in HTTP_METHODS and isinstance(operation, dict):
+                    yield f"{method.upper()} {path}", operation
 
 
-def _walk_http_contracts(
-    routes: Sequence[BaseRoute], registry: ErrorRegistry
-) -> Iterator[
-    tuple[
-        APIRoute,
-        tuple[AnyError, ...],
-        tuple[int, ...],
-        tuple[int, str | None] | None,
-    ]
-]:
-    for route in routes:
-        if isinstance(route, _IncludedRouterRoute):
-            yield from _walk_http_contracts(route.original_router.routes, registry)
-            continue
-        if isinstance(route, APIRoute):
-            errors, http_statuses, success = _contracts_from_responses(route, registry)
-            yield route, errors, http_statuses, success
-
-
-def _contracts_from_responses(
-    route: APIRoute, registry: ErrorRegistry
+def contracts_from_responses(
+    path: str, responses: Mapping[str, Any], registry: ErrorRegistry
 ) -> tuple[
     tuple[AnyError, ...],
     tuple[int, ...],
@@ -70,7 +46,7 @@ def _contracts_from_responses(
     seen_http_statuses: set[int] = set()
     success: tuple[int, str | None] | None = None
 
-    for configured_status, configured_response in route.responses.items():
+    for configured_status, configured_response in responses.items():
         response: object = configured_response
         if not isinstance(response, Mapping):
             continue
@@ -79,16 +55,13 @@ def _contracts_from_responses(
             if not isinstance(identities, list) or not all(
                 isinstance(identity, str) for identity in identities
             ):
-                msg = (
-                    f"route {route.path!r} contains invalid fastapi-canon "
-                    "error metadata"
-                )
+                msg = f"route {path!r} contains invalid fastapi-canon error metadata"
                 raise ErrorConfigurationError(msg)
             for identity in identities:
                 error = by_identity.get(identity)
                 if error is None:
                     msg = (
-                        f"route {route.path!r} declares an error whose exact "
+                        f"route {path!r} declares an error whose exact "
                         "definition is missing from the installed registry"
                     )
                     raise ErrorConfigurationError(msg)
@@ -105,7 +78,7 @@ def _contracts_from_responses(
                 for status in statuses
             ):
                 msg = (
-                    f"route {route.path!r} contains invalid fastapi-canon HTTP "
+                    f"route {path!r} contains invalid fastapi-canon HTTP "
                     "status metadata"
                 )
                 raise ErrorConfigurationError(msg)
@@ -117,35 +90,16 @@ def _contracts_from_responses(
         if SUCCESS_EXTENSION in response:
             media_type = response[SUCCESS_EXTENSION]
             if media_type is not None and not isinstance(media_type, str):
-                msg = (
-                    f"route {route.path!r} contains invalid fastapi-canon success "
-                    "metadata"
-                )
+                msg = f"route {path!r} contains invalid fastapi-canon success metadata"
                 raise ErrorConfigurationError(msg)
             try:
                 status = int(configured_status)
             except (TypeError, ValueError) as error:
-                msg = f"route {route.path!r} has a non-numeric success status"
+                msg = f"route {path!r} has a non-numeric success status"
                 raise ErrorConfigurationError(msg) from error
             if success is not None:
-                msg = f"route {route.path!r} declares multiple success contracts"
+                msg = f"route {path!r} declares multiple success contracts"
                 raise ErrorConfigurationError(msg)
-            effective_status = route.status_code or 200
-            if status != effective_status:
-                msg = (
-                    f"route {route.path!r} declares success status {status}, but "
-                    f"its endpoint status is {effective_status}"
-                )
-                raise ErrorConfigurationError(msg)
-            success = (status, media_type)
-
-    if success is not None and success[1] is None and route.response_field is not None:
-        from fastapi_canon.response import ResponseConfigurationError
-
-        msg = (
-            f"route {route.path!r} response_model conflicts with bodyless "
-            "CanonResponse"
-        )
-        raise ResponseConfigurationError(msg)
+            success = (status, media_type or None)
 
     return tuple(result), tuple(http_statuses), success

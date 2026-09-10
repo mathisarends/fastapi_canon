@@ -9,7 +9,6 @@ from starlette.responses import RedirectResponse
 from fastapi_canon import (
     CanonResponse,
     ErrorRegistry,
-    ResponseConfigurationError,
 )
 from fastapi_canon.error import ErrorConfigurationError
 from fastapi_canon.error.types import JsonValue, OpenAPIHeader
@@ -190,7 +189,7 @@ def test_empty_redirect_suppresses_fastapi_generated_json_content() -> None:
     }
 
 
-def test_bodyless_contract_rejects_response_model() -> None:
+def test_plain_router_contract_does_not_inspect_runtime_response_model() -> None:
     class UserResponse(BaseModel):
         name: str
 
@@ -204,25 +203,23 @@ def test_bodyless_contract_rejects_response_model() -> None:
     )(lambda: RedirectResponse("/target"))
     app = FastAPI()
     app.include_router(router)
+    errors.install(app)
 
-    with pytest.raises(
-        ResponseConfigurationError,
-        match="response_model conflicts with bodyless CanonResponse",
-    ):
-        errors.install(app)
+    assert (
+        "content" not in app.openapi()["paths"]["/elsewhere"]["get"]["responses"]["307"]
+    )
 
 
-def test_success_contract_rejects_a_mismatched_endpoint_status() -> None:
+def test_plain_router_contract_does_not_infer_endpoint_status() -> None:
     errors = registry()
     router = APIRouter()
     router.get(
         "/created",
-        responses=errors.responses(
-            success=CanonResponse.json(status=201),
-        ),
+        responses=errors.responses(success=CanonResponse.json(status=201)),
     )(lambda: None)
     app = FastAPI()
     app.include_router(router)
+    errors.install(app)
 
-    with pytest.raises(ErrorConfigurationError, match="endpoint status is 200"):
-        errors.install(app)
+    responses = app.openapi()["paths"]["/created"]["get"]["responses"]
+    assert {"200", "201"} <= responses.keys()

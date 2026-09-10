@@ -6,6 +6,11 @@ contracts, exception handlers, and lifespan into one immutable value. The
 application installs an explicitly ordered set of those values at its
 composition root.
 
+`CanonRouter` is the canonical API for declaring application routes. It adds
+composable `raises=` and `response=` contracts to FastAPI's familiar route
+decorators. Ordinary `APIRouter` declarations and the lower-level response
+compilers remain supported for generated code and incremental migration.
+
 Dishka is a deliberate part of this canon, not an optional integration.
 `fastapi-canon` defines one dependency-injection approach: features contribute
 Dishka providers, and the composition builds and owns one shared Dishka
@@ -19,11 +24,13 @@ outside the library's intended architecture.
   - [Shared API router](#shared-api-router)
   - [Dishka](#dishka)
 - [Error contracts](#error-contracts)
+  - [Canon routers](#canon-routers)
   - [OpenAPI representation](#openapi-representation)
 - [Success response contracts](#success-response-contracts)
   - [Server-sent events](#server-sent-events)
   - [Binary and PDF streams](#binary-and-pdf-streams)
   - [Streaming boundary](#streaming-boundary)
+- [Low-level FastAPI compatibility](#low-level-fastapi-compatibility)
 - [Installation guarantees](#installation-guarantees)
 - [Requirements](#requirements)
 - [Development](#development)
@@ -32,10 +39,10 @@ outside the library's intended architecture.
 ## Quick start
 
 ```python
-from fastapi import APIRouter, FastAPI
-from fastapi_canon import Composition, Feature
+from fastapi import FastAPI
+from fastapi_canon import CanonRouter, Composition, Feature
 
-projects = APIRouter(prefix="/projects", tags=["projects"])
+projects = CanonRouter(prefix="/projects", tags=["projects"])
 
 
 @projects.get("")
@@ -73,15 +80,12 @@ configuration diagnostics.
 
 Use `router_factory` to create one application router per installed composition.
 Feature routers are included in that router before it is mounted on the app, so
-the factory can supply a shared prefix, tags, dependencies, and a custom
-`APIRouter` subclass:
+the factory can supply a shared prefix, tags, and dependencies. Returning a
+`CanonRouter` keeps the application boundary on the canonical router API:
 
 ```python
-from fastapi import APIRouter, Depends
-
-
-class ApplicationRouter(APIRouter):
-    pass
+from fastapi import Depends
+from fastapi_canon import CanonRouter
 
 
 async def require_request_id() -> None: ...
@@ -89,7 +93,7 @@ async def require_request_id() -> None: ...
 
 composition = Composition(
     project_feature,
-    router_factory=lambda: ApplicationRouter(
+    router_factory=lambda: CanonRouter(
         prefix="/api/v1",
         tags=["api"],
         dependencies=[Depends(require_request_id)],
@@ -98,7 +102,8 @@ composition = Composition(
 ```
 
 The factory is called during `apply()` and must return a fresh, empty
-`APIRouter`. Omitting it preserves direct router installation.
+`APIRouter`; custom `APIRouter` subclasses remain supported. Omitting it
+preserves direct router installation.
 
 ### Dishka
 
@@ -131,7 +136,14 @@ merged and installed once, so runtime RFC 9457 Problem Details and OpenAPI use
 the same definitions:
 
 ```python
-from fastapi_canon import Composition, Error, ErrorOptions, ErrorRegistry, Feature
+from fastapi_canon import (
+    CanonRouter,
+    Composition,
+    Error,
+    ErrorOptions,
+    ErrorRegistry,
+    Feature,
+)
 
 
 class ProjectNotFound(Exception):
@@ -151,6 +163,12 @@ project_errors = ErrorRegistry(
     errors=[project_not_found],
 )
 
+projects = CanonRouter(
+    prefix="/projects",
+    tags=["projects"],
+    errors=project_errors,
+)
+
 project_feature = Feature(
     name="projects",
     routers=[projects],
@@ -165,31 +183,21 @@ app = Composition(
 ).apply(FastAPI())
 ```
 
-Declare endpoint responses from the same registry used at runtime:
+Declare operation failures from the same registry used at runtime:
 
 ```python
 @projects.get(
     "/{project_id}",
-    responses=project_errors.responses(project_not_found),
+    raises=[project_not_found],
 )
 async def get_project(project_id: str) -> dict[str, str]:
     raise ProjectNotFound(project_id)
 ```
 
-Normalized `HTTPException` responses use the same declaration path:
-
-```python
-@projects.get(
-    "/private",
-    responses=project_errors.responses(http_statuses=[401, 403]),
-)
-async def private_project() -> dict[str, str]: ...
-```
-
-These contracts document the normalized runtime codes (`http_401`,
-`http_403`, and so on) and `application/problem+json`. A domain error and a
-generic HTTP problem may share a status; the generated response then uses the
-same discriminated `oneOf` representation.
+Generic normalized `HTTPException` contracts remain available through the
+low-level compatibility API described below. A domain error and a generic HTTP
+problem may share a status; the generated response then uses the same
+discriminated `oneOf` representation.
 
 FastAPI `responses={...}` entries without canon error declarations require no
 additional metadata. Success contracts and other media types can be declared
@@ -264,10 +272,70 @@ reviewed public contract. Domain registries should use specific exception types;
 broad built-ins such as `Exception`, `ValueError`, and `RuntimeError` can also
 match unrelated programming failures.
 
+### Canon routers
+
+`CanonRouter` separates errors shared by a router context from the errors that
+belong to one operation. Give the router its registry through `errors=` and
+declare shared contracts once with `raises=`:
+
+```python
+from fastapi.responses import StreamingResponse
+from fastapi_canon import CanonResponse, CanonRouter
+
+router = CanonRouter(
+    prefix="/sessions",
+    errors=SESSION_ERRORS,
+    raises=[
+        AUTHENTICATION_REQUIRED_ERROR,
+        SESSION_NOT_FOUND_ERROR,
+        SESSION_ACCESS_DENIED_ERROR,
+    ],
+)
+
+
+@router.post(
+    "/{session_id}/playlist/spotify",
+    raises=[
+        SESSION_PLAYLIST_EMPTY_ERROR,
+        SESSION_PLAYLIST_MISSING_SPOTIFY_TRACKS_ERROR,
+        SESSION_EXPORT_REQUIRES_SPOTIFY_CONNECTION_ERROR,
+    ],
+    response=CanonResponse.sse(description="Server-sent session events."),
+)
+async def export_session_playlist_to_spotify(...) -> StreamingResponse: ...
+```
+
+Canon composes router-level and operation-level errors with the success response
+and passes the compiled declaration through FastAPI's normal route API. It does
+not patch `APIRouter` or `APIRoute`. Its documented `app.openapi` hook compiles
+contracts from the generated OpenAPI document without traversing FastAPI's
+internal route tree. The standard
+`get`, `put`, `post`, `delete`, `options`, `head`, `patch`, and `trace`
+decorators support `raises=` and `response=`; `api_route()` supports them for
+custom method sets.
+
+The error registry is optional for success-only routers, but any `raises=`
+declaration requires one. Every declared error must belong to that exact
+registry. The same error declared at both levels is included only once.
+
+`response=` uses its own status as the route's `status_code` when none is given.
+Canon rejects mismatched status codes, bodyless responses with an explicit
+`response_model`, and status collisions with FastAPI's manual `responses=`
+declarations at route declaration time. Other FastAPI decorator options continue
+to pass through unchanged.
+
+Application-registry membership and HTTP-normalization checks run when
+`app.openapi()` is generated. Call it after registering all routes in a startup
+check or test to catch configuration errors early. Compilation failures are not
+cached. Routes excluded with `include_in_schema=False` are outside this
+document-level validation; `CanonRouter` still validates their explicit
+declarations when they are registered. Router-level `raises=` applies to
+operations declared on that router, not to separately included child routers.
+
 ## Success response contracts
 
-`CanonResponse` describes one successful response using the same `responses()` call
-as domain and HTTP errors:
+`CanonResponse` describes one successful response directly on a `CanonRouter`
+operation:
 
 ```python
 from fastapi_canon import CanonResponse
@@ -275,10 +343,8 @@ from fastapi_canon import CanonResponse
 
 @router.get(
     "/events",
-    responses=api_errors.responses(
-        http_statuses=[401, 403],
-        success=CanonResponse.sse(),
-    ),
+    raises=[AUTHENTICATION_REQUIRED_ERROR, ACCESS_DENIED_ERROR],
+    response=CanonResponse.sse(),
 )
 async def events() -> StreamingResponse: ...
 ```
@@ -306,22 +372,20 @@ The available constructors are:
 | `CanonResponse.binary(media_type)` | Binary string stream with status 200 |
 | `CanonResponse.sse()` | `CanonResponse.stream("text/event-stream")` |
 
-Success-only routes can compile their contract directly without creating an
-empty `ErrorRegistry`:
+Success-only routers do not need an empty `ErrorRegistry`:
 
 ```python
 @router.get(
     "/health",
-    responses=CanonResponse.json(
+    response=CanonResponse.json(
         schema={"type": "object"},
         description="Service health",
-    ).responses(),
+    ),
 )
 async def health() -> dict[str, str]: ...
 ```
 
-The application's installed registry still performs the shared final OpenAPI
-compilation, but the route declaration is independent of its error definitions.
+The route declaration is independent of the application's error definitions.
 
 Bodyless contracts also replace FastAPI's generated success content for 2xx and
 3xx responses, so a redirect needs no matching `response_class` solely for
@@ -330,19 +394,18 @@ OpenAPI purposes:
 ```python
 @router.get(
     "/elsewhere",
-    status_code=307,
-    responses=CanonResponse.empty(status=307).responses(),
+    response=CanonResponse.empty(status=307),
 )
 async def elsewhere() -> RedirectResponse: ...
 ```
 
-A bodyless `CanonResponse` cannot be combined with `response_model`; canon raises
-`ResponseConfigurationError` while installing the application contracts.
+A bodyless contract combined with an explicit `response_model` raises
+`ResponseConfigurationError` at declaration time.
 
 Schemas and header definitions are copied into immutable mappings. Header names
 may be supplied as a list for standard string-valued header schemas or as a
-mapping containing complete OpenAPI header definitions. When a success status
-is not 200, set the same `status_code` on the FastAPI route.
+mapping containing complete OpenAPI header definitions. `CanonRouter` derives
+the route status from the success contract when `status_code` is omitted.
 
 ### Server-sent events
 
@@ -350,7 +413,13 @@ is not 200, set the same `status_code` on the FastAPI route.
 from collections.abc import AsyncIterator
 
 from fastapi.responses import StreamingResponse
-from fastapi_canon import CanonResponse
+from fastapi_canon import CanonResponse, CanonRouter
+
+
+router = CanonRouter(
+    errors=api_errors,
+    raises=[AUTHENTICATION_REQUIRED_ERROR, ACCESS_DENIED_ERROR],
+)
 
 
 async def event_chunks() -> AsyncIterator[str]:
@@ -360,10 +429,7 @@ async def event_chunks() -> AsyncIterator[str]:
 
 @router.get(
     "/events",
-    responses=api_errors.responses(
-        http_statuses=[401, 403],
-        success=CanonResponse.sse(),
-    ),
+    response=CanonResponse.sse(),
 )
 async def events() -> StreamingResponse:
     return StreamingResponse(
@@ -384,7 +450,13 @@ from pathlib import Path
 from uuid import UUID
 
 from fastapi.responses import StreamingResponse
-from fastapi_canon import CanonResponse
+from fastapi_canon import CanonResponse, CanonRouter
+
+
+router = CanonRouter(
+    errors=document_errors,
+    raises=[AUTHENTICATION_REQUIRED_ERROR, ACCESS_DENIED_ERROR],
+)
 
 
 def pdf_chunks(path: Path) -> Iterator[bytes]:
@@ -395,13 +467,10 @@ def pdf_chunks(path: Path) -> Iterator[bytes]:
 
 @router.get(
     "/documents/{document_id}",
-    responses=api_errors.responses(
-        document_missing,
-        http_statuses=[401, 403],
-        success=CanonResponse.binary(
-            "application/pdf",
-            headers=["Content-Disposition"],
-        ),
+    raises=[document_missing],
+    response=CanonResponse.binary(
+        "application/pdf",
+        headers=["Content-Disposition"],
     ),
 )
 async def document(document_id: UUID) -> StreamingResponse:
@@ -429,6 +498,36 @@ exception inside the iterator cannot be converted into another HTTP response.
 SSE protocols can define an application-specific failure event; a failed binary
 iterator produces an incomplete download.
 
+## Low-level FastAPI compatibility
+
+`CanonRouter` is the canonical API for new application code. The lower-level
+compilers remain supported for ordinary `APIRouter`, generated routers, and
+incremental migrations:
+
+```python
+from fastapi import APIRouter
+from fastapi_canon import CanonResponse
+
+legacy_router = APIRouter()
+
+
+@legacy_router.get(
+    "/private",
+    responses=api_errors.responses(
+        project_not_found,
+        http_statuses=[401, 403],
+        success=CanonResponse.json(),
+    ),
+)
+async def private_project() -> dict[str, str]: ...
+```
+
+`ErrorRegistry.responses()` still combines domain errors, normalized
+`HTTPException` statuses, and an optional success contract.
+`CanonResponse.responses()` still supports success-only declarations. Because
+these primitives populate FastAPI's `responses={...}` mapping directly, they do
+not provide all declaration-time consistency checks of `CanonRouter`.
+
 ## Installation guarantees
 
 - Feature order is explicit and deterministic.
@@ -437,8 +536,8 @@ iterator produces an incomplete download.
 - A different second installation is rejected.
 - Duplicate routers, providers, handlers, and error collisions fail during
   configuration.
-- Known configuration errors are validated against a temporary application
-  before the real application is changed.
+- Registry and handler configuration is checked against a temporary application
+  before installation. Operation contracts are checked during OpenAPI generation.
 - Provider-backed features must be installed before the application starts.
 - Disabling a feature means omitting it from `Composition`, which removes all of
   its contributions together.

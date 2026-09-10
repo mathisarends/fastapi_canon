@@ -168,7 +168,8 @@ class CanonResponse:
         from fastapi_canon.error.contracts import SUCCESS_EXTENSION
 
         response = self.as_openapi()
-        response[SUCCESS_EXTENSION] = self.media_type
+        # FastAPI omits null extension values when serializing OpenAPI.
+        response[SUCCESS_EXTENSION] = self.media_type or ""
         return {self.status: response}
 
 
