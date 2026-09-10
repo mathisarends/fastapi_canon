@@ -150,3 +150,9 @@ uv run mypy
 uv run pytest
 uv build
 ```
+
+## Showcase
+
+See [`examples/showcase`](examples/showcase) for a runnable two-feature FastAPI
+application. It keeps error contracts alongside their feature routes and merges
+them once at the composition root.
