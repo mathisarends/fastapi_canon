@@ -13,11 +13,12 @@ from .feature import (
 )
 from .openapi import install_openapi_contracts
 from .response import CanonResponse, ResponseConfigurationError, ResponseHeaders
-from .router import CanonRouter
+from .router import CanonRouter, CanonRouterGroup
 
 __all__ = [
     "CanonResponse",
     "CanonRouter",
+    "CanonRouterGroup",
     "Composition",
     "Error",
     "ErrorConfigurationError",

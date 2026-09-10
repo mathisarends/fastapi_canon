@@ -210,6 +210,47 @@ class CanonRouter(APIRouter):
         return {**manual, **canon}
 
 
+class CanonRouterGroup:
+    """Create sibling canon routers with one shared contract context."""
+
+    def __init__(
+        self,
+        *,
+        error_registry: ErrorRegistry | None = None,
+        raises: Sequence[AnyError] = (),
+    ) -> None:
+        raw_error_registry: object = error_registry
+        if raw_error_registry is not None and not isinstance(
+            raw_error_registry, ErrorRegistry
+        ):
+            msg = "error_registry must be an ErrorRegistry instance or None"
+            raise ErrorConfigurationError(msg)
+        self.error_registry = error_registry
+        self.raises = _normalize_raises(
+            raises,
+            registry=error_registry,
+            parameter="raises",
+        )
+
+    def router(
+        self,
+        *,
+        raises: Sequence[AnyError] = (),
+        **kwargs: Any,
+    ) -> CanonRouter:
+        """Return a router inheriting this group's registry and shared errors."""
+        local_raises = _normalize_raises(
+            raises,
+            registry=self.error_registry,
+            parameter="raises",
+        )
+        return CanonRouter(
+            error_registry=self.error_registry,
+            raises=_distinct((*self.raises, *local_raises)),
+            **kwargs,
+        )
+
+
 def _normalize_raises(
     values: Sequence[AnyError],
     *,

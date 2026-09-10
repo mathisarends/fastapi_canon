@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from fastapi_canon import (
     CanonResponse,
     CanonRouter,
+    CanonRouterGroup,
     Error,
     ErrorConfigurationError,
     ErrorRegistry,
@@ -165,6 +166,23 @@ def test_api_route_accepts_canon_contracts_for_custom_method_sets() -> None:
     assert isinstance(route, APIRoute)
     assert route.methods == {"GET", "POST"}
     assert set(route.responses) == {200, 404}
+
+
+def test_router_group_shares_registry_and_contracts_across_sibling_routers() -> None:
+    group = CanonRouterGroup(
+        error_registry=SESSION_ERRORS,
+        raises=[AUTHENTICATION_REQUIRED],
+    )
+    sessions = group.router(prefix="/sessions")
+    playlists = group.router(prefix="/playlists", raises=[SESSION_NOT_FOUND])
+
+    sessions.get("")(lambda: None)
+    playlists.get("")(lambda: None)
+
+    assert sessions.error_registry is SESSION_ERRORS
+    assert playlists.error_registry is SESSION_ERRORS
+    assert set(cast(APIRoute, sessions.routes[0]).responses) == {401}
+    assert set(cast(APIRoute, playlists.routes[0]).responses) == {401, 404}
 
 
 def test_raises_requires_a_registry() -> None:

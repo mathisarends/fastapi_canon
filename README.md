@@ -319,6 +319,24 @@ internal route tree. The standard
 decorators support `raises=` and `response=`; `api_route()` supports them for
 custom method sets.
 
+Use `CanonRouterGroup` when sibling routers share a registry and common error
+contracts but remain separate modules:
+
+```python
+from fastapi_canon import CanonRouterGroup
+
+sessions = CanonRouterGroup(
+    error_registry=SESSION_ERRORS,
+    raises=[AUTHENTICATION_REQUIRED_ERROR],
+)
+
+conversation_router = sessions.router(prefix="/sessions")
+playlist_router = sessions.router(prefix="/sessions")
+```
+
+Each call returns an independent `CanonRouter` with the group contracts already
+applied. Additional router-level errors can be passed to `router(raises=[...])`.
+
 The error registry is optional for success-only routers, but any `raises=`
 declaration requires one. Every declared error must belong to that exact
 registry. The same error declared at both levels is included only once.
@@ -335,7 +353,8 @@ check or test to catch configuration errors early. Compilation failures are not
 cached. Routes excluded with `include_in_schema=False` are outside this
 document-level validation; `CanonRouter` still validates their explicit
 declarations when they are registered. Router-level `raises=` applies to
-operations declared on that router, not to separately included child routers.
+operations declared on that router, not to separately included child routers;
+use `CanonRouterGroup` for explicit sharing across sibling routers.
 
 ## Success response contracts
 
