@@ -326,8 +326,7 @@ def _validate_applied_composition(app: object, composition: Composition) -> None
         else None
     )
     if not isinstance(installed, _Installation) or (
-        installed.feature_ids
-        != tuple(id(feature) for feature in composition.features)
+        installed.feature_ids != tuple(id(feature) for feature in composition.features)
         or installed.errors != composition.errors
         or installed.router_factory_id != expected_router_factory_id
     ):
