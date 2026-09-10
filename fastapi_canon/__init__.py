@@ -11,6 +11,7 @@ from .feature import (
     ProviderSource,
     RouterFactory,
 )
+from .response import Response, ResponseHeaders
 
 __all__ = [
     "Composition",
@@ -24,5 +25,7 @@ __all__ = [
     "Problem",
     "ProviderFactory",
     "ProviderSource",
+    "Response",
+    "ResponseHeaders",
     "RouterFactory",
 ]

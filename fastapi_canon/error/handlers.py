@@ -107,7 +107,7 @@ def install_handlers(
 def _validate_route_contracts(
     registry: ErrorRegistry, app: FastAPI, *, include_http_exceptions: bool = True
 ) -> None:
-    for http_route, http_errors, http_statuses in iter_http_contracts(
+    for http_route, http_errors, http_statuses, _success in iter_http_contracts(
         app.router, registry
     ):
         for http_error in http_errors:

@@ -12,6 +12,7 @@ from fastapi_canon.error.contracts import (
     ERRORS_EXTENSION,
     HTTP_STATUSES_EXTENSION,
     INSTALLED_REGISTRY_STATE_KEY,
+    SUCCESS_EXTENSION,
     iter_http_contracts,
 )
 from fastapi_canon.error.problem import Problem
@@ -25,11 +26,13 @@ from fastapi_canon.error.types import (
 
 if TYPE_CHECKING:
     from fastapi_canon.error.registry import AnyError, ErrorRegistry
+    from fastapi_canon.response import Response
 
 _PROBLEM_MEDIA_TYPE = "application/problem+json"
 _HTTP_METHODS = frozenset(
     {"get", "put", "post", "delete", "options", "head", "patch", "trace"}
 )
+_MISSING = object()
 
 
 def install_openapi(
@@ -86,7 +89,7 @@ def compile_document(
 
     contracts = effective_http_contracts(app, registry)
     declared_http_statuses = {
-        status for _, _, _, statuses in contracts for status in statuses
+        status for _, _, _, statuses, _ in contracts for status in statuses
     }
     if declared_http_statuses and not include_http_exceptions:
         msg = "normalized HTTP responses require HTTP exception normalization"
@@ -98,7 +101,7 @@ def compile_document(
             _http_problem_schema(status),
         )
 
-    for path, methods, _errors, _http_statuses in contracts:
+    for path, methods, _errors, _http_statuses, _success in contracts:
         path_item = cast(dict[str, Any] | None, result.get("paths", {}).get(path))
         if path_item is None:
             continue
@@ -111,6 +114,9 @@ def compile_document(
                 if isinstance(response, dict):
                     response.pop(ERRORS_EXTENSION, None)
                     response.pop(HTTP_STATUSES_EXTENSION, None)
+                    success_media_type = response.pop(SUCCESS_EXTENSION, _MISSING)
+                    if success_media_type is not _MISSING:
+                        _retain_success_content(response, success_media_type)
             if include_validation_error:
                 _replace_default_validation_response(responses)
 
@@ -122,6 +128,7 @@ def compile_responses(
     errors: Sequence[AnyError],
     *,
     http_statuses: Sequence[int] = (),
+    success: Response | None = None,
 ) -> OpenAPIResponses:
     grouped: dict[int, list[AnyError]] = {}
     for error in errors:
@@ -159,13 +166,35 @@ def compile_responses(
         seen_http_statuses.add(status)
 
     statuses = dict.fromkeys((*grouped, *http_statuses))
-    return {
+    result: OpenAPIResponses = {
         status: _response_for_contracts(
             grouped.get(status, ()),
             http_status=status if status in seen_http_statuses else None,
         )
         for status in statuses
     }
+    if success is not None:
+        if success.status in result:
+            msg = f"success response conflicts with error status {success.status}"
+            raise ErrorConfigurationError(msg)
+        compiled_success = success.as_openapi()
+        compiled_success[SUCCESS_EXTENSION] = success.media_type
+        return {success.status: compiled_success, **result}
+    return result
+
+
+def _retain_success_content(response: dict[str, Any], media_type: object) -> None:
+    if media_type is None:
+        response.pop("content", None)
+        return
+    if not isinstance(media_type, str):
+        msg = "compiled success response contains invalid media type metadata"
+        raise ErrorConfigurationError(msg)
+    content = response.get("content")
+    if not isinstance(content, dict) or media_type not in content:
+        msg = f"compiled success response is missing media type {media_type!r}"
+        raise ErrorConfigurationError(msg)
+    response["content"] = {media_type: content[media_type]}
 
 
 def compile_error_schema(
@@ -402,7 +431,15 @@ def _request_validation_schema(registry: ErrorRegistry) -> dict[str, Any]:
 
 def effective_http_contracts(
     app: FastAPI, registry: ErrorRegistry | None = None
-) -> list[tuple[str, set[str], tuple[AnyError, ...], tuple[int, ...]]]:
+) -> list[
+    tuple[
+        str,
+        set[str],
+        tuple[AnyError, ...],
+        tuple[int, ...],
+        tuple[int, str | None] | None,
+    ]
+]:
     if registry is None:
         from fastapi_canon.error.registry import ErrorRegistry
 
@@ -416,8 +453,16 @@ def effective_http_contracts(
     if len(contracts) != len(contexts):
         msg = "FastAPI route traversal changed; cannot compile error contracts safely"
         raise ErrorConfigurationError(msg)
-    result: list[tuple[str, set[str], tuple[AnyError, ...], tuple[int, ...]]] = []
-    for (route, errors, http_statuses), context in zip(
+    result: list[
+        tuple[
+            str,
+            set[str],
+            tuple[AnyError, ...],
+            tuple[int, ...],
+            tuple[int, str | None] | None,
+        ]
+    ] = []
+    for (route, errors, http_statuses, success), context in zip(
         contracts, contexts, strict=True
     ):
         original = getattr(context, "original_route", context)
@@ -428,7 +473,7 @@ def effective_http_contracts(
         methods = set(
             cast(set[str] | None, getattr(context, "methods", route.methods)) or ()
         )
-        result.append((path, methods, errors, http_statuses))
+        result.append((path, methods, errors, http_statuses, success))
     return result
 
 
