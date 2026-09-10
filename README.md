@@ -30,7 +30,7 @@ Every contribution is optional:
 feature = Feature(
     routers=[router],
     providers=[provider],
-    faults=feature_faults,
+    errors=feature_errors,
     exception_handlers=[handler_spec],
     lifespan=feature_lifespan,
 )
@@ -47,28 +47,62 @@ one `AsyncContainer`. Applying the composition configures Dishka's FastAPI
 middleware and closes the container during application shutdown. Dishka exposes
 the container as `app.state.dishka_container`.
 
-### Faults
+### Errors
 
-Each feature may expose one `fastapi_faults.FaultRegistry`. The registries are
-merged and installed once, so runtime Problem Details and OpenAPI use the same
-definitions:
+Error contracts are implemented directly by `fastapi-canon`; no separate error
+library is required. Each feature may expose one `ErrorRegistry`. Registries are
+merged and installed once, so runtime RFC 9457 Problem Details and OpenAPI use
+the same definitions:
 
 ```python
-from fastapi_canon import Composition, FaultOptions
+from fastapi_canon import Composition, Error, ErrorOptions, ErrorRegistry, Feature
+
+
+class ProjectNotFound(Exception):
+    pass
+
+
+project_not_found = Error(
+    ProjectNotFound,
+    status=404,
+    code="project_not_found",
+    title="Project not found",
+    detail=lambda error: str(error),
+)
+
+project_errors = ErrorRegistry(
+    name="projects",
+    errors=[project_not_found],
+)
+
+project_feature = Feature(
+    routers=[projects],
+    errors=project_errors,
+)
 
 app = Composition(
     project_feature,
-    account_feature,
-    faults=FaultOptions(
+    errors=ErrorOptions(
         type_base="https://api.example.com/problems",
     ),
 ).apply(FastAPI())
 ```
 
+Declare endpoint responses from the same registry used at runtime:
+
+```python
+@projects.get(
+    "/{project_id}",
+    responses=project_errors.responses(project_not_found),
+)
+async def get_project(project_id: str) -> dict[str, str]:
+    raise ProjectNotFound(project_id)
+```
+
 When all local registries already share a `type_base`, it is inferred. The
-`FaultOptions` settings `include_validation_error`,
+`ErrorOptions` settings `include_validation_error`,
 `include_http_exceptions`, and `include_unhandled_error` are passed to
-`fastapi-faults` and default to `True`.
+the integrated error engine and default to `True`.
 
 Use `ExceptionHandlerSpec` for a deliberately custom Starlette/FastAPI handler:
 
@@ -85,7 +119,7 @@ feature = Feature(
 - Feature order is explicit and deterministic.
 - Reinstalling the exact same feature objects with the same options is a no-op.
 - A different second installation is rejected.
-- Duplicate routers, providers, handlers, and fault collisions fail during
+- Duplicate routers, providers, handlers, and error collisions fail during
   configuration.
 - Known configuration errors are validated against a temporary application
   before the real application is changed.
@@ -100,7 +134,7 @@ Configuration failures raise `FeatureConfigurationError`.
 - CPython 3.12, 3.13, or 3.14
 - FastAPI 0.115 or newer, below 1.0
 - Dishka 1.10 or newer, below 2.0
-- fastapi-faults 0.1 or newer
+- Pydantic 2.9 or newer, below 3.0
 
 ## Development
 

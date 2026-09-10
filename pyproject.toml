@@ -3,11 +3,22 @@ name = "fastapi-canon"
 version = "0.1.0"
 description = "Feature-oriented composition for FastAPI applications"
 readme = "README.md"
+authors = [{ name = "mathisarends" }]
+license = "MIT"
 requires-python = ">=3.12,<3.15"
+classifiers = [
+    "Framework :: FastAPI",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Typing :: Typed",
+]
 dependencies = [
     "dishka>=1.10,<2",
     "fastapi>=0.115,<1",
-    "fastapi-faults>=0.1.0",
+    "pydantic>=2.9,<3",
 ]
 
 [build-system]
@@ -20,9 +31,13 @@ packages = ["fastapi_canon"]
 [dependency-groups]
 dev = [
     "httpx>=0.27",
+    "httpx2>=2.12.0",
+    "jsonschema>=4.23",
     "mypy>=1.15",
+    "openapi-spec-validator>=0.7.1",
     "pytest>=8.3",
     "ruff>=0.11",
+    "types-jsonschema>=4.26",
 ]
 
 [tool.ruff]
@@ -43,3 +58,6 @@ warn_unreachable = true
 [tool.pytest.ini_options]
 addopts = ["--strict-config", "--strict-markers"]
 testpaths = ["tests"]
+filterwarnings = [
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning:starlette.testclient",
+]

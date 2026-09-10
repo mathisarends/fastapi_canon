@@ -7,15 +7,16 @@ from dishka import AsyncContainer, Provider, make_async_container
 from dishka.exceptions import DishkaError  # type: ignore[attr-defined]  # not exported
 from dishka.integrations.fastapi import setup_dishka
 from fastapi import APIRouter, FastAPI
-from fastapi_faults import FaultConfigurationError, FaultRegistry
 from starlette.types import ExceptionHandler, Lifespan
+
+from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
 
 type FeatureLifespan = Lifespan[FastAPI]
 
 _INSTALLATION_STATE_KEY = "_fastapi_canon_installation"
 
 
-class FeatureConfigurationError(FaultConfigurationError):
+class FeatureConfigurationError(ErrorConfigurationError):
     """Raised when feature contributions cannot be installed coherently."""
 
 
@@ -47,7 +48,7 @@ class Feature:
 
     routers: tuple[APIRouter, ...]
     providers: tuple[Provider, ...]
-    faults: FaultRegistry | None
+    errors: ErrorRegistry | None
     exception_handlers: tuple[ExceptionHandlerSpec, ...]
     lifespan: FeatureLifespan | None
 
@@ -56,7 +57,7 @@ class Feature:
         *,
         routers: Sequence[APIRouter] = (),
         providers: Sequence[Provider] = (),
-        faults: FaultRegistry | None = None,
+        errors: ErrorRegistry | None = None,
         exception_handlers: Sequence[ExceptionHandlerSpec] = (),
         lifespan: FeatureLifespan | None = None,
     ) -> None:
@@ -67,10 +68,10 @@ class Feature:
             ExceptionHandlerSpec,
             "exception_handlers",
         )
-        raw_faults: object = faults
+        raw_errors: object = errors
         raw_lifespan: object = lifespan
-        if raw_faults is not None and not isinstance(raw_faults, FaultRegistry):
-            msg = "faults must be a FaultRegistry instance or None"
+        if raw_errors is not None and not isinstance(raw_errors, ErrorRegistry):
+            msg = "errors must be an ErrorRegistry instance or None"
             raise FeatureConfigurationError(msg)
         if raw_lifespan is not None and not callable(raw_lifespan):
             msg = "lifespan must be callable or None"
@@ -78,14 +79,14 @@ class Feature:
 
         object.__setattr__(self, "routers", normalized_routers)
         object.__setattr__(self, "providers", normalized_providers)
-        object.__setattr__(self, "faults", faults)
+        object.__setattr__(self, "errors", errors)
         object.__setattr__(self, "exception_handlers", normalized_handlers)
         object.__setattr__(self, "lifespan", lifespan)
 
 
 @dataclass(frozen=True, slots=True, init=False)
-class FaultOptions:
-    """Application-wide options for composing feature fault registries."""
+class ErrorOptions:
+    """Application-wide options for composing feature error registries."""
 
     type_base: str | None
     registry_name: str | None
@@ -123,20 +124,20 @@ class Composition:
     """An ordered, reusable declaration of an application's features."""
 
     features: tuple[Feature, ...]
-    faults: FaultOptions
+    errors: ErrorOptions
 
     def __init__(
         self,
         *features: Feature,
-        faults: FaultOptions | None = None,
+        errors: ErrorOptions | None = None,
     ) -> None:
         normalized_features = _unique_instances(features, Feature, "features")
-        raw_faults: object = faults
-        if raw_faults is not None and not isinstance(raw_faults, FaultOptions):
-            msg = "faults must be a FaultOptions instance or None"
+        raw_errors: object = errors
+        if raw_errors is not None and not isinstance(raw_errors, ErrorOptions):
+            msg = "errors must be an ErrorOptions instance or None"
             raise FeatureConfigurationError(msg)
         object.__setattr__(self, "features", normalized_features)
-        object.__setattr__(self, "faults", faults or FaultOptions())
+        object.__setattr__(self, "errors", errors or ErrorOptions())
 
     def apply(self, app: FastAPI) -> FastAPI:
         """Apply this composition to *app* exactly once and return the app."""
@@ -148,7 +149,7 @@ class Composition:
 class _Installation:
     features: tuple[Feature, ...] = field(compare=False)
     feature_ids: tuple[int, ...]
-    faults: FaultOptions
+    errors: ErrorOptions
     container: AsyncContainer | None = field(compare=False)
 
 
@@ -160,7 +161,7 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
     requested = _Installation(
         features=composition.features,
         feature_ids=tuple(id(feature) for feature in composition.features),
-        faults=composition.faults,
+        errors=composition.errors,
         container=None,
     )
     installed = getattr(app.state, _INSTALLATION_STATE_KEY, None)
@@ -183,22 +184,22 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
     _validate_handlers(app, handler_specs)
 
     registries = tuple(
-        feature.faults for feature in composition.features if feature.faults is not None
+        feature.errors for feature in composition.features if feature.errors is not None
     )
-    registry = _merge_faults(
+    registry = _merge_errors(
         registries,
-        name=composition.faults.registry_name,
-        type_base=composition.faults.type_base,
+        name=composition.errors.registry_name,
+        type_base=composition.errors.type_base,
     )
     container = _make_container(providers)
-    _validate_fault_installation(
+    _validate_error_installation(
         app,
         routers,
         handler_specs,
         registry,
-        include_validation_error=composition.faults.include_validation_error,
-        include_http_exceptions=composition.faults.include_http_exceptions,
-        include_unhandled_error=composition.faults.include_unhandled_error,
+        include_validation_error=composition.errors.include_validation_error,
+        include_http_exceptions=composition.errors.include_http_exceptions,
+        include_unhandled_error=composition.errors.include_unhandled_error,
     )
     if container is not None and app.middleware_stack is not None:
         msg = "features with providers must be installed before the app starts"
@@ -212,9 +213,9 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
     if registry is not None:
         registry.install(
             app,
-            include_validation_error=composition.faults.include_validation_error,
-            include_http_exceptions=composition.faults.include_http_exceptions,
-            include_unhandled_error=composition.faults.include_unhandled_error,
+            include_validation_error=composition.errors.include_validation_error,
+            include_http_exceptions=composition.errors.include_http_exceptions,
+            include_unhandled_error=composition.errors.include_unhandled_error,
         )
     if container is not None:
         setup_dishka(container, app)
@@ -228,7 +229,7 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
     completed = _Installation(
         features=composition.features,
         feature_ids=requested.feature_ids,
-        faults=composition.faults,
+        errors=composition.errors,
         container=container,
     )
     setattr(app.state, _INSTALLATION_STATE_KEY, completed)
@@ -306,9 +307,9 @@ def _validate_handlers(app: FastAPI, specs: tuple[ExceptionHandlerSpec, ...]) ->
             raise FeatureConfigurationError(msg)
 
 
-def _merge_faults(
-    registries: tuple[FaultRegistry, ...], *, name: str | None, type_base: str | None
-) -> FaultRegistry | None:
+def _merge_errors(
+    registries: tuple[ErrorRegistry, ...], *, name: str | None, type_base: str | None
+) -> ErrorRegistry | None:
     if not registries:
         return None
     inferred_base = type_base
@@ -316,12 +317,12 @@ def _merge_faults(
     if inferred_base is None and len(registry_bases) == 1:
         inferred_base = next(iter(registry_bases))
     try:
-        return FaultRegistry.merge(
+        return ErrorRegistry.merge(
             *registries,
             name=name,
             type_base=inferred_base,
         )
-    except FaultConfigurationError as error:
+    except ErrorConfigurationError as error:
         raise FeatureConfigurationError(str(error)) from error
 
 
@@ -335,11 +336,11 @@ def _make_container(providers: tuple[Provider, ...]) -> AsyncContainer | None:
         raise FeatureConfigurationError(msg) from error
 
 
-def _validate_fault_installation(
+def _validate_error_installation(
     app: FastAPI,
     routers: tuple[APIRouter, ...],
     handler_specs: tuple[ExceptionHandlerSpec, ...],
-    registry: FaultRegistry | None,
+    registry: ErrorRegistry | None,
     *,
     include_validation_error: bool,
     include_http_exceptions: bool,
@@ -364,7 +365,7 @@ def _validate_fault_installation(
             include_http_exceptions=include_http_exceptions,
             include_unhandled_error=include_unhandled_error,
         )
-    except FaultConfigurationError as error:
+    except ErrorConfigurationError as error:
         raise FeatureConfigurationError(str(error)) from error
 
 

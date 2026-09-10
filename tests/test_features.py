@@ -8,16 +8,16 @@ from dishka.integrations.fastapi import inject
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
-from fastapi_faults import Fault, FaultRegistry
 from starlette.responses import Response
 
 from fastapi_canon import (
     Composition,
+    ErrorOptions,
     ExceptionHandlerSpec,
-    FaultOptions,
     Feature,
     FeatureConfigurationError,
 )
+from fastapi_canon.error import Error, ErrorRegistry
 
 
 def test_feature_copies_inputs_and_is_frozen() -> None:
@@ -75,25 +75,25 @@ def test_composition_rejects_a_different_second_composition() -> None:
         Composition(Feature()).apply(app)
 
 
-def test_composition_and_fault_options_are_immutable() -> None:
+def test_composition_and_error_options_are_immutable() -> None:
     feature = Feature()
-    options = FaultOptions(type_base="https://example.test/problems")
-    composition = Composition(feature, faults=options)
+    options = ErrorOptions(type_base="https://example.test/problems")
+    composition = Composition(feature, errors=options)
 
     assert composition.features == (feature,)
-    assert composition.faults is options
+    assert composition.errors is options
     with pytest.raises(FrozenInstanceError):
         composition.features = ()  # type: ignore[misc]
     with pytest.raises(FrozenInstanceError):
         options.type_base = None  # type: ignore[misc]
 
 
-def test_fault_options_reject_invalid_values() -> None:
+def test_error_options_reject_invalid_values() -> None:
     with pytest.raises(FeatureConfigurationError, match="type_base"):
-        FaultOptions(type_base=42)  # type: ignore[arg-type]
+        ErrorOptions(type_base=42)  # type: ignore[arg-type]
 
     with pytest.raises(FeatureConfigurationError, match="include_http_exceptions"):
-        FaultOptions(include_http_exceptions=1)  # type: ignore[arg-type]
+        ErrorOptions(include_http_exceptions=1)  # type: ignore[arg-type]
 
 
 def test_composition_rejects_shared_router_without_partial_application() -> None:
@@ -240,24 +240,24 @@ class NotFoundError(Exception):
     pass
 
 
-def test_fault_registries_are_merged_for_runtime_and_openapi() -> None:
-    fault = Fault(
+def test_error_registries_are_merged_for_runtime_and_openapi() -> None:
+    error = Error(
         NotFoundError,
         status=404,
         code="item_not_found",
         title="Item not found",
     )
-    faults = FaultRegistry(name="items", faults=[fault])
+    errors = ErrorRegistry(name="items", errors=[error])
     router = APIRouter()
 
-    @router.get("/items/{item_id}", responses=faults.responses(fault))
+    @router.get("/items/{item_id}", responses=errors.responses(error))
     async def get_item(item_id: str) -> None:
         del item_id
         raise NotFoundError
 
     app = Composition(
-        Feature(routers=[router], faults=faults),
-        faults=FaultOptions(type_base="https://example.test/problems"),
+        Feature(routers=[router], errors=errors),
+        errors=ErrorOptions(type_base="https://example.test/problems"),
     ).apply(FastAPI())
 
     with TestClient(app, raise_server_exceptions=False) as client:
@@ -271,17 +271,17 @@ def test_fault_registries_are_merged_for_runtime_and_openapi() -> None:
     )
 
 
-def test_fault_collision_does_not_install_routers() -> None:
+def test_error_collision_does_not_install_routers() -> None:
     class OtherNotFoundError(Exception):
         pass
 
-    first = Fault(
+    first = Error(
         NotFoundError,
         status=404,
         code="same_code",
         title="First",
     )
-    second = Fault(
+    second = Error(
         OtherNotFoundError,
         status=404,
         code="same_code",
@@ -295,10 +295,10 @@ def test_fault_collision_does_not_install_routers() -> None:
         Composition(
             Feature(
                 routers=[router],
-                faults=FaultRegistry(name="first", faults=[first]),
+                errors=ErrorRegistry(name="first", errors=[first]),
             ),
-            Feature(faults=FaultRegistry(name="second", faults=[second])),
-            faults=FaultOptions(type_base="https://example.test/problems"),
+            Feature(errors=ErrorRegistry(name="second", errors=[second])),
+            errors=ErrorOptions(type_base="https://example.test/problems"),
         ).apply(app)
 
     assert tuple(app.routes) == original_routes
