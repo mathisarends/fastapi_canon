@@ -7,6 +7,9 @@ from .feature import (
     ExceptionHandlerSpec,
     Feature,
     FeatureConfigurationError,
+    ProviderFactory,
+    ProviderSource,
+    RouterFactory,
 )
 
 __all__ = [
@@ -19,4 +22,7 @@ __all__ = [
     "Feature",
     "FeatureConfigurationError",
     "Problem",
+    "ProviderFactory",
+    "ProviderSource",
+    "RouterFactory",
 ]

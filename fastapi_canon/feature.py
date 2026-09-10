@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any
@@ -12,6 +12,9 @@ from starlette.types import ExceptionHandler, Lifespan
 from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
 
 type FeatureLifespan = Lifespan[FastAPI]
+type ProviderFactory = Callable[[], Provider]
+type ProviderSource = Provider | ProviderFactory
+type RouterFactory = Callable[[], APIRouter]
 
 _INSTALLATION_STATE_KEY = "_fastapi_canon_installation"
 
@@ -46,8 +49,9 @@ class ExceptionHandlerSpec:
 class Feature:
     """An immutable declaration of one feature's FastAPI contributions."""
 
+    name: str
     routers: tuple[APIRouter, ...]
-    providers: tuple[Provider, ...]
+    providers: tuple[ProviderSource, ...]
     errors: ErrorRegistry | None
     exception_handlers: tuple[ExceptionHandlerSpec, ...]
     lifespan: FeatureLifespan | None
@@ -55,28 +59,35 @@ class Feature:
     def __init__(
         self,
         *,
+        name: str,
         routers: Sequence[APIRouter] = (),
-        providers: Sequence[Provider] = (),
+        providers: Sequence[ProviderSource] = (),
         errors: ErrorRegistry | None = None,
         exception_handlers: Sequence[ExceptionHandlerSpec] = (),
         lifespan: FeatureLifespan | None = None,
     ) -> None:
-        normalized_routers = _unique_instances(routers, APIRouter, "routers")
-        normalized_providers = _unique_instances(providers, Provider, "providers")
+        normalized_name = _validate_feature_name(name)
+        normalized_routers = _unique_instances(
+            routers, APIRouter, f"feature {normalized_name!r} routers"
+        )
+        normalized_providers = _unique_provider_sources(
+            providers, feature_name=normalized_name
+        )
         normalized_handlers = _unique_instances(
             exception_handlers,
             ExceptionHandlerSpec,
-            "exception_handlers",
+            f"feature {normalized_name!r} exception_handlers",
         )
         raw_errors: object = errors
         raw_lifespan: object = lifespan
         if raw_errors is not None and not isinstance(raw_errors, ErrorRegistry):
-            msg = "errors must be an ErrorRegistry instance or None"
+            msg = f"feature {normalized_name!r} errors must be an ErrorRegistry instance or None"
             raise FeatureConfigurationError(msg)
         if raw_lifespan is not None and not callable(raw_lifespan):
-            msg = "lifespan must be callable or None"
+            msg = f"feature {normalized_name!r} lifespan must be callable or None"
             raise FeatureConfigurationError(msg)
 
+        object.__setattr__(self, "name", normalized_name)
         object.__setattr__(self, "routers", normalized_routers)
         object.__setattr__(self, "providers", normalized_providers)
         object.__setattr__(self, "errors", errors)
@@ -125,19 +136,27 @@ class Composition:
 
     features: tuple[Feature, ...]
     errors: ErrorOptions
+    router_factory: RouterFactory | None
 
     def __init__(
         self,
         *features: Feature,
         errors: ErrorOptions | None = None,
+        router_factory: RouterFactory | None = None,
     ) -> None:
         normalized_features = _unique_instances(features, Feature, "features")
+        _validate_unique_feature_names(normalized_features)
         raw_errors: object = errors
+        raw_router_factory: object = router_factory
         if raw_errors is not None and not isinstance(raw_errors, ErrorOptions):
             msg = "errors must be an ErrorOptions instance or None"
             raise FeatureConfigurationError(msg)
+        if raw_router_factory is not None and not callable(raw_router_factory):
+            msg = "router_factory must be callable or None"
+            raise FeatureConfigurationError(msg)
         object.__setattr__(self, "features", normalized_features)
         object.__setattr__(self, "errors", errors or ErrorOptions())
+        object.__setattr__(self, "router_factory", router_factory)
 
     def apply(self, app: FastAPI) -> FastAPI:
         """Apply this composition to *app* exactly once and return the app."""
@@ -150,7 +169,15 @@ class _Installation:
     features: tuple[Feature, ...] = field(compare=False)
     feature_ids: tuple[int, ...]
     errors: ErrorOptions
+    router_factory: RouterFactory | None = field(compare=False)
+    router_factory_id: int | None
     container: AsyncContainer | None = field(compare=False)
+
+
+@dataclass(frozen=True, slots=True)
+class _MaterializedProvider:
+    feature_name: str
+    provider: Provider
 
 
 def _apply_composition(app: FastAPI, composition: Composition) -> None:
@@ -162,6 +189,12 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
         features=composition.features,
         feature_ids=tuple(id(feature) for feature in composition.features),
         errors=composition.errors,
+        router_factory=composition.router_factory,
+        router_factory_id=(
+            id(composition.router_factory)
+            if composition.router_factory is not None
+            else None
+        ),
         container=None,
     )
     installed = getattr(app.state, _INSTALLATION_STATE_KEY, None)
@@ -172,29 +205,38 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
         return
 
     routers = _flatten_routers(composition.features)
-    providers = _flatten_providers(composition.features)
+    provider_sources = _flatten_provider_sources(composition.features)
     handler_specs = _flatten_handlers(composition.features)
     lifespans = tuple(
         feature.lifespan
         for feature in composition.features
         if feature.lifespan is not None
     )
-    _reject_duplicate_contributions(routers, "router")
-    _reject_duplicate_contributions(providers, "provider")
-    _validate_handlers(app, handler_specs)
+    _reject_duplicate_contributions(composition.features, "routers", "router")
+    _reject_duplicate_contributions(
+        composition.features, "providers", "provider source"
+    )
+    materialized_providers = _materialize_providers(provider_sources)
+    _reject_duplicate_materialized_providers(materialized_providers)
+    _validate_handlers(app, composition.features)
+    installed_routers = _prepare_routers(routers, composition.router_factory)
 
     registries = tuple(
-        feature.errors for feature in composition.features if feature.errors is not None
+        (feature.name, feature.errors)
+        for feature in composition.features
+        if feature.errors is not None
     )
     registry = _merge_errors(
         registries,
         name=composition.errors.registry_name,
         type_base=composition.errors.type_base,
     )
-    container = _make_container(providers)
+    container = _make_container(
+        tuple(contribution.provider for contribution in materialized_providers)
+    )
     _validate_error_installation(
         app,
-        routers,
+        installed_routers,
         handler_specs,
         registry,
         include_validation_error=composition.errors.include_validation_error,
@@ -206,7 +248,7 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
         raise FeatureConfigurationError(msg)
 
     original_lifespan = app.router.lifespan_context
-    for router in routers:
+    for router in installed_routers:
         app.include_router(router)
     for spec in handler_specs:
         app.add_exception_handler(spec.exception, spec.handler)
@@ -230,6 +272,8 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
         features=composition.features,
         feature_ids=requested.feature_ids,
         errors=composition.errors,
+        router_factory=composition.router_factory,
+        router_factory_id=requested.router_factory_id,
         container=container,
     )
     setattr(app.state, _INSTALLATION_STATE_KEY, completed)
@@ -258,6 +302,31 @@ def _validate_optional_string(value: object, parameter: str) -> None:
         raise FeatureConfigurationError(msg)
 
 
+def _validate_feature_name(value: object) -> str:
+    if (
+        not isinstance(value, str)
+        or not value.strip()
+        or "\r" in value
+        or "\n" in value
+    ):
+        msg = "feature name must be a non-empty, single-line string"
+        raise FeatureConfigurationError(msg)
+    return value
+
+
+def _validate_unique_feature_names(features: tuple[Feature, ...]) -> None:
+    seen: dict[str, int] = {}
+    for index, feature in enumerate(features):
+        previous = seen.get(feature.name)
+        if previous is not None:
+            msg = (
+                f"feature name {feature.name!r} is duplicated at "
+                f"features[{previous}] and features[{index}]"
+            )
+            raise FeatureConfigurationError(msg)
+        seen[feature.name] = index
+
+
 def _validate_bool(value: object, parameter: str) -> None:
     if not isinstance(value, bool):
         msg = f"{parameter} must be a bool"
@@ -268,8 +337,38 @@ def _flatten_routers(features: tuple[Feature, ...]) -> tuple[APIRouter, ...]:
     return tuple(router for feature in features for router in feature.routers)
 
 
-def _flatten_providers(features: tuple[Feature, ...]) -> tuple[Provider, ...]:
-    return tuple(provider for feature in features for provider in feature.providers)
+def _unique_provider_sources(
+    values: Sequence[ProviderSource], *, feature_name: str
+) -> tuple[ProviderSource, ...]:
+    result: list[ProviderSource] = []
+    seen: set[int] = set()
+    for index, value in enumerate(values):
+        raw_value: object = value
+        if not isinstance(raw_value, Provider) and not callable(raw_value):
+            msg = (
+                f"feature {feature_name!r} providers[{index}] must be a Provider "
+                "instance, Provider class, or zero-argument provider factory"
+            )
+            raise FeatureConfigurationError(msg)
+        if id(value) in seen:
+            msg = (
+                f"feature {feature_name!r} providers[{index}] duplicates an "
+                "earlier provider source"
+            )
+            raise FeatureConfigurationError(msg)
+        seen.add(id(value))
+        result.append(value)
+    return tuple(result)
+
+
+def _flatten_provider_sources(
+    features: tuple[Feature, ...],
+) -> tuple[tuple[str, ProviderSource], ...]:
+    return tuple(
+        (feature.name, provider)
+        for feature in features
+        for provider in feature.providers
+    )
 
 
 def _flatten_handlers(
@@ -280,50 +379,133 @@ def _flatten_handlers(
     )
 
 
-def _reject_duplicate_contributions(values: Sequence[object], kind: str) -> None:
-    seen: set[int] = set()
-    for value in values:
-        if id(value) in seen:
-            msg = f"the same {kind} instance is contributed by multiple features"
-            raise FeatureConfigurationError(msg)
-        seen.add(id(value))
+def _reject_duplicate_contributions(
+    features: tuple[Feature, ...], attribute: str, kind: str
+) -> None:
+    seen: dict[int, str] = {}
+    for feature in features:
+        values = getattr(feature, attribute)
+        for value in values:
+            previous = seen.get(id(value))
+            if previous is not None:
+                msg = (
+                    f"features {previous!r} and {feature.name!r} contribute the "
+                    f"same {kind} instance"
+                )
+                raise FeatureConfigurationError(msg)
+            seen[id(value)] = feature.name
 
 
-def _validate_handlers(app: FastAPI, specs: tuple[ExceptionHandlerSpec, ...]) -> None:
-    seen: set[type[Exception]] = set()
-    for spec in specs:
-        if spec.exception in seen:
+def _materialize_providers(
+    sources: tuple[tuple[str, ProviderSource], ...],
+) -> tuple[_MaterializedProvider, ...]:
+    result: list[_MaterializedProvider] = []
+    for feature_name, source in sources:
+        if isinstance(source, Provider):
+            provider = source
+        else:
+            try:
+                candidate: object = source()
+            except Exception as error:
+                msg = f"provider factory from feature {feature_name!r} failed"
+                raise FeatureConfigurationError(msg) from error
+            if not isinstance(candidate, Provider):
+                msg = (
+                    f"provider factory from feature {feature_name!r} returned "
+                    f"{type(candidate).__name__}, expected Provider"
+                )
+                raise FeatureConfigurationError(msg)
+            provider = candidate
+        result.append(_MaterializedProvider(feature_name, provider))
+    return tuple(result)
+
+
+def _reject_duplicate_materialized_providers(
+    providers: tuple[_MaterializedProvider, ...],
+) -> None:
+    seen: dict[int, str] = {}
+    for contribution in providers:
+        previous = seen.get(id(contribution.provider))
+        if previous is not None:
             msg = (
-                "multiple features define an exception handler for "
-                f"{spec.exception.__qualname__}"
+                f"provider sources from features {previous!r} and "
+                f"{contribution.feature_name!r} produced the same Provider instance"
             )
             raise FeatureConfigurationError(msg)
-        seen.add(spec.exception)
-        if spec.exception in app.exception_handlers:
-            msg = (
-                "application already defines an exception handler for "
-                f"{spec.exception.__qualname__}"
-            )
-            raise FeatureConfigurationError(msg)
+        seen[id(contribution.provider)] = contribution.feature_name
+
+
+def _prepare_routers(
+    routers: tuple[APIRouter, ...], router_factory: RouterFactory | None
+) -> tuple[APIRouter, ...]:
+    if router_factory is None:
+        return routers
+    try:
+        wrapper: object = router_factory()
+    except Exception as error:
+        msg = "router_factory failed"
+        raise FeatureConfigurationError(msg) from error
+    if not isinstance(wrapper, APIRouter):
+        msg = f"router_factory returned {type(wrapper).__name__}, expected APIRouter"
+        raise FeatureConfigurationError(msg)
+    if wrapper.routes:
+        msg = "router_factory must return a fresh APIRouter without routes"
+        raise FeatureConfigurationError(msg)
+    try:
+        for router in routers:
+            wrapper.include_router(router)
+    except Exception as error:
+        msg = "composition router failed to include feature routers"
+        raise FeatureConfigurationError(msg) from error
+    return (wrapper,)
+
+
+def _validate_handlers(app: FastAPI, features: tuple[Feature, ...]) -> None:
+    seen: dict[type[Exception], str] = {}
+    for feature in features:
+        for spec in feature.exception_handlers:
+            previous = seen.get(spec.exception)
+            if previous is not None:
+                msg = (
+                    f"features {previous!r} and {feature.name!r} define an "
+                    "exception handler for "
+                    f"{spec.exception.__qualname__}"
+                )
+                raise FeatureConfigurationError(msg)
+            seen[spec.exception] = feature.name
+            if spec.exception in app.exception_handlers:
+                msg = (
+                    f"feature {feature.name!r} defines an exception handler for "
+                    f"{spec.exception.__qualname__}, but the application already "
+                    "defines one"
+                )
+                raise FeatureConfigurationError(msg)
 
 
 def _merge_errors(
-    registries: tuple[ErrorRegistry, ...], *, name: str | None, type_base: str | None
+    registries: tuple[tuple[str, ErrorRegistry], ...],
+    *,
+    name: str | None,
+    type_base: str | None,
 ) -> ErrorRegistry | None:
     if not registries:
         return None
     inferred_base = type_base
-    registry_bases = {registry.type_base for registry in registries}
+    registry_bases = {registry.type_base for _, registry in registries}
     if inferred_base is None and len(registry_bases) == 1:
         inferred_base = next(iter(registry_bases))
     try:
         return ErrorRegistry.merge(
-            *registries,
+            *(registry for _, registry in registries),
             name=name,
             type_base=inferred_base,
         )
     except ErrorConfigurationError as error:
-        raise FeatureConfigurationError(str(error)) from error
+        feature_names = ", ".join(repr(feature_name) for feature_name, _ in registries)
+        msg = (
+            f"error registries from features {feature_names} are incompatible: {error}"
+        )
+        raise FeatureConfigurationError(msg) from error
 
 
 def _make_container(providers: tuple[Provider, ...]) -> AsyncContainer | None:

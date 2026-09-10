@@ -5,6 +5,7 @@ from .providers import CatalogProvider
 from .router import router
 
 feature = Feature(
+    name="catalog",
     routers=[router],
     providers=[CatalogProvider()],
     errors=registry,
