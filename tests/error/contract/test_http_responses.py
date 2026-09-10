@@ -124,3 +124,16 @@ def test_declared_http_response_requires_runtime_normalization() -> None:
 
     with pytest.raises(ErrorConfigurationError, match="normalization is disabled"):
         registry.install(app, include_http_exceptions=False)
+
+
+def test_generic_http_response_rejects_a_conflicting_domain_code() -> None:
+    conflict = Error(
+        Missing,
+        status=404,
+        code="http_404",
+        title="Custom missing response",
+    )
+    registry = make_registry(conflict)
+
+    with pytest.raises(ErrorConfigurationError, match="conflicts with domain error"):
+        registry.responses(conflict, http_statuses=[404])

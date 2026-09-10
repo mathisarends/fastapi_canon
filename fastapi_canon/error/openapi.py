@@ -142,6 +142,20 @@ def compile_responses(
         if status in seen_http_statuses:
             msg = f"http_statuses[{index}] duplicates status {status}"
             raise ErrorConfigurationError(msg)
+        conflicting_error = next(
+            (
+                error
+                for error in grouped.get(status, ())
+                if error.code == f"http_{status}"
+            ),
+            None,
+        )
+        if conflicting_error is not None:
+            msg = (
+                f"generic HTTP status {status} conflicts with domain error code "
+                f"{conflicting_error.code!r}"
+            )
+            raise ErrorConfigurationError(msg)
         seen_http_statuses.add(status)
 
     statuses = dict.fromkeys((*grouped, *http_statuses))
