@@ -50,7 +50,9 @@ def _errors_from_responses(
         response: object = configured_response
         if not isinstance(response, Mapping):
             continue
-        identities = response.get(ERRORS_EXTENSION, ())
+        if ERRORS_EXTENSION not in response:
+            continue
+        identities = response[ERRORS_EXTENSION]
         if not isinstance(identities, list) or not all(
             isinstance(identity, str) for identity in identities
         ):
