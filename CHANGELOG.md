@@ -4,6 +4,11 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ## 0.3.0 - 2026-09-10
 
+### Added
+
+- Added `CanonResponse.responses()` so success-only routes can declare and
+  compile response contracts without an empty `ErrorRegistry`.
+
 ### Changed
 
 - Renamed the public success contract from `Response` to `CanonResponse` to

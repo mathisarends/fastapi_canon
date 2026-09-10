@@ -306,6 +306,23 @@ The available constructors are:
 | `CanonResponse.binary(media_type)` | Binary string stream with status 200 |
 | `CanonResponse.sse()` | `CanonResponse.stream("text/event-stream")` |
 
+Success-only routes can compile their contract directly without creating an
+empty `ErrorRegistry`:
+
+```python
+@router.get(
+    "/health",
+    responses=CanonResponse.json(
+        schema={"type": "object"},
+        description="Service health",
+    ).responses(),
+)
+async def health() -> dict[str, str]: ...
+```
+
+The application's installed registry still performs the shared final OpenAPI
+compilation, but the route declaration is independent of its error definitions.
+
 Schemas and header definitions are copied into immutable mappings. Header names
 may be supplied as a list for standard string-valued header schemas or as a
 mapping containing complete OpenAPI header definitions. When a success status

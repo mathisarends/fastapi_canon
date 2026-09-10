@@ -177,9 +177,7 @@ def compile_responses(
         if success.status in result:
             msg = f"success response conflicts with error status {success.status}"
             raise ErrorConfigurationError(msg)
-        compiled_success = success.as_openapi()
-        compiled_success[SUCCESS_EXTENSION] = success.media_type
-        return {success.status: compiled_success, **result}
+        return {**success.responses(), **result}
     return result
 
 

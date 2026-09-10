@@ -2,6 +2,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 from fastapi import APIRouter, FastAPI
+from fastapi.responses import JSONResponse
 
 from fastapi_canon import CanonResponse, ErrorRegistry
 from fastapi_canon.error import ErrorConfigurationError
@@ -116,6 +117,30 @@ def test_success_contract_replaces_fastapi_default_media_type() -> None:
     }
     assert "401" in responses
     assert "403" in responses
+
+
+def test_success_only_route_does_not_require_an_error_registry_declaration() -> None:
+    errors = registry()
+    router = APIRouter()
+
+    @router.get(
+        "/health",
+        responses=CanonResponse.json(
+            schema={"type": "object"},
+            description="Service health",
+        ).responses(),
+    )
+    async def health() -> JSONResponse:
+        return JSONResponse({"status": "ok"})
+
+    app = FastAPI()
+    app.include_router(router)
+    errors.install(app)
+
+    assert app.openapi()["paths"]["/health"]["get"]["responses"]["200"] == {
+        "description": "Service health",
+        "content": {"application/json": {"schema": {"type": "object"}}},
+    }
 
 
 def test_empty_success_contract_matches_endpoint_status() -> None:

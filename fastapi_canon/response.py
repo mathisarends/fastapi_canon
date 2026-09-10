@@ -12,6 +12,7 @@ from fastapi_canon.error.types import (
     JsonValue,
     OpenAPIHeader,
     OpenAPIResponse,
+    OpenAPIResponses,
 )
 
 type ResponseHeaders = Sequence[str] | Mapping[str, OpenAPIHeader]
@@ -157,6 +158,14 @@ class CanonResponse:
                 name: _thaw(definition) for name, definition in self.headers.items()
             }
         return result
+
+    def responses(self) -> OpenAPIResponses:
+        """Compile this contract for a FastAPI route's ``responses`` argument."""
+        from fastapi_canon.error.contracts import SUCCESS_EXTENSION
+
+        response = self.as_openapi()
+        response[SUCCESS_EXTENSION] = self.media_type
+        return {self.status: response}
 
 
 def _validate_status(value: object) -> int:
