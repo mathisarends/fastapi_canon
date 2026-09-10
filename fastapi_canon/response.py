@@ -23,7 +23,7 @@ _NO_CONTENT_STATUSES = frozenset({204, 304})
 
 
 @dataclass(frozen=True, slots=True, init=False)
-class Response:
+class CanonResponse:
     """An immutable OpenAPI contract for one successful HTTP response."""
 
     status: int

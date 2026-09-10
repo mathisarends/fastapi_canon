@@ -26,7 +26,7 @@ from fastapi_canon.error.types import (
 
 if TYPE_CHECKING:
     from fastapi_canon.error.registry import AnyError, ErrorRegistry
-    from fastapi_canon.response import Response
+    from fastapi_canon.response import CanonResponse
 
 _PROBLEM_MEDIA_TYPE = "application/problem+json"
 _HTTP_METHODS = frozenset(
@@ -128,7 +128,7 @@ def compile_responses(
     errors: Sequence[AnyError],
     *,
     http_statuses: Sequence[int] = (),
-    success: Response | None = None,
+    success: CanonResponse | None = None,
 ) -> OpenAPIResponses:
     grouped: dict[int, list[AnyError]] = {}
     for error in errors:

@@ -266,18 +266,18 @@ match unrelated programming failures.
 
 ## Success response contracts
 
-`Response` describes one successful response using the same `responses()` call
+`CanonResponse` describes one successful response using the same `responses()` call
 as domain and HTTP errors:
 
 ```python
-from fastapi_canon import Response
+from fastapi_canon import CanonResponse
 
 
 @router.get(
     "/events",
     responses=api_errors.responses(
         http_statuses=[401, 403],
-        success=Response.sse(),
+        success=CanonResponse.sse(),
     ),
 )
 async def events() -> StreamingResponse: ...
@@ -287,7 +287,7 @@ The generic form accepts a status, media type, OpenAPI schema, description, and
 response headers:
 
 ```python
-success = Response(
+success = CanonResponse(
     status=200,
     media_type="application/example+json",
     schema={"type": "object"},
@@ -300,11 +300,11 @@ The available constructors are:
 
 | Constructor | Default contract |
 | --- | --- |
-| `Response.json()` | `application/json` with status 200 |
-| `Response.empty()` | No response content with status 204 |
-| `Response.stream(media_type)` | String stream with status 200 |
-| `Response.binary(media_type)` | Binary string stream with status 200 |
-| `Response.sse()` | `Response.stream("text/event-stream")` |
+| `CanonResponse.json()` | `application/json` with status 200 |
+| `CanonResponse.empty()` | No response content with status 204 |
+| `CanonResponse.stream(media_type)` | String stream with status 200 |
+| `CanonResponse.binary(media_type)` | Binary string stream with status 200 |
+| `CanonResponse.sse()` | `CanonResponse.stream("text/event-stream")` |
 
 Schemas and header definitions are copied into immutable mappings. Header names
 may be supplied as a list for standard string-valued header schemas or as a
@@ -317,7 +317,7 @@ is not 200, set the same `status_code` on the FastAPI route.
 from collections.abc import AsyncIterator
 
 from fastapi.responses import StreamingResponse
-from fastapi_canon import Response
+from fastapi_canon import CanonResponse
 
 
 async def event_chunks() -> AsyncIterator[str]:
@@ -329,7 +329,7 @@ async def event_chunks() -> AsyncIterator[str]:
     "/events",
     responses=api_errors.responses(
         http_statuses=[401, 403],
-        success=Response.sse(),
+        success=CanonResponse.sse(),
     ),
 )
 async def events() -> StreamingResponse:
@@ -351,7 +351,7 @@ from pathlib import Path
 from uuid import UUID
 
 from fastapi.responses import StreamingResponse
-from fastapi_canon import Response
+from fastapi_canon import CanonResponse
 
 
 def pdf_chunks(path: Path) -> Iterator[bytes]:
@@ -365,7 +365,7 @@ def pdf_chunks(path: Path) -> Iterator[bytes]:
     responses=api_errors.responses(
         document_missing,
         http_statuses=[401, 403],
-        success=Response.binary(
+        success=CanonResponse.binary(
             "application/pdf",
             headers=["Content-Disposition"],
         ),
