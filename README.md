@@ -347,14 +347,15 @@ Canon rejects mismatched status codes, bodyless responses with an explicit
 declarations at route declaration time. Other FastAPI decorator options continue
 to pass through unchanged.
 
-Application-registry membership and HTTP-normalization checks run when
-`app.openapi()` is generated. Call it after registering all routes in a startup
-check or test to catch configuration errors early. Compilation failures are not
-cached. Routes excluded with `include_in_schema=False` are outside this
-document-level validation; `CanonRouter` still validates their explicit
-declarations when they are registered. Router-level `raises=` applies to
-operations declared on that router, not to separately included child routers;
-use `CanonRouterGroup` for explicit sharing across sibling routers.
+Application-registry membership and HTTP-normalization checks run when OpenAPI
+is generated. Call `composition.validate(app)` after applying a composition, or
+`validate_openapi_contracts(app)` for a manually assembled application, to make
+that validation intent explicit. Compilation failures are not cached. Routes
+excluded with `include_in_schema=False` are outside document-level validation;
+`CanonRouter` still validates their explicit declarations when they are
+registered. Router-level `raises=` applies to operations declared on that
+router, not to separately included child routers; use `CanonRouterGroup` for
+explicit sharing across sibling routers.
 
 ## Success response contracts
 

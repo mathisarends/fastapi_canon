@@ -10,7 +10,10 @@ from fastapi import APIRouter, FastAPI
 from starlette.types import ExceptionHandler, Lifespan
 
 from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
-from fastapi_canon.openapi import install_openapi_contracts
+from fastapi_canon.openapi import (
+    install_openapi_contracts,
+    validate_openapi_contracts,
+)
 from fastapi_canon.router import CanonRouter
 
 type FeatureLifespan = Lifespan[FastAPI]
@@ -172,6 +175,11 @@ class Composition:
         _apply_composition(app, self)
         return app
 
+    def validate(self, app: FastAPI) -> None:
+        """Validate the OpenAPI contracts of this applied composition."""
+        _validate_applied_composition(app, self)
+        validate_openapi_contracts(app)
+
 
 @dataclass(frozen=True, slots=True)
 class _Installation:
@@ -305,6 +313,26 @@ def _unique_instances[ItemT](
         seen.add(id(value))
         result.append(value)
     return tuple(result)
+
+
+def _validate_applied_composition(app: object, composition: Composition) -> None:
+    if not isinstance(app, FastAPI):
+        msg = "app must be a FastAPI instance"
+        raise FeatureConfigurationError(msg)
+    installed = getattr(app.state, _INSTALLATION_STATE_KEY, None)
+    expected_router_factory_id = (
+        id(composition.router_factory)
+        if composition.router_factory is not None
+        else None
+    )
+    if not isinstance(installed, _Installation) or (
+        installed.feature_ids
+        != tuple(id(feature) for feature in composition.features)
+        or installed.errors != composition.errors
+        or installed.router_factory_id != expected_router_factory_id
+    ):
+        msg = "composition must be applied to the application before validation"
+        raise FeatureConfigurationError(msg)
 
 
 def _collect_router_errors(
