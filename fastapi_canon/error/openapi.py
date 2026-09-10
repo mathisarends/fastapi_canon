@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 from fastapi_canon.error.contracts import (
     ERRORS_EXTENSION,
+    HTTP_STATUSES_EXTENSION,
     INSTALLED_REGISTRY_STATE_KEY,
     iter_http_contracts,
 )
@@ -19,6 +20,7 @@ from fastapi_canon.error.types import (
     JsonValue,
     OpenAPIResponse,
     OpenAPIResponses,
+    http_problem_title,
 )
 
 if TYPE_CHECKING:
@@ -35,6 +37,7 @@ def install_openapi(
     app: FastAPI,
     *,
     include_validation_error: bool,
+    include_http_exceptions: bool,
 ) -> None:
     previous_openapi = app.openapi
 
@@ -47,6 +50,7 @@ def install_openapi(
             app,
             document,
             include_validation_error=include_validation_error,
+            include_http_exceptions=include_http_exceptions,
         )
         app.openapi_schema = compiled
         return compiled
@@ -60,6 +64,7 @@ def compile_document(
     document: dict[str, Any],
     *,
     include_validation_error: bool,
+    include_http_exceptions: bool,
 ) -> dict[str, Any]:
     result = copy.deepcopy(document)
     components = result.setdefault("components", {}).setdefault("schemas", {})
@@ -79,7 +84,21 @@ def compile_document(
             _request_validation_schema(registry),
         )
 
-    for path, methods, _errors in effective_http_contracts(app, registry):
+    contracts = effective_http_contracts(app, registry)
+    declared_http_statuses = {
+        status for _, _, _, statuses in contracts for status in statuses
+    }
+    if declared_http_statuses and not include_http_exceptions:
+        msg = "normalized HTTP responses require HTTP exception normalization"
+        raise ErrorConfigurationError(msg)
+    for status in sorted(declared_http_statuses):
+        _add_component(
+            components,
+            _http_component_name(status),
+            _http_problem_schema(status),
+        )
+
+    for path, methods, _errors, _http_statuses in contracts:
         path_item = cast(dict[str, Any] | None, result.get("paths", {}).get(path))
         if path_item is None:
             continue
@@ -91,6 +110,7 @@ def compile_document(
             for response in responses.values():
                 if isinstance(response, dict):
                     response.pop(ERRORS_EXTENSION, None)
+                    response.pop(HTTP_STATUSES_EXTENSION, None)
             if include_validation_error:
                 _replace_default_validation_response(responses)
 
@@ -100,6 +120,8 @@ def compile_document(
 def compile_responses(
     registry: ErrorRegistry,
     errors: Sequence[AnyError],
+    *,
+    http_statuses: Sequence[int] = (),
 ) -> OpenAPIResponses:
     grouped: dict[int, list[AnyError]] = {}
     for error in errors:
@@ -108,7 +130,28 @@ def compile_responses(
             raise ErrorConfigurationError(msg)
         grouped.setdefault(error.status, []).append(error)
 
-    return {status: _response_for_errors(group) for status, group in grouped.items()}
+    seen_http_statuses: set[int] = set()
+    for index, status in enumerate(http_statuses):
+        if (
+            not isinstance(status, int)
+            or isinstance(status, bool)
+            or not 400 <= status <= 599
+        ):
+            msg = f"http_statuses[{index}] must be between 400 and 599"
+            raise ErrorConfigurationError(msg)
+        if status in seen_http_statuses:
+            msg = f"http_statuses[{index}] duplicates status {status}"
+            raise ErrorConfigurationError(msg)
+        seen_http_statuses.add(status)
+
+    statuses = dict.fromkeys((*grouped, *http_statuses))
+    return {
+        status: _response_for_contracts(
+            grouped.get(status, ()),
+            http_status=status if status in seen_http_statuses else None,
+        )
+        for status in statuses
+    }
 
 
 def compile_error_schema(
@@ -174,31 +217,43 @@ def _base_problem_schema() -> dict[str, Any]:
     }
 
 
-def _response_for_errors(errors: Sequence[AnyError]) -> OpenAPIResponse:
+def _response_for_contracts(
+    errors: Sequence[AnyError], *, http_status: int | None
+) -> OpenAPIResponse:
     references = [
         f"#/components/schemas/{error.effective_schema_name}" for error in errors
     ]
-    if len(errors) == 1:
+    titles = [error.title for error in errors]
+    codes = [error.code for error in errors]
+    if http_status is not None:
+        references.append(f"#/components/schemas/{_http_component_name(http_status)}")
+        titles.append(http_problem_title(http_status))
+        codes.append(f"http_{http_status}")
+
+    if len(references) == 1:
         schema: dict[str, Any] = {"$ref": references[0]}
-        description = errors[0].description or errors[0].title
+        description = errors[0].description or errors[0].title if errors else titles[0]
     else:
         schema = {
             "oneOf": [{"$ref": reference} for reference in references],
             "discriminator": {
                 "propertyName": "code",
                 "mapping": {
-                    error.code: reference
-                    for error, reference in zip(errors, references, strict=True)
+                    code: reference
+                    for code, reference in zip(codes, references, strict=True)
                 },
             },
         }
-        description = "Possible problems: " + ", ".join(error.title for error in errors)
+        description = "Possible problems: " + ", ".join(titles)
 
     response: OpenAPIResponse = {
         "description": description,
         "content": {_PROBLEM_MEDIA_TYPE: {"schema": schema}},
     }
-    response[ERRORS_EXTENSION] = [str(id(error)) for error in errors]
+    if errors:
+        response[ERRORS_EXTENSION] = [str(id(error)) for error in errors]
+    if http_status is not None:
+        response[HTTP_STATUSES_EXTENSION] = [http_status]
     headers: dict[str, Any] = {}
     for error in errors:
         for name, definition in (error.openapi_headers or {}).items():
@@ -213,6 +268,29 @@ def _response_for_errors(errors: Sequence[AnyError]) -> OpenAPIResponse:
     if headers:
         response["headers"] = headers
     return response
+
+
+def _http_component_name(status: int) -> str:
+    return f"Http{status}Problem"
+
+
+def _http_problem_schema(status: int) -> dict[str, Any]:
+    schema = _base_problem_schema()
+    schema["title"] = _http_component_name(status)
+    properties = cast(dict[str, Any], schema["properties"])
+    properties.update(
+        {
+            "type": {
+                "type": "string",
+                "format": "uri-reference",
+                "const": "about:blank",
+            },
+            "title": {"type": "string", "const": http_problem_title(status)},
+            "status": {"type": "integer", "const": status},
+            "code": {"type": "string", "const": f"http_{status}"},
+        }
+    )
+    return schema
 
 
 def _merge_error_responses(
@@ -310,7 +388,7 @@ def _request_validation_schema(registry: ErrorRegistry) -> dict[str, Any]:
 
 def effective_http_contracts(
     app: FastAPI, registry: ErrorRegistry | None = None
-) -> list[tuple[str, set[str], tuple[AnyError, ...]]]:
+) -> list[tuple[str, set[str], tuple[AnyError, ...], tuple[int, ...]]]:
     if registry is None:
         from fastapi_canon.error.registry import ErrorRegistry
 
@@ -324,8 +402,10 @@ def effective_http_contracts(
     if len(contracts) != len(contexts):
         msg = "FastAPI route traversal changed; cannot compile error contracts safely"
         raise ErrorConfigurationError(msg)
-    result: list[tuple[str, set[str], tuple[AnyError, ...]]] = []
-    for (route, errors), context in zip(contracts, contexts, strict=True):
+    result: list[tuple[str, set[str], tuple[AnyError, ...], tuple[int, ...]]] = []
+    for (route, errors, http_statuses), context in zip(
+        contracts, contexts, strict=True
+    ):
         original = getattr(context, "original_route", context)
         if original is not route:
             msg = "FastAPI route order changed; cannot compile error contracts safely"
@@ -334,7 +414,7 @@ def effective_http_contracts(
         methods = set(
             cast(set[str] | None, getattr(context, "methods", route.methods)) or ()
         )
-        result.append((path, methods, errors))
+        result.append((path, methods, errors, http_statuses))
     return result
 
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from http import HTTPStatus
 from typing import TYPE_CHECKING, cast
 
 from fastapi import FastAPI, Request
@@ -22,7 +21,11 @@ from fastapi_canon.error.contracts import (
 )
 from fastapi_canon.error.openapi import install_openapi
 from fastapi_canon.error.rendering import render_problem
-from fastapi_canon.error.types import ErrorConfigurationError, JsonValue
+from fastapi_canon.error.types import (
+    ErrorConfigurationError,
+    JsonValue,
+    http_problem_title,
+)
 
 if TYPE_CHECKING:
     from fastapi_canon.error.registry import ErrorRegistry
@@ -50,7 +53,11 @@ def install_handlers(
         raise ErrorConfigurationError(msg)
 
     registry.require_resolved()
-    _validate_route_contracts(registry, app)
+    _validate_route_contracts(
+        registry,
+        app,
+        include_http_exceptions=include_http_exceptions,
+    )
     if (
         include_validation_error or include_unhandled_error
     ) and registry.type_base is None:
@@ -92,12 +99,17 @@ def install_handlers(
         registry,
         app,
         include_validation_error=include_validation_error,
+        include_http_exceptions=include_http_exceptions,
     )
     setattr(app.state, INSTALLED_REGISTRY_STATE_KEY, registry)
 
 
-def _validate_route_contracts(registry: ErrorRegistry, app: FastAPI) -> None:
-    for http_route, http_errors in iter_http_contracts(app.router, registry):
+def _validate_route_contracts(
+    registry: ErrorRegistry, app: FastAPI, *, include_http_exceptions: bool = True
+) -> None:
+    for http_route, http_errors, http_statuses in iter_http_contracts(
+        app.router, registry
+    ):
         for http_error in http_errors:
             if not registry.contains(http_error):
                 msg = (
@@ -106,6 +118,13 @@ def _validate_route_contracts(registry: ErrorRegistry, app: FastAPI) -> None:
                     "installed registry does not contain that exact definition"
                 )
                 raise ErrorConfigurationError(msg)
+        if http_statuses and not include_http_exceptions:
+            statuses = ", ".join(str(status) for status in http_statuses)
+            msg = (
+                f"route {http_route.path!r} declares normalized HTTP responses "
+                f"for {statuses}, but HTTP exception normalization is disabled"
+            )
+            raise ErrorConfigurationError(msg)
 
 
 def _domain_handler(registry: ErrorRegistry) -> ExceptionHandler:
@@ -138,10 +157,7 @@ async def _http_exception_handler(request: Request, exception: Exception) -> Res
     if not isinstance(exception, HTTPException):
         raise exception
     status = exception.status_code
-    try:
-        title = HTTPStatus(status).phrase
-    except ValueError:
-        title = "HTTP Error"
+    title = http_problem_title(status)
     detail = exception.detail if isinstance(exception.detail, str) else None
     payload: dict[str, JsonValue] = {
         "type": "about:blank",

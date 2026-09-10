@@ -160,9 +160,13 @@ class ErrorRegistry:
             )
             raise ErrorConfigurationError(msg)
 
-    def responses(self, *errors: AnyError) -> OpenAPIResponses:
-        """Compile validated error responses for FastAPI's ``responses=``."""
-        return compile_responses(self, errors)
+    def responses(
+        self,
+        *errors: AnyError,
+        http_statuses: Sequence[int] = (),
+    ) -> OpenAPIResponses:
+        """Compile domain and normalized HTTP responses for FastAPI routes."""
+        return compile_responses(self, errors, http_statuses=http_statuses)
 
     def install(
         self,
