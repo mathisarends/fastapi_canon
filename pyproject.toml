@@ -1,7 +1,7 @@
 [project]
 name = "fastapi-canon"
-version = "0.1.0"
-description = "Feature-oriented composition for FastAPI applications"
+version = "0.2.0"
+description = "Opinionated FastAPI feature composition with Dishka and Problem Details"
 readme = "README.md"
 authors = [{ name = "mathisarends" }]
 license = "MIT"
@@ -20,6 +20,11 @@ dependencies = [
     "fastapi>=0.115,<1",
     "pydantic>=2.9,<3",
 ]
+
+[project.urls]
+Homepage = "https://github.com/mathisarends/fastapi_canon"
+Repository = "https://github.com/mathisarends/fastapi_canon"
+Issues = "https://github.com/mathisarends/fastapi_canon/issues"
 
 [build-system]
 requires = ["hatchling"]

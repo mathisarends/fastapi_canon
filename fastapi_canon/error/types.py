@@ -1,5 +1,6 @@
 import re
 from collections.abc import Mapping
+from http import HTTPStatus
 from typing import Protocol
 from urllib.parse import urlsplit
 
@@ -45,6 +46,14 @@ CODE_PATTERN = re.compile(r"^[a-z][a-z0-9_]{2,}$")
 
 class ErrorConfigurationError(ValueError):
     """Raised when error definitions cannot form a safe, coherent contract."""
+
+
+def http_problem_title(status: int) -> str:
+    """Return the stable title used for a normalized HTTP exception."""
+    try:
+        return HTTPStatus(status).phrase
+    except ValueError:
+        return "HTTP Error"
 
 
 def is_absolute_uri(value: str) -> bool:

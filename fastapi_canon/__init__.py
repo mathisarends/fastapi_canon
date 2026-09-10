@@ -1,4 +1,4 @@
-"""Feature-oriented composition for FastAPI applications."""
+"""Opinionated FastAPI feature composition with Dishka and Problem Details."""
 
 from .error import Error, ErrorConfigurationError, ErrorRegistry, Problem
 from .feature import (
@@ -7,7 +7,11 @@ from .feature import (
     ExceptionHandlerSpec,
     Feature,
     FeatureConfigurationError,
+    ProviderFactory,
+    ProviderSource,
+    RouterFactory,
 )
+from .response import Response, ResponseHeaders
 
 __all__ = [
     "Composition",
@@ -19,4 +23,9 @@ __all__ = [
     "Feature",
     "FeatureConfigurationError",
     "Problem",
+    "ProviderFactory",
+    "ProviderSource",
+    "Response",
+    "ResponseHeaders",
+    "RouterFactory",
 ]

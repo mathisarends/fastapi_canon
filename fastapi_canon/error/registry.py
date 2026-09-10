@@ -17,6 +17,7 @@ from fastapi_canon.error.types import (
     is_absolute_uri,
 )
 from fastapi_canon.error.validation import unique_instances
+from fastapi_canon.response import Response
 
 type AnyError = Error[Any]
 
@@ -160,9 +161,23 @@ class ErrorRegistry:
             )
             raise ErrorConfigurationError(msg)
 
-    def responses(self, *errors: AnyError) -> OpenAPIResponses:
-        """Compile validated error responses for FastAPI's ``responses=``."""
-        return compile_responses(self, errors)
+    def responses(
+        self,
+        *errors: AnyError,
+        http_statuses: Sequence[int] = (),
+        success: Response | None = None,
+    ) -> OpenAPIResponses:
+        """Compile domain and normalized HTTP responses for FastAPI routes."""
+        raw_success: object = success
+        if raw_success is not None and not isinstance(raw_success, Response):
+            msg = "success must be a fastapi_canon.Response instance or None"
+            raise ErrorConfigurationError(msg)
+        return compile_responses(
+            self,
+            errors,
+            http_statuses=http_statuses,
+            success=success,
+        )
 
     def install(
         self,

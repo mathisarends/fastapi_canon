@@ -1,9 +1,35 @@
 # fastapi-canon
 
-`fastapi-canon` is a small composition library for feature-oriented FastAPI
-applications. A feature groups its routers, Dishka providers, error contracts,
-exception handlers, and lifespan into one immutable value. The application
-installs an explicitly ordered set of those values at its composition root.
+`fastapi-canon` is an opinionated composition library for feature-oriented
+FastAPI applications. A feature groups its routers, Dishka providers, error
+contracts, exception handlers, and lifespan into one immutable value. The
+application installs an explicitly ordered set of those values at its
+composition root.
+
+Dishka is a deliberate part of this canon, not an optional integration.
+`fastapi-canon` defines one dependency-injection approach: features contribute
+Dishka providers, and the composition builds and owns one shared Dishka
+container. Applications that choose another dependency-injection framework are
+outside the library's intended architecture.
+
+## Contents
+
+- [Quick start](#quick-start)
+- [Feature composition](#feature-composition)
+  - [Shared API router](#shared-api-router)
+  - [Dishka](#dishka)
+- [Error contracts](#error-contracts)
+  - [OpenAPI representation](#openapi-representation)
+- [Success response contracts](#success-response-contracts)
+  - [Server-sent events](#server-sent-events)
+  - [Binary and PDF streams](#binary-and-pdf-streams)
+  - [Streaming boundary](#streaming-boundary)
+- [Installation guarantees](#installation-guarantees)
+- [Requirements](#requirements)
+- [Development](#development)
+- [Showcase](#showcase)
+
+## Quick start
 
 ```python
 from fastapi import APIRouter, FastAPI
@@ -17,17 +43,18 @@ async def list_projects() -> list[str]:
     return []
 
 
-project_feature = Feature(routers=[projects])
+project_feature = Feature(name="projects", routers=[projects])
 
 app = Composition(project_feature).apply(FastAPI())
 ```
 
-## Contributions
+## Feature composition
 
 Every contribution is optional:
 
 ```python
 feature = Feature(
+    name="projects",
     routers=[router],
     providers=[provider],
     errors=feature_errors,
@@ -39,15 +66,64 @@ feature = Feature(
 Mutable sequences passed to `Feature` are copied to tuples. Installing features
 preserves declaration order for routes and startup. Shutdown runs in reverse
 order, including cleanup of features that started before a later feature failed.
+Feature names are required, unique within a composition, and included in
+configuration diagnostics.
+
+### Shared API router
+
+Use `router_factory` to create one application router per installed composition.
+Feature routers are included in that router before it is mounted on the app, so
+the factory can supply a shared prefix, tags, dependencies, and a custom
+`APIRouter` subclass:
+
+```python
+from fastapi import APIRouter, Depends
+
+
+class ApplicationRouter(APIRouter):
+    pass
+
+
+async def require_request_id() -> None: ...
+
+
+composition = Composition(
+    project_feature,
+    router_factory=lambda: ApplicationRouter(
+        prefix="/api/v1",
+        tags=["api"],
+        dependencies=[Depends(require_request_id)],
+    ),
+)
+```
+
+The factory is called during `apply()` and must return a fresh, empty
+`APIRouter`. Omitting it preserves direct router installation.
 
 ### Dishka
 
-Provider instances from every feature are validated together and used to build
-one `AsyncContainer`. Applying the composition configures Dishka's FastAPI
-middleware and closes the container during application shutdown. Dishka exposes
-the container as `app.state.dishka_container`.
+Dishka is a required runtime dependency and the canonical dependency-injection
+mechanism. A feature accepts provider instances, provider classes, and
+zero-argument factories:
 
-### Errors
+```python
+feature = Feature(
+    name="projects",
+    providers=[ProjectProvider, lambda: DatabaseProvider(settings.database)],
+)
+```
+
+Classes and factories are materialized once per application during `apply()`;
+instances are used as supplied. The providers from every feature are validated
+together and used to build one `AsyncContainer`.
+
+`Composition` manages the container lifecycle. It configures Dishka's FastAPI
+middleware, exposes the container as `app.state.dishka_container`, and closes
+it during application shutdown. Existing application lifespans are composed
+automatically. Applications should treat the exposed container as
+composition-owned and not close it independently.
+
+## Error contracts
 
 Error contracts are implemented directly by `fastapi-canon`; no separate error
 library is required. Each feature may expose one `ErrorRegistry`. Registries are
@@ -67,7 +143,7 @@ project_not_found = Error(
     status=404,
     code="project_not_found",
     title="Project not found",
-    detail=lambda error: str(error),
+    detail="The requested project does not exist.",
 )
 
 project_errors = ErrorRegistry(
@@ -76,6 +152,7 @@ project_errors = ErrorRegistry(
 )
 
 project_feature = Feature(
+    name="projects",
     routers=[projects],
     errors=project_errors,
 )
@@ -99,6 +176,71 @@ async def get_project(project_id: str) -> dict[str, str]:
     raise ProjectNotFound(project_id)
 ```
 
+Normalized `HTTPException` responses use the same declaration path:
+
+```python
+@projects.get(
+    "/private",
+    responses=project_errors.responses(http_statuses=[401, 403]),
+)
+async def private_project() -> dict[str, str]: ...
+```
+
+These contracts document the normalized runtime codes (`http_401`,
+`http_403`, and so on) and `application/problem+json`. A domain error and a
+generic HTTP problem may share a status; the generated response then uses the
+same discriminated `oneOf` representation.
+
+FastAPI `responses={...}` entries without canon error declarations require no
+additional metadata. Success contracts and other media types can be declared
+alongside problem responses.
+
+#### OpenAPI representation
+
+Every declared error becomes a reusable schema in `components.schemas`. The
+corresponding operation references it as an `application/problem+json`
+response:
+
+```yaml
+paths:
+  /projects/{project_id}:
+    get:
+      responses:
+        "404":
+          description: Project not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProjectNotFoundProblem"
+
+components:
+  schemas:
+    ProjectNotFoundProblem:
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type:
+          type: string
+          const: https://api.example.com/problems/project_not_found
+        title:
+          type: string
+          const: Project not found
+        status:
+          type: integer
+          const: 404
+        code:
+          type: string
+          const: project_not_found
+        detail:
+          type: [string, "null"]
+```
+
+Typed extension fields and documented response headers are added to that same
+schema and response. If multiple errors share one status code, the response
+uses `oneOf` with `code` as its discriminator. When validation normalization is
+enabled, FastAPI's default `422` response is replaced by
+`RequestValidationProblem` using the same media type.
+
 When all local registries already share a `type_base`, it is inferred. The
 `ErrorOptions` settings `include_validation_error`,
 `include_http_exceptions`, and `include_unhandled_error` are passed to
@@ -110,13 +252,154 @@ Use `ExceptionHandlerSpec` for a deliberately custom Starlette/FastAPI handler:
 from fastapi_canon import ExceptionHandlerSpec
 
 feature = Feature(
+    name="projects",
     exception_handlers=[ExceptionHandlerSpec(DomainError, domain_error_handler)],
 )
 ```
 
+`Error.code` is the stable client contract. Dynamic `detail`, extensions, and
+headers are public response data and should contain only information classified
+for API exposure. Exception text can be used as detail when it is itself a
+reviewed public contract. Domain registries should use specific exception types;
+broad built-ins such as `Exception`, `ValueError`, and `RuntimeError` can also
+match unrelated programming failures.
+
+## Success response contracts
+
+`Response` describes one successful response using the same `responses()` call
+as domain and HTTP errors:
+
+```python
+from fastapi_canon import Response
+
+
+@router.get(
+    "/events",
+    responses=api_errors.responses(
+        http_statuses=[401, 403],
+        success=Response.sse(),
+    ),
+)
+async def events() -> StreamingResponse: ...
+```
+
+The generic form accepts a status, media type, OpenAPI schema, description, and
+response headers:
+
+```python
+success = Response(
+    status=200,
+    media_type="application/example+json",
+    schema={"type": "object"},
+    description="Example document",
+    headers=["X-Request-ID"],
+)
+```
+
+The available constructors are:
+
+| Constructor | Default contract |
+| --- | --- |
+| `Response.json()` | `application/json` with status 200 |
+| `Response.empty()` | No response content with status 204 |
+| `Response.stream(media_type)` | String stream with status 200 |
+| `Response.binary(media_type)` | Binary string stream with status 200 |
+| `Response.sse()` | `Response.stream("text/event-stream")` |
+
+Schemas and header definitions are copied into immutable mappings. Header names
+may be supplied as a list for standard string-valued header schemas or as a
+mapping containing complete OpenAPI header definitions. When a success status
+is not 200, set the same `status_code` on the FastAPI route.
+
+### Server-sent events
+
+```python
+from collections.abc import AsyncIterator
+
+from fastapi.responses import StreamingResponse
+from fastapi_canon import Response
+
+
+async def event_chunks() -> AsyncIterator[str]:
+    yield "event: ready\ndata: {}\n\n"
+    yield 'event: message\ndata: {"id": 1}\n\n'
+
+
+@router.get(
+    "/events",
+    responses=api_errors.responses(
+        http_statuses=[401, 403],
+        success=Response.sse(),
+    ),
+)
+async def events() -> StreamingResponse:
+    return StreamingResponse(
+        event_chunks(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+```
+
+### Binary and PDF streams
+
+```python
+from collections.abc import Iterator
+from pathlib import Path
+from uuid import UUID
+
+from fastapi.responses import StreamingResponse
+from fastapi_canon import Response
+
+
+def pdf_chunks(path: Path) -> Iterator[bytes]:
+    with path.open("rb") as source:
+        while chunk := source.read(64 * 1024):
+            yield chunk
+
+
+@router.get(
+    "/documents/{document_id}",
+    responses=api_errors.responses(
+        document_missing,
+        http_statuses=[401, 403],
+        success=Response.binary(
+            "application/pdf",
+            headers=["Content-Disposition"],
+        ),
+    ),
+)
+async def document(document_id: UUID) -> StreamingResponse:
+    path = Path("documents") / f"{document_id}.pdf"
+    if not path.is_file():
+        raise DocumentMissing
+    return StreamingResponse(
+        pdf_chunks(path),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{document_id}.pdf"',
+        },
+    )
+```
+
+The generated operation documents only `text/event-stream` or
+`application/pdf` for the successful response. Error responses continue to use
+`application/problem+json`.
+
+### Streaming boundary
+
+Authentication, authorization, validation, and resource lookup should complete
+before returning `StreamingResponse`. Once response headers have been sent, an
+exception inside the iterator cannot be converted into another HTTP response.
+SSE protocols can define an application-specific failure event; a failed binary
+iterator produces an incomplete download.
+
 ## Installation guarantees
 
 - Feature order is explicit and deterministic.
+- Feature names identify conflicting contributions in diagnostics.
 - Reinstalling the exact same feature objects with the same options is a no-op.
 - A different second installation is rejected.
 - Duplicate routers, providers, handlers, and error collisions fail during
@@ -150,3 +433,9 @@ uv run mypy
 uv run pytest
 uv build
 ```
+
+## Showcase
+
+See [`examples/showcase`](examples/showcase) for a runnable two-feature FastAPI
+application. It keeps error contracts alongside their feature routes and merges
+them once at the composition root.
