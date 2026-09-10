@@ -1,6 +1,6 @@
 [project]
 name = "fastapi-canon"
-version = "0.1.0"
+version = "0.2.0"
 description = "Opinionated FastAPI feature composition with Dishka and Problem Details"
 readme = "README.md"
 authors = [{ name = "mathisarends" }]
