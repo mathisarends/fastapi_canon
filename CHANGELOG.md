@@ -4,11 +4,23 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ## 0.4.0 - 2026-09-10
 
+### Added
+
+- Added `install_openapi_contracts(app)` for low-level success-only
+  applications. `Composition` installs the compiler automatically even when no
+  error registry exists.
+
 ### Changed
 
 - Renamed the `CanonRouter` registry parameter from `errors=` to
   `error_registry=` to distinguish the available error catalog from the
   router-level and operation-level errors declared through `raises=`.
+
+### Fixed
+
+- Made `CanonRouter` success responses self-contained so standalone JSON and
+  bodyless routes no longer expose internal `x-fastapi-canon-success` metadata
+  or retain FastAPI's generated JSON content.
 
 ## 0.3.0 - 2026-09-10
 

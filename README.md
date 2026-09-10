@@ -349,6 +349,9 @@ from fastapi_canon import CanonResponse
 async def events() -> StreamingResponse: ...
 ```
 
+These declarations are self-contained: a success-only `CanonRouter` produces
+clean OpenAPI without installing an `ErrorRegistry` or another OpenAPI hook.
+
 The generic form accepts a status, media type, OpenAPI schema, description, and
 response headers:
 
@@ -506,7 +509,7 @@ incremental migrations:
 
 ```python
 from fastapi import APIRouter
-from fastapi_canon import CanonResponse
+from fastapi_canon import CanonResponse, install_openapi_contracts
 
 legacy_router = APIRouter()
 
@@ -520,13 +523,19 @@ legacy_router = APIRouter()
     ),
 )
 async def private_project() -> dict[str, str]: ...
+
+
+install_openapi_contracts(app)
 ```
 
 `ErrorRegistry.responses()` still combines domain errors, normalized
 `HTTPException` statuses, and an optional success contract.
 `CanonResponse.responses()` still supports success-only declarations. Because
 these primitives populate FastAPI's `responses={...}` mapping directly, they do
-not provide all declaration-time consistency checks of `CanonRouter`.
+not provide all declaration-time consistency checks of `CanonRouter`. A
+manually assembled application using low-level success contracts must call
+`install_openapi_contracts(app)` before generating OpenAPI. `Composition`
+installs that compiler automatically, including when no error registry exists.
 
 ## Installation guarantees
 

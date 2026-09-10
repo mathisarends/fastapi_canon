@@ -4,7 +4,9 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse, Response
 
+from fastapi_canon.error.contracts import SUCCESS_EXTENSION
 from fastapi_canon.error.error import Error
 from fastapi_canon.error.registry import AnyError, ErrorRegistry
 from fastapi_canon.error.types import ErrorConfigurationError, OpenAPIResponses
@@ -68,6 +70,7 @@ class CanonRouter(APIRouter):
                     f"status_code is {status_code}"
                 )
                 raise ResponseConfigurationError(msg)
+            kwargs.setdefault("response_class", _response_class(response))
 
         configured_responses = kwargs.pop("responses", None)
         kwargs["responses"] = self._responses_for_route(
@@ -187,8 +190,10 @@ class CanonRouter(APIRouter):
             if registry is None:  # pragma: no cover - guarded by _normalize_raises
                 raise AssertionError("raises require an error registry")
             canon = registry.responses(*declared, success=response)
+            if response is not None:
+                canon[response.status].pop(SUCCESS_EXTENSION, None)
         elif response is not None:
-            canon = response.responses()
+            canon = {response.status: response.as_openapi()}
         else:
             return manual
 
@@ -242,3 +247,12 @@ def _distinct(errors: Sequence[AnyError]) -> tuple[AnyError, ...]:
 
 def _status_key(value: object) -> str:
     return str(value)
+
+
+def _response_class(response: CanonResponse) -> type[Response]:
+    media_type = response.media_type
+    if media_type == "application/json" or (
+        media_type is not None and media_type.endswith("+json")
+    ):
+        return JSONResponse
+    return Response

@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from starlette.responses import Response
 
 from fastapi_canon import (
+    CanonResponse,
     Composition,
     ErrorOptions,
     ExceptionHandlerSpec,
@@ -374,6 +375,23 @@ def test_error_registries_are_merged_for_runtime_and_openapi() -> None:
         app.openapi()["paths"]["/items/{item_id}"]["get"]["responses"]["404"]
         is not None
     )
+
+
+def test_composition_installs_success_openapi_without_an_error_registry() -> None:
+    router = APIRouter()
+    router.get(
+        "/ready",
+        status_code=307,
+        responses=CanonResponse.empty(status=307).responses(),
+    )(lambda: None)
+    app = Composition(Feature(name="health", routers=[router])).apply(FastAPI())
+
+    schema = app.openapi()
+
+    assert schema["paths"]["/ready"]["get"]["responses"] == {
+        "307": {"description": "No content"}
+    }
+    assert "x-fastapi-canon" not in str(schema)
 
 
 def test_error_collision_does_not_install_routers() -> None:

@@ -3,7 +3,7 @@ from typing import cast
 
 import pytest
 from fastapi import APIRouter, FastAPI
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
@@ -93,11 +93,37 @@ def test_response_status_becomes_the_route_status() -> None:
 
     app = FastAPI()
     app.include_router(router)
-    ErrorRegistry(errors=[], type_base="https://example.test/problems").install(app)
 
-    assert app.openapi()["paths"]["/elsewhere"]["get"]["responses"] == {
+    schema = app.openapi()
+    assert schema["paths"]["/elsewhere"]["get"]["responses"] == {
         "307": {"description": "No content"}
     }
+    assert "x-fastapi-canon" not in str(schema)
+
+
+def test_json_response_is_self_contained_without_an_openapi_hook() -> None:
+    router = CanonRouter()
+
+    @router.get(
+        "/health",
+        response=CanonResponse.json(
+            schema={"type": "object"},
+            description="Service health",
+        ),
+    )
+    async def health() -> JSONResponse:
+        return JSONResponse({"status": "ok"})
+
+    app = FastAPI()
+    app.include_router(router)
+
+    schema = app.openapi()
+    assert schema["paths"]["/health"]["get"]["responses"]["200"] == {
+        "description": "Service health",
+        "content": {"application/json": {"schema": {"type": "object"}}},
+    }
+    assert TestClient(app).get("/health").json() == {"status": "ok"}
+    assert "x-fastapi-canon" not in str(schema)
 
 
 @pytest.mark.parametrize(

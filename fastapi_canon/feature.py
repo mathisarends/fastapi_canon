@@ -10,6 +10,7 @@ from fastapi import APIRouter, FastAPI
 from starlette.types import ExceptionHandler, Lifespan
 
 from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
+from fastapi_canon.openapi import install_openapi_contracts
 
 type FeatureLifespan = Lifespan[FastAPI]
 type ProviderFactory = Callable[[], Provider]
@@ -259,6 +260,8 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
             include_http_exceptions=composition.errors.include_http_exceptions,
             include_unhandled_error=composition.errors.include_unhandled_error,
         )
+    else:
+        install_openapi_contracts(app)
     if container is not None:
         setup_dishka(container, app)
     if lifespans or container is not None:
@@ -528,11 +531,11 @@ def _validate_error_installation(
     include_http_exceptions: bool,
     include_unhandled_error: bool,
 ) -> None:
-    if registry is None:
-        return
     if app.openapi_schema is not None:
         msg = "install features before generating or caching OpenAPI"
         raise FeatureConfigurationError(msg)
+    if registry is None:
+        return
     validation_app = FastAPI()
     validation_app.exception_handlers.update(app.exception_handlers)
     for router in routers:
