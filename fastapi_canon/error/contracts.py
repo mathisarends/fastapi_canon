@@ -139,4 +139,13 @@ def _contracts_from_responses(
                 raise ErrorConfigurationError(msg)
             success = (status, media_type)
 
+    if success is not None and success[1] is None and route.response_field is not None:
+        from fastapi_canon.response import ResponseConfigurationError
+
+        msg = (
+            f"route {route.path!r} response_model conflicts with bodyless "
+            "CanonResponse"
+        )
+        raise ResponseConfigurationError(msg)
+
     return tuple(result), tuple(http_statuses), success

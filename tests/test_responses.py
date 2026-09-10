@@ -3,8 +3,14 @@ from dataclasses import FrozenInstanceError
 import pytest
 from fastapi import APIRouter, FastAPI
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+from starlette.responses import RedirectResponse
 
-from fastapi_canon import CanonResponse, ErrorRegistry
+from fastapi_canon import (
+    CanonResponse,
+    ErrorRegistry,
+    ResponseConfigurationError,
+)
 from fastapi_canon.error import ErrorConfigurationError
 from fastapi_canon.error.types import JsonValue, OpenAPIHeader
 
@@ -158,6 +164,52 @@ def test_empty_success_contract_matches_endpoint_status() -> None:
     assert app.openapi()["paths"]["/ready"]["get"]["responses"] == {
         "204": {"description": "No content"}
     }
+
+
+def test_empty_redirect_suppresses_fastapi_generated_json_content() -> None:
+    errors = registry()
+    router = APIRouter()
+
+    @router.get(
+        "/elsewhere",
+        status_code=307,
+        responses=CanonResponse.empty(
+            status=307,
+            description="Temporary redirect",
+        ).responses(),
+    )
+    async def elsewhere() -> RedirectResponse:
+        return RedirectResponse("/target")
+
+    app = FastAPI()
+    app.include_router(router)
+    errors.install(app)
+
+    assert app.openapi()["paths"]["/elsewhere"]["get"]["responses"]["307"] == {
+        "description": "Temporary redirect"
+    }
+
+
+def test_bodyless_contract_rejects_response_model() -> None:
+    class UserResponse(BaseModel):
+        name: str
+
+    errors = registry()
+    router = APIRouter()
+    router.get(
+        "/elsewhere",
+        status_code=307,
+        response_model=UserResponse,
+        responses=CanonResponse.empty(status=307).responses(),
+    )(lambda: RedirectResponse("/target"))
+    app = FastAPI()
+    app.include_router(router)
+
+    with pytest.raises(
+        ResponseConfigurationError,
+        match="response_model conflicts with bodyless CanonResponse",
+    ):
+        errors.install(app)
 
 
 def test_success_contract_rejects_a_mismatched_endpoint_status() -> None:

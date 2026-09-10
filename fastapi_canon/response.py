@@ -23,6 +23,10 @@ _MEDIA_TYPE_PATTERN = re.compile(
 _NO_CONTENT_STATUSES = frozenset({204, 304})
 
 
+class ResponseConfigurationError(ErrorConfigurationError):
+    """Raised when a Canon response conflicts with its FastAPI route."""
+
+
 @dataclass(frozen=True, slots=True, init=False)
 class CanonResponse:
     """An immutable OpenAPI contract for one successful HTTP response."""

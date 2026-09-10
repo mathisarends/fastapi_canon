@@ -323,6 +323,22 @@ async def health() -> dict[str, str]: ...
 The application's installed registry still performs the shared final OpenAPI
 compilation, but the route declaration is independent of its error definitions.
 
+Bodyless contracts also replace FastAPI's generated success content for 2xx and
+3xx responses, so a redirect needs no matching `response_class` solely for
+OpenAPI purposes:
+
+```python
+@router.get(
+    "/elsewhere",
+    status_code=307,
+    responses=CanonResponse.empty(status=307).responses(),
+)
+async def elsewhere() -> RedirectResponse: ...
+```
+
+A bodyless `CanonResponse` cannot be combined with `response_model`; canon raises
+`ResponseConfigurationError` while installing the application contracts.
+
 Schemas and header definitions are copied into immutable mappings. Header names
 may be supplied as a list for standard string-valued header schemas or as a
 mapping containing complete OpenAPI header definitions. When a success status

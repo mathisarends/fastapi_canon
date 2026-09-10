@@ -101,7 +101,7 @@ def compile_document(
             _http_problem_schema(status),
         )
 
-    for path, methods, _errors, _http_statuses, _success in contracts:
+    for path, methods, _errors, _http_statuses, success in contracts:
         path_item = cast(dict[str, Any] | None, result.get("paths", {}).get(path))
         if path_item is None:
             continue
@@ -117,6 +117,15 @@ def compile_document(
                     success_media_type = response.pop(SUCCESS_EXTENSION, _MISSING)
                     if success_media_type is not _MISSING:
                         _retain_success_content(response, success_media_type)
+            if success is not None:
+                status, media_type = success
+                success_response = responses.get(str(status))
+                if not isinstance(success_response, dict):
+                    msg = (
+                        f"compiled operation is missing CanonResponse status {status}"
+                    )
+                    raise ErrorConfigurationError(msg)
+                _retain_success_content(success_response, media_type)
             if include_validation_error:
                 _replace_default_validation_response(responses)
 
