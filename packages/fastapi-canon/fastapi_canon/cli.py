@@ -15,10 +15,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         ("websockets", "Export OpenRPC contracts and generate WebSocket clients"),
         ("webrtc", "Export WebRTC contracts and generate browser clients"),
         ("check", "Check application contracts without importing application code"),
+        ("generate", "Generate one domain SDK from configured application contracts"),
     ):
         commands.add_parser(name, help=description, add_help=False)
     args, remaining = parser.parse_known_args(argv)
-    if args.command == "sse":
+    if args.command == "generate":
+        from fastapi_canon.codegen.cli import main as generate_main
+
+        return generate_main(remaining)
+    elif args.command == "sse":
         from fastapi_canon.integrations.sse.codegen.cli import main as sse_main
 
         return sse_main(remaining)

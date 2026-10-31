@@ -84,7 +84,7 @@ The installed-wheel matrix covers:
 | `[websockets]` | RPC and typed/raw/binary sockets |
 | `[webrtc]` | Session declarations, signaling, admission and missing-engine diagnostics |
 | `[webrtc,aiortc]` | Optional engine installation |
-| `[codegen]` | Offline tooling without transport or engine extras |
+| `[codegen]` | Offline specialized and unified generation without transport/engine extras; execution of a generated JSON HTTP client |
 | `[sse,codegen]` | SSE contracts and clients |
 | `[websockets,codegen]` | OpenRPC export and client execution/compilation |
 | `[sse,websockets,codegen]` | Shared application state and Dishka cleanup |
@@ -118,3 +118,10 @@ native Linux Chromium/GStreamer integration and browser fallback tests. These
 are consumer-reported results, not independent workspace deployment verification.
 Deployed TURN/NAT, PostgreSQL concurrency and proxies still require
 application-side validation.
+
+The prepared 0.10.0 unified SDK is also exercised across HTTP, SSE and JSON-RPC
+with one problem/error identity and shared model classes. Tests compile and run
+the generated TypeScript facade, compile its socket/WebRTC session signatures,
+and exercise generated Python requests and cleanup. The common HTTP binding is
+a JSON subset; multipart, other parameter styles and unsupported schemas fail
+preflight. See the [codegen guide](unified-canon-concept.md) for the precise scope.

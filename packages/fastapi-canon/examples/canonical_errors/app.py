@@ -17,6 +17,10 @@ class MissingFields(BaseModel):
     replacement: str | None = None
 
 
+class Project(BaseModel):
+    id: int
+
+
 class ProjectEvent(BaseModel):
     sequence: int
 
@@ -43,10 +47,15 @@ def require_project(project_id: int) -> None:
         raise ProjectMissing("private database information")
 
 
-@http.get("/projects/{project_id}", raises=[project_missing])
-async def get_project(project_id: int) -> dict[str, int]:
+@http.get(
+    "/projects/{project_id}",
+    operation_id="get",
+    tags=["projects"],
+    raises=[project_missing],
+)
+async def get_project(project_id: int) -> Project:
     require_project(project_id)
-    return {"id": project_id}
+    return Project(id=project_id)
 
 
 @streams.stream(
@@ -77,7 +86,6 @@ endpoint = service.socket("/ws", channels=[projects])
 websockets = APIRouter()
 RpcRoutes(websockets).mount(endpoint)
 feature = Feature(name="projects", routers=[http, streams, websockets])
-contract = service.contract(title="Projects", base_url="wss://api.example.com")
 
 
 def create_app() -> FastAPI:
@@ -85,3 +93,4 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+contract = service.contract(title="Projects", base_url="wss://api.example.com", app=app)

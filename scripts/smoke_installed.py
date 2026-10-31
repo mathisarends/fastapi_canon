@@ -58,6 +58,7 @@ def main() -> None:
     app = FastAPI()
     if importlib.util.find_spec("jsonschema") and importlib.util.find_spec("jinja2"):
         _offline_sse_codegen()
+        _unified_codegen()
     routers = []
     if "fastapi-canon" in selected:
         from fastapi_canon import CanonRouter
@@ -322,6 +323,84 @@ def _offline_sse_codegen() -> None:
             ]
             subprocess.run(command, cwd=temporary, check=True, timeout=30)
             subprocess.run([*command, "--check"], cwd=temporary, check=True, timeout=30)
+
+
+def _unified_codegen() -> None:
+    import httpx
+
+    document = {
+        "openapi": "3.1.0",
+        "info": {"title": "Health", "version": "1"},
+        "paths": {
+            "/health": {
+                "get": {
+                    "operationId": "health.get",
+                    "responses": {
+                        "200": {
+                            "description": "OK",
+                            "content": {
+                                "application/json": {"schema": {"type": "string"}}
+                            },
+                        }
+                    },
+                }
+            }
+        },
+    }
+    with tempfile.TemporaryDirectory(prefix="canon-unified-") as temporary:
+        root = Path(temporary)
+        (root / "openapi.json").write_text(json.dumps(document), encoding="utf-8")
+        (root / "canon.toml").write_text(
+            """version = 1
+[sources.api]
+kind = "openapi"
+source = "must_not_import:app"
+output = "openapi.json"
+[targets.python]
+language = "python"
+sources = ["api"]
+output = "artifact_sdk"
+package = "artifact_sdk"
+[targets.browser]
+language = "typescript"
+sources = ["api"]
+output = "browser"
+""",
+            encoding="utf-8",
+        )
+        command = [
+            sys.executable,
+            "-I",
+            "-m",
+            "fastapi_canon",
+            "generate",
+            "--config",
+            str(root / "canon.toml"),
+            "--offline",
+        ]
+        subprocess.run(command, cwd=temporary, check=True, timeout=30)
+        subprocess.run([*command, "--check"], cwd=temporary, check=True, timeout=30)
+        sys.path.insert(0, temporary)
+        try:
+            sdk = importlib.import_module("artifact_sdk")
+
+            async def consume() -> None:
+                transport = httpx.MockTransport(
+                    lambda request: httpx.Response(200, json="ok")
+                )
+                async with httpx.AsyncClient(transport=transport) as http:
+                    async with sdk.ApiClient(
+                        "https://test", http_client=http
+                    ) as client:
+                        assert await client.health.get() == "ok"
+                    assert not http.is_closed
+
+            asyncio.run(consume())
+        finally:
+            sys.path.remove(temporary)
+            for name in tuple(sys.modules):
+                if name == "artifact_sdk" or name.startswith("artifact_sdk."):
+                    del sys.modules[name]
 
 
 class _RecordingEngine:

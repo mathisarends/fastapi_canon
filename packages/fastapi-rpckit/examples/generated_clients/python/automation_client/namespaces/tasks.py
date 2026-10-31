@@ -35,9 +35,9 @@ class Tasks:
         title: str,
     ) -> Task:
         """Create a task."""
-        params = CreateTaskParams(
-            title=title,
-        )
+        values: dict[str, object] = {}
+        values["title"] = title
+        params = CreateTaskParams.model_validate(values)
         return await self._rpc.request(
             TASKS_CREATE,
             params=params,
@@ -49,9 +49,9 @@ class Tasks:
         task_id: str,
     ) -> bool:
         """Delete a task."""
-        params = DeleteTaskParams(
-            task_id=task_id,
-        )
+        values: dict[str, object] = {}
+        values["taskId"] = task_id
+        params = DeleteTaskParams.model_validate(values)
         return await self._rpc.request(
             TASKS_DELETE,
             params=params,

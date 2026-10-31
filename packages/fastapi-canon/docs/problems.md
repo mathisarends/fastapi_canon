@@ -137,11 +137,12 @@ let `Composition(..., errors=ErrorOptions(type_base=...))` supply it. Passing
 `app=app` when creating the RPC contract uses those same resolved type URIs for
 code generation. A standalone RPC contract can use a fully resolved registry.
 
-Export SSE with `canon sse schema --app ... --output ...`, then generate its SDK
-from that OpenAPI 3.2 file. Export the RPC contract and use the existing
-`canon websockets generate --config ...` workflow. Both generators consume the
-exported documents; generated runtimes have no dependency on Canon. Generator
-configuration and output ownership remain separate in this release.
+Use `canon generate --config canon.toml` to export the app and its RPC contract
+and generate one domain SDK with shared models and one error runtime. The
+[common codegen guide](../../../docs/unified-canon-concept.md) and
+[example configuration](../examples/canonical_errors/canon.toml) show the complete
+workflow. Specialized SSE/RPC generator commands remain available for separate
+SDK outputs. Generated runtimes do not depend on Canon.
 
 ## What goes over the wire
 
@@ -185,12 +186,16 @@ import { createClient, ProblemError } from "./generated";
 
 const client = createClient({ baseUrl: "https://api.example.com" });
 try {
-  for await (const event of client.projects.events({ project_id: 2 })) {
+  const project = await client.projects.get({ projectId: 1 });
+  for await (const event of client.projects.events({ projectId: 2 })) {
     render(event);
   }
+  await client.projects.cancel({ projectId: project.id });
 } catch (error) {
   if (error instanceof ProblemError) showProblem(error.problem);
   else throw error;
+} finally {
+  await client.close();
 }
 ```
 
@@ -203,9 +208,9 @@ its automatic reconnection.
 
 The same `ProblemError.problem` convention applies to generated RPC clients.
 Unknown type URIs remain generic problems; matching a familiar `code` alone does
-not turn them into a known generated subclass. Each standalone SDK owns one copy
-of the shared error runtime. Combining distinct generated SDK packages into one
-facade with a single runtime instance is later orchestration work.
+not turn them into a known generated subclass. The common workflow emits one shared error runtime and canonical model graph
+inside the SDK. Specialized generators producing separate SDKs still have
+separate runtime/class identities.
 
 ## Migration
 

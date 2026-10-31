@@ -2,9 +2,9 @@
 
 Decision date: 2026-10-31.
 
-Status: agreed architectural direction from the maintainer discussion, with
-explicitly marked API sketches and unresolved details. This document is an agent
-handoff and design record. It does not claim that the target APIs are implemented.
+Status: approved design and implementation record for PR #6, prepared Canon
+0.10.0. The common generation workflow below is implemented in this PR. Verify
+the checked-out source and current-head tests when continuing work.
 
 ## 1. Purpose and authority
 
@@ -17,7 +17,7 @@ reported production regression. Breaking changes are explicitly allowed.
 Read this document for the decisions made in the discussion. Read the checked-out
 source, tests, `AGENTS.md`, and implemented package guides for what actually exists.
 In the consolidated repository, `docs/canon.md` records current package boundaries
-and `docs/unified-canon-concept.md` contains the earlier codegen discussion draft.
+and `docs/unified-canon-concept.md` documents the implemented common generation workflow.
 The final client-facing direction below supersedes the transport-prefixed and
 feature-client alternatives discussed earlier in the chat.
 
@@ -25,7 +25,7 @@ The maintainer paused implementation to discuss and record this design, then
 explicitly authorized the first error-canonicalization PR. This first step is
 expanded to shared RFC 9457 errors, RPC and terminal SSE bindings, and their
 generated-client handling; see the implementation update below. Combined SDK
-orchestration remains later work. Publication
+orchestration is included by the maintainer's subsequent approval. Publication
 is not authorized.
 
 ## 2. One product and one composition model
@@ -77,9 +77,11 @@ definitions should drive runtime rendering, exported schemas, and generated
 problem types. Keep registry membership and collision checks explicit.
 `raises=` is a contract declaration, not an exhaustive checked-exception system.
 
-The exact extension of the existing RPC declaration API to consume this catalog
-is still to be designed. Do not present a hypothetical `RpcService` constructor
-or decorator as an implemented API.
+`RpcChannel(error_registry=errors)` consumes this catalog. Channel/method
+`raises=` accepts the same `Error` definitions. Composition collects mounted
+channel registries; export with `service.contract(..., app=app)` to use its
+resolved type URIs. Catalog rendering helpers are internal adapter APIs, not
+application APIs and must not be the focus of PR descriptions.
 
 ## 4. RFC 9457 is the HTTP foundation
 
@@ -192,7 +194,7 @@ The embedded problem omits `status`. The HTTP response status is already fixed;
 the catalog's HTTP error status must not be represented as a new status for that
 response. SSE keeps its `text/event-stream` media type. Embedding uses the RFC
 model following Appendix C; `canon.problem` and `canon.complete` are Canon's
-proposed protocol conventions, not event names defined by RFC 9457.
+protocol conventions, not event names defined by RFC 9457.
 
 Generated clients consume these control frames, yield ordinary application
 events, raise `ProblemError` for a terminal problem, and stop on completion.
@@ -208,319 +210,131 @@ StreamRouter endpoints keep their unprofiled behavior. Regeneration is required
 for SDKs to understand Canon controls. Replay and resumption remain future work.
 See the [SSE processing model](https://html.spec.whatwg.org/multipage/server-sent-events.html#processing-model).
 
-## 7. Final generated client direction: a domain-facing API
+## 7. Domain operations, interaction, and binding
 
-The final recommendation after discussion is one generated SDK per selected
-language/target, with a common domain-facing client and operation groups.
-Transport adapters remain separate internally.
+Keep three concepts separate:
 
-Illustrative TypeScript target API, not an implemented signature:
+| Concept | Examples |
+| --- | --- |
+| Domain operation | `projects.get`, `projects.cancel`, `projects.events`, `rooms.join` |
+| Interaction | `call`, `stream`, `session` |
+| Binding | HTTP JSON, SSE over HTTP, JSON-RPC over WebSocket, raw WebSocket, WebRTC |
+
+RPC is an interaction model; JSON-RPC is a concrete protocol; WebSocket is a
+transport. Streams are not limited to HTTP. These are not parallel public domain
+namespaces. The accepted generated API is:
 
 ```typescript
-const client = new Client({
-  baseUrl: "https://api.example.com",
-});
-
+import { createClient, ProblemError } from "./generated";
+const client = createClient({ baseUrl: "https://api.example.com" });
 try {
-  const evaluation = await client.evaluations.start({ input });
-
-  for await (const event of client.evaluations.events({
-    evaluationId: evaluation.id,
-  })) {
+  const project = await client.projects.get({ projectId: 1 });
+  for await (const event of client.projects.events({ projectId: project.id })) {
     render(event);
   }
+  await client.projects.cancel({ projectId: project.id });
+} catch (error) {
+  if (error instanceof ProblemError) showProblem(error.problem);
+  else throw error;
 } finally {
   await client.close();
 }
 ```
 
-The call site selects the capability. The generated contract selects its
-transport binding. The observable result is explicit in the type:
+This is one facade with internal binding clients, one shared problem/error
+runtime and one canonical model graph per output. It does not multiplex different
+protocols onto one connection. Independent language/output targets have separate
+class identities. Specialized generators remain available; two independently
+generated SDKs do not share their error class identities.
 
-```typescript
-start(input): Promise<Evaluation>
-events(input): AsyncIterable<EvaluationEvent>
-```
+Calls return Promises/awaitables; streams expose async iteration; sessions retain
+explicit socket/media objects and their own close/channel APIs. Python sessions
+use async context managers. Server feature names, directory structure, transport
+prefixes and URL paths do not prescribe the client's domain namespaces.
 
-These are signature sketches. Exact names, overloads, constructor options, and
-connection factories are not frozen by the examples.
+## 8. Common generation and model identity
 
-Public API groups come from the public contract and explicit generation
-configuration. They do not automatically mirror server-side Canon `Feature`
-objects, Python modules, URL prefixes, or connection boundaries.
+`canon generate --config canon.toml` is the canonical workflow. Live sources export
+reviewable protocol contracts; saved inputs and `--offline` avoid application
+imports. A common plan resolves operations, schemas and errors before language
+and binding emitters render one SDK. The exact configuration and supported scope
+are in [the codegen guide](docs/unified-canon-concept.md).
 
-The existing WebSocket generator already produces one client for a contract with
-namespaces, such as `AutomationClient.tasks` and `.browser`. It does not imply
-one independently connected client per feature. Preserve that useful distinction.
+OpenAPI names use explicit configuration, `x-canon-operation`, dotted operation
+IDs, or first tag plus operation ID, in that order. JSON-RPC uses declared method
+names; WebRTC uses session names. Explicit source `operations` mappings override
+those defaults. Reject normalized name and method/group collisions. Do not
+silently select an alternative binding or infer fallback behavior.
 
-## 8. Earlier client alternatives are superseded
+Merge models through explicit semantic identity (`x-canon-model-id`, `$id`, or
+source `identities` settings), not structural similarity. Different identities
+with colliding public names require explicit `names` mappings. Identical
+identities require compatible schemas. Keep input/output identities separate
+when their wire schemas differ. Problem type URIs supply shared identity;
+nested extension definitions retain identity across exporter-specific layouts.
+Canonical model declarations are generated once and reused by binding modules.
+Use one acronym/name policy and wire aliases when building RPC parameter models;
+Python common DTOs use snake case, with BaseModel name collisions escaped.
+UUID/date-time scalars use JSON wire strings consistently across bindings.
+Binding-specific internal aliases may remain local.
 
-Do not treat the following earlier examples as the selected default:
+## 9. Lifecycle and errors
 
-```typescript
-client.sse.evaluations.events(...)
-client.websockets.rpc.evaluations.start(...)
-rpc.evaluations.start(...)
-streams.evaluations.events(...)
-```
+Bindings open lazily. HTTP/SSE and an unambiguous single JSON-RPC endpoint share
+the configured base URL; explicit binding connection settings override it.
+Credentials, template variables and multiple servers remain binding options.
+HTTP headers are not automatically forwarded to WebSockets.
 
-Separate `RunsRpcClient` and `RunsStreamClient` classes per business feature were
-also explored and then superseded as the default direction. A monolithic public
-transport hierarchy and mandatory feature-specific client instances are not the
-goal.
+The facade closes resources it creates, rejects work after close, and tracks
+active work and sessions. Injected clients stay caller-owned; TypeScript can
+explicitly mark an injected binding owned. Preserve per-binding request/session
+options and cancellation semantics. Do not pretend accepted raw/WebRTC sessions
+have SSE or JSON-RPC framing.
 
-The selected public shape is:
+Every binding uses the same generated `ProblemError` base and public problem
+shape within one output. Protocol-specific diagnostics may subclass the common
+transport errors. Unknown problem types and extensions remain available; a known
+`code` alone cannot select a known subtype with a different URI.
 
-```typescript
-client.evaluations.start(...)
-client.evaluations.events(...)
-```
+Python validates received data with Pydantic. TypeScript provides static model
+types and runtime checks for standard problem members and SSE controls; it does
+not claim complete JSON Schema runtime validation.
 
-An application can pass `client.evaluations` to code that only needs that API
-group. Low-level transport access can remain available for explicit use cases.
-RPC is a protocol and WebSocket is a transport; neither distinction needs to
-appear as an extra level in ordinary domain method calls.
+## 10. Determinism, ownership, and supported scope
 
-## 9. Lifecycle, cancellation, and transport behavior remain explicit
+Version-1 `canon.toml` configuration (or `[tool.canon]` in `pyproject.toml`) names
+`sources` and language `targets`. Paths resolve relative to the configuration.
+Unknown settings, incompatible schemas, ambiguous names and unsupported targets
+fail explicitly. Validate/render all selected targets before writing. Exit codes
+are 0 success, 1 drift, 2 invalid configuration/contracts/dependencies.
+`--check` is read-only; `--diff` implies check.
 
-Removing transport prefixes does not erase their observable behavior.
+One `.canon-codegen.json` manifest owns each SDK output and records input hashes,
+generator settings and files. Preserve handwritten files, reject unowned
+collisions, remove only stale owned files, and reject overlapping outputs and
+symlink/junction traversal. Use a fresh output or explicit migration for old
+specialized SDKs; ownership of predecessor manifests is not assumed. Never
+install dependencies or publish SDKs automatically.
 
-- Constructing the common client should not eagerly connect every integration.
-- Open connections on demand or through clearly documented connection methods.
-- Close resources owned by the SDK. Injected clients/transports remain owned by
-  their caller unless ownership transfer is explicit.
-- Expose clear cancellation for calls, streams, and sessions.
-- Document connection state, reconnect, deadlines, retries, and resumption.
-- Keep transport-specific configuration and diagnostics accessible.
-- Retain meaningful connection/session objects when the application explicitly
-  manages sockets or media sessions.
+The unified pipeline supports JSON HTTP calls, typed SSE, JSON-RPC calls and
+subscriptions, raw/binary sessions, and TypeScript WebRTC. Python WebRTC fails
+before writing. Unsupported media, parameter styles and schema constructs fail
+preflight. Specialized emitters remain available for their additional options.
+Multipart/file clients, automatic manifest migration, complete JSON Schema
+runtime validation in TypeScript, machine-readable diagnostic output and SSE
+replay remain future work.
 
-One shared client does not imply one physical connection. Connection pooling and
-reuse remain internal transport responsibilities. A successful reconnection does
-not by itself promise gap-free event replay. Retries must account for operation
-semantics and idempotency; do not apply a blanket retry policy to all methods.
+## 11. Implementation and review ownership
 
-Authentication must respect platform capabilities. For example, browser
-WebSockets cannot attach arbitrary HTTP request headers. A shared facade must
-not promise identical credential mechanisms for every transport.
+This work belongs to [PR #6](https://github.com/mathisarends/fastapi_canon/pull/6),
+on `codex/canonical-error-contracts` in `dist/pr-canonical-errors`, based on fetched
+`origin/main`. Prepared version: 0.10.0. No merge, release or publication is
+authorized by this task. Preserve the older draft worktrees; do not merge their
+partial ports accidentally. Verify current main ancestry and current-head CI.
 
-## 10. Common generated errors and shared models
-
-Use a shared generated problem model and shared error classes within an SDK.
-The working error vocabulary is:
-
-| Error | Meaning |
-| --- | --- |
-| `ProblemError` | A remote application problem carried by a documented transport binding; exposes `.problem`. |
-| `TransportError` | Connection failure, timeout, or unexpected interruption. |
-| `ProtocolError` | Received data violates the agreed protocol or declared contract. |
-
-Cancellation remains recognizable as cancellation. Exact class names and
-language-specific inheritance details need final API review.
-
-HTTP, RPC, and SSE adapters extract the same semantic problem representation.
-Use `type` as the primary problem-type identity; expose `code` as a convenience
-extension. Preserve transport diagnostics separately rather than inventing HTTP
-statuses for non-HTTP failures. Runtime validation must support the guarantees
-promised by generated types and helpers.
-
-Generate shared models/problems once per SDK target and import them from its
-transport implementations. In particular, avoid duplicate `ProblemError` class
-definitions that make `instanceof` depend on which transport created an error.
-
-Share domain schemas only when semantic identity and serialization are
-compatible. Matching names or shapes alone are insufficient. Input and output
-schemas may differ in aliases, defaults, and required fields. Report conflicts
-with source locations. Unknown problem types/extensions need a documented
-forward-compatibility policy; do not use unchecked casts to claim a known type.
-
-## 11. One code generation workflow
-
-The selected direction is one workflow around the existing emitters:
-
-```text
-Configured sources or saved contracts
-  -> export/read and validate contracts
-  -> validate a complete generation plan
-  -> resolve names, shared models, and problems
-  -> render the selected language/transport implementations
-  -> write SDK files through one ownership boundary per output
-```
-
-Keep OpenAPI (including native SSE schemas), OpenRPC, and WebRTC contracts as
-reviewable artifacts. A common workflow does not require a new universal wire
-protocol or the loss of protocol-specific schema information.
-
-Discussed commands, not current implemented command claims:
-
-```console
-canon generate
-canon generate --target frontend
-canon generate --check --diff
-```
-
-The full workflow should use current live exports when sources are configured,
-so checking against an old saved contract cannot conceal application drift.
-Also support generation from saved contracts without importing application code
-or requiring unrelated optional engines. Separate export/offline stages are
-useful; names such as `canon contracts export` and `canon clients generate`
-remain provisional.
-
-## 12. One versioned configuration, named targets
-
-A shared `[tool.canon]` configuration in `pyproject.toml` is the preferred
-direction. It names contracts, language targets, outputs, and scoped options.
-The exact spelling below is a discussion sketch:
-
-```toml
-[tool.canon]
-config-version = 1
-
-[tool.canon.contracts.http]
-kind = "openapi"
-source = "app.main:app"
-output = "contracts/openapi.json"
-
-[tool.canon.contracts.rpc]
-kind = "openrpc"
-source = "app.contracts:rpc"
-output = "contracts/rpc.json"
-
-[tool.canon.clients.frontend]
-language = "typescript"
-contracts = ["http", "rpc"]
-transports = ["sse", "websockets"]
-output = "frontend/src/generated"
-```
-
-The `transports` list selects internal generation capabilities, not public
-property names such as `client.sse`. Additional targets may select Python or a
-different contract subset. A saved input alternative should support offline
-generation. Resolve paths relative to the configuration file.
-
-Reject unknown keys, unsupported targets, ambiguous public names, incompatible
-schemas, unsafe paths, and overlapping ownership before writing. If multiple
-transports expose a candidate for the same public method, require an explicit
-selection; do not choose or fall back based on naming guesses.
-
-## 13. Determinism, diagnostics, and file ownership
-
-- The same inputs and generator/configuration versions produce the same output.
-- Validate and render all selected targets before starting output writes.
-- `--check` is read-only, including files, directories, manifests, and reports.
-- `--diff` shows drift in check mode.
-- Use consistent exit codes: `0` success, `1` drift, `2` configuration,
-  dependency, or contract errors. Errors take precedence over drift.
-- Provide readable diagnostics and a machine-readable JSON form containing a
-  stable diagnostic code, source location, and actionable cause.
-- Keep one owner/writer per generated SDK output. Preserve handwritten files;
-  remove only stale files recorded as generator-owned.
-- Record contract hashes, generator/configuration versions, options, generated
-  files, and consumer runtime requirements in deterministic ownership metadata.
-- Migrate existing ownership manifests explicitly. The new manifest filename
-  and exact output-directory layout remain open.
-- Do not automatically install missing dependencies or publish generated SDKs.
-
-## 14. Actual codegen support and implementation sequence
-
-The consolidated source inspected during the discussion has the `canon sse`,
-`canon websockets`, and `canon webrtc` command families. SSE and WebSocket
-generation support Python and TypeScript; the existing WebRTC emitter targets
-TypeScript. Ordinary REST client generation currently uses separate tooling.
-
-The proposed domain-client examples describe the target experience. They do not
-prove a complete Canon REST emitter or a combined SDK already exists. Adding
-ordinary REST generation is a distinct implementation decision. Unsupported
-combinations, including WebRTC for Python, must fail explicitly.
-
-The recommended sequence discussed was:
-
-1. Agree the public contracts, problem mappings, and SSE profile.
-2. Implement shared configuration, planning, validation, diagnostics, and ownership
-   around the existing generators.
-3. Implement the domain-facing SDK facade and shared models/problem runtime.
-4. Update language/transport emitters and verify real consumer behavior.
-
-This is sequencing guidance, not permission to mark every stage complete or to
-expand a narrowly scoped change into every possible emitter.
-
-## 15. Acceptance expectations for future implementation
-
-- Inspect the current checkout and applicable instructions before changing APIs.
-- Verify runtime problem payloads against exported schemas, including shared
-  statuses and typed extensions.
-- Verify the same domain problem identity through each implemented binding.
-- Test SSE admission failures, terminal problems, normal completion, unexpected
-  EOF, malformed frames, cancellation, and cleanup.
-- Generate, compile/typecheck, and execute real Python/TypeScript consumer paths.
-  Successful generation alone does not establish runtime interoperability.
-- Check shared class identity, naming collisions, input/output model differences,
-  and forward compatibility.
-- Check deterministic output, drift detection, offline behavior, and preservation
-  of handwritten files.
-- Preserve optional-dependency boundaries and verify actual built artifacts in
-  fresh environments.
-- Follow the current repository's versioning and migration policy for breaking
-  APIs, defaults, generated clients, and wire-profile changes. Permission for
-  breaking changes does not waive migration documentation or release checks.
-
-## 16. Open details and handoff state
-
-Open details include the precise SDK constructor/connection API; public-group
-metadata and name mapping; shared model identity across contract formats;
-occurrence identifiers; SSE replay semantics; config and manifest
-syntax; output layout; runtime validation strategy; and the scope of a future
-ordinary REST emitter.
-
-Additional core changes appeared in an early implementation draft: normalization
-without a domain registry, a default problem URI base, automatic startup OpenAPI
-validation, a common configuration-error base, nested registry collection,
-`http_statuses=`, and lifecycle/install checks. These are not all individually
-ratified by this design discussion. Review them against the final model rather
-than treating the draft patch as the agreed specification.
-
-At the time of this record:
-
-- The original checkout was an old 0.4.0 snapshot. Its draft changes were saved
-  locally on `codex/coherent-contracts-source` in commit `33564bf`.
-- Current consolidated source was fetched and an isolated worktree created at
-  `dist/pr-coherent-canon`, on `codex/coherent-canon-contracts`, based on
-  `af2d5d3` from `origin/main` (prepared, unpublished Canon 0.9.0).
-- Transferring the old patch to the new package layout was interrupted for the
-  design discussion. The worktree contains a partial port, including unresolved
-  Git index entries. It is not a finished or reviewed implementation.
-- The earlier report of 249 passing tests applies to the old checkout, not to
-  the completed merged-stack target. Do not reuse it as validation of that target.
-- No PR has been created for this canonicalization work and no release has been
-  published. Future agents must reassess the actual state before continuing.
-
-Re-check these historical handoff facts when resuming; subsequent repository
-changes may supersede the recorded branch, commit, and worktree state.
-
-## 17. First implementation step after design approval
-
-The maintainer authorized starting with error canonicalization and creating an
-isolated PR, with current `origin/main` included. A fresh worktree at
-`dist/pr-canonical-errors`, branch `codex/canonical-error-contracts`, was created
-directly from fetched main `af2d5d3`. The interrupted broader port described in
-section 16 is preserved separately and is not the basis of this PR.
-
-The maintainer expanded this PR to include the bindings and generated-client
-handling that make the shared error model useful to application authors. The
-public workflow is: define `Error`, put it in `ErrorRegistry`, provide that same
-registry to HTTP/stream routers and RPC channels, and declare `raises=` or
-`stream_raises=` on operations. Rendering, schema lookup, and installed-catalog
-access are internal adapter responsibilities, not new application-facing APIs.
-
-The PR prepares Canon 0.10.0, uses resolved type URIs for HTTP unions, preserves
-null extensions, binds RPC failures under `error.data.problem`, and implements
-version 1 of the SSE terminal problem/completion profile. Python and TypeScript
-generators consume these bindings and share the source of their standalone
-problem/error runtime. Separate generated packages still own separate runtime
-copies; a combined SDK facade and shared cross-contract output ownership remain
-future work. See `packages/fastapi-canon/docs/problems.md` for implemented user
-examples and migration steps.
-
-PR #6 is the implementation PR. Re-check its actual head, validation results,
-and remote main ancestry before relying on a historical status report. No
-publication is authorized by this work.
+PR descriptions must show actual developer APIs: define errors, register HTTP,
+SSE and RPC operations, compose the app, generate one SDK, and consume domain
+methods. Do not replace this with catalog-internal rendering examples. Test
+actual generated Python and TypeScript calls, common model/error identity,
+stream controls and cleanup, offline generation, drift and file ownership.
+Do not reuse old-checkout validation as proof of the current PR.

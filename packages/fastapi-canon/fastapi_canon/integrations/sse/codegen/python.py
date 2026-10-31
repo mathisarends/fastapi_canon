@@ -1,4 +1,5 @@
 import re
+from collections.abc import Callable
 from dataclasses import replace
 from importlib.resources import files
 from typing import Literal
@@ -149,16 +150,7 @@ def generate_python(
         groups=groups, http_import=http_import
     )
     output["problem.py"] = problem_runtime("python")
-    output["runtime.py"] = (
-        files(__package__)
-        .joinpath("templates/python/runtime.py")
-        .read_text(encoding="utf-8")
-        .replace("\nimport httpx\n", f"\n{http_import}\n", 1)
-        .replace(
-            "from fastapi_canon.codegen.templates.problem import",
-            "from .problem import",
-        )
-    )
+    output["runtime.py"] = runtime_source(http_client=http_client)
     output["__init__.py"] = _HEADER + (
         "from .client import Client as Client\n"
         "from .problem import (\n"
@@ -185,8 +177,31 @@ def generate_python(
     return output
 
 
+def runtime_source(*, http_client: Literal["httpx", "httpx2"] = "httpx") -> str:
+    http_import = (
+        "import httpx2 as httpx" if http_client == "httpx2" else "import httpx"
+    )
+    return (
+        files(__package__)
+        .joinpath("templates/python/runtime.py")
+        .read_text(encoding="utf-8")
+        .replace("\nimport httpx\n", f"\n{http_import}\n", 1)
+        .replace(
+            "from fastapi_canon.codegen.templates.problem import",
+            "from .problem import",
+        )
+    )
+
+
 class _Models:
-    def __init__(self, declarations: tuple[Declaration, ...]) -> None:
+    def __init__(
+        self,
+        declarations: tuple[Declaration, ...],
+        *,
+        field_name: Callable[[str], str] | None = None,
+    ) -> None:
+        self.field_name = field_name or _field_name
+        self.custom_fields = field_name is not None
         if collisions := _MODEL_SYMBOLS & {
             declaration.name for declaration in declarations
         }:
@@ -385,10 +400,14 @@ class _Models:
                         lines.append(
                             "    model_config = ConfigDict(populate_by_name=True)"
                         )
+                    if self.custom_fields:
+                        lines[-1] = (
+                            lines[-1].removesuffix(")") + ", protected_namespaces=())"
+                        )
                     field_names: set[str] = set()
                     nonnullable_optional: list[str] = []
                     for field in obj.fields:
-                        field_name = _field_name(field.name)
+                        field_name = self.field_name(field.name)
                         if field_name in field_names:
                             raise ContractError(
                                 f"Python field name collision in {name}: {field_name}"

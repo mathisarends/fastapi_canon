@@ -25,8 +25,8 @@ These changes are not published yet. See the
 commands and the current codegen scope.
 
 The [Canon architecture and public API](docs/canon.md) defines the shared
-namespaces and ownership rules. The [codegen discussion](docs/unified-canon-concept.md)
-collects candidate next steps for review before implementation.
+namespaces and ownership rules. The [codegen guide](docs/unified-canon-concept.md)
+documents `canon generate`, the domain SDK and its shared model/error runtime.
 
 ## Repository
 

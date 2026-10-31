@@ -1,0 +1,22 @@
+version = 1
+
+[sources.api]
+kind = "openapi"
+source = "app:app"
+output = "contracts/openapi.json"
+
+[sources.control]
+kind = "openrpc"
+source = "app:contract"
+output = "contracts/openrpc.json"
+
+[targets.browser]
+language = "typescript"
+sources = ["api", "control"]
+output = "dist/generated/typescript"
+
+[targets.python]
+language = "python"
+sources = ["api", "control"]
+output = "dist/generated/python/api_client"
+package = "api_client"

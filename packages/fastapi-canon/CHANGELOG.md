@@ -42,13 +42,25 @@ All notable changes to `fastapi-canon` are documented in this file.
 - Python and TypeScript SDK problem/error runtimes from a common source;
   `ProblemError.problem`, `TransportError`, and `ProtocolError`, plus known RPC
   error subclasses selected by type URI. Unknown problems preserve extensions.
+- Generated Python RPC calls/subscriptions validate parameter objects by wire
+  aliases, including all-required parameters, so shared DTOs use one mapping.
 - Typed RPC method decorators and default-context endpoints preserve normal
   application type inference. The executable API example is checked with mypy.
 - An executable example defining one error and registering it with HTTP, SSE,
   and RPC, and a root decision record for future implementation work.
 
-Combined SDK orchestration and shared cross-contract output ownership remain
-future work. The implemented error workflow is documented in `docs/problems.md`.
+- Version-1 `canon generate` configuration and a common operations/model plan for
+  OpenAPI, OpenRPC and WebRTC sources, with live export, saved/offline inputs,
+  read-only drift checks, explicit identity/name conflict resolution and one
+  ownership manifest per SDK output.
+- A generated domain facade (`client.projects.get/cancel/events`) with a JSON
+  HTTP binding, internal SSE/JSON-RPC/socket bindings, TypeScript WebRTC sessions,
+  shared canonical model declarations and one common error runtime per output.
+  Connections are lazy; injected clients remain caller-owned.
+
+To adopt the common workflow, configure `sources`/`targets` in `canon.toml` and
+choose a fresh SDK output. Specialized generator commands and their manifests
+remain available. See `docs/problems.md` and the root codegen guide.
 
 ## 0.9.0 - unreleased
 

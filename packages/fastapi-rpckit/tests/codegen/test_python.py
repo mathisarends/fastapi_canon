@@ -317,11 +317,10 @@ def test_camel_case_wire_fields_become_snake_case_python_names(
     assert 'project_id: str = Field(alias="projectId")' in files["models.py"]
     assert "model_config = ConfigDict(validate_by_name=True)" in files["models.py"]
     assert "        project_id: str," in files["namespaces/greeting.py"]
+    assert 'values["projectId"] = project_id' in files["namespaces/greeting.py"]
     assert (
-        "        params = SayParams(\n            project_id=project_id,"
-        in files["namespaces/greeting.py"]
+        "params = SayParams.model_validate(values)" in files["namespaces/greeting.py"]
     )
-    assert "values:" not in files["namespaces/greeting.py"]
 
 
 def test_servers_generate_resolvable_endpoint_helpers(

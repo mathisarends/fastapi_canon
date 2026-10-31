@@ -102,11 +102,12 @@ output ownership manifests. Canon 0.10.0 adds the shared application-error
 bindings and generated-client changes described in [canonical errors](problems.md).
 Regenerate clients and follow that guide when adopting the new stream profile.
 
-## Further codegen work
+## Common codegen workflow
 
-This release establishes one distribution and CLI. The proposed `[tool.canon]`
-configuration, `canon generate` workflow, shared cross-contract type registry
-and combined SDK facade are subsequent work described in the
-[unified codegen concept](../../../docs/unified-canon-concept.md).
-Ordinary REST generation still uses separate OpenAPI tooling. Do not configure
-multiple current generators to own the same output directory.
+Prepared 0.10.0 adds version-1 `canon generate` configuration, shared model/error
+identity and a domain SDK facade. JSON HTTP calls, SSE, JSON-RPC and sessions can
+contribute to one output per language. Follow the
+[codegen guide](../../../docs/unified-canon-concept.md) and choose a fresh output
+when adopting the common workflow. Specialized generator commands remain
+available with their own configuration and ownership; never point multiple
+generators at the same SDK directory.

@@ -1006,9 +1006,6 @@ def _template_filters(
             )
             <= 88
         ),
-        "direct_params": lambda parameters: all(
-            parameter.required for parameter in parameters
-        ),
         "docstring": _docstring,
         "enum_decl": lambda declaration: isinstance(declaration, EnumDecl),
         "field_line": lambda field: _field_line(field, imports),
