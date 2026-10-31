@@ -23,6 +23,7 @@ interface RequestSpec {
   path: string;
   method: string;
   statuses: readonly string[];
+  bodyless: readonly string[];
   parameters: readonly { name: string; wire: string; location: string }[];
 }
 export class HttpError extends TransportError {
@@ -159,7 +160,11 @@ export class Runtime {
       if (response.status < 200 || response.status >= 300) throw new ProtocolError("Unexpected HTTP response status");
       if (!spec.statuses.includes(String(response.status)) && !spec.statuses.includes("2XX")) throw new ProtocolError("Undocumented HTTP response status");
       const text = await response.text();
-      try { return (text ? JSON.parse(text) : null) as T; } catch (cause) { throw new ProtocolError("Invalid HTTP response", { cause }); }
+      if (spec.bodyless.includes(String(response.status)) || spec.bodyless.includes("2XX")) {
+        if (text) throw new ProtocolError("Unexpected body for bodyless HTTP response");
+        return undefined as T;
+      }
+      try { return JSON.parse(text) as T; } catch (cause) { throw new ProtocolError("Invalid HTTP response", { cause }); }
     } finally {
       await response?.body?.cancel().catch(() => undefined);
       if (timeout !== undefined) clearTimeout(timeout);

@@ -51,8 +51,19 @@ def render(plan: Plan, target: TargetConfig) -> dict[str, str]:
                 Declaration(_alias(operation, direction), types.parse(schema))
             )
         if operation.interaction != "session":
+            result_schema = operation.result
+            if target.language == "typescript" and operation.binding.protocol == "http":
+                metadata = operation.binding.metadata
+                results = []
+                for status, schema in metadata["responses"].items():
+                    if status not in metadata["bodyless"] and schema not in results:
+                        results.append(schema)
+                if results:
+                    result_schema = (
+                        results[0] if len(results) == 1 else {"anyOf": results}
+                    )
             declarations.append(
-                Declaration(_alias(operation, "Result"), types.parse(operation.result))
+                Declaration(_alias(operation, "Result"), types.parse(result_schema))
             )
     declarations = [*types.declarations(), *declarations]
     if len({declaration.name for declaration in declarations}) != len(declarations):
@@ -392,17 +403,22 @@ def _typescript_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
         params = f"params: {{ {fields} }}" + (
             " = {}" if not any(param.required for param in operation.parameters) else ""
         )
-        result = (
-            "void"
-            if operation.result == {"type": "null"}
-            else "Models." + _alias(operation, "Result")
-        )
         binding = operation.binding
+        result = "Models." + _alias(operation, "Result")
+        if binding.protocol == "http":
+            bodyless = binding.metadata["bodyless"]
+            if len(bodyless) == len(binding.metadata["responses"]):
+                result = "void"
+            elif bodyless:
+                result += " | void"
+        elif operation.result == {"type": "null"}:
+            result = "void"
         if binding.protocol == "http":
             spec = {
                 "path": binding.path,
                 "method": binding.method,
                 "statuses": list(binding.metadata["responses"]),
+                "bodyless": bodyless,
                 "parameters": [
                     {
                         "name": camel(param.name),

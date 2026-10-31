@@ -52,6 +52,41 @@ output path; put its parent on the import path. Generation needs Canon's
 Pydantic, the selected HTTP client, and `websockets` for WebSocket connections.
 TypeScript needs fetch/DOM APIs and the ESNext.Disposable type library.
 
+### Incremental adoption from an existing contract
+
+Select operations by their original wire IDs before model planning and binding
+generation. This lets a consumer adopt a supported part of an existing API
+without editing the exported contract or importing/deploying the application:
+
+```toml
+[codegen.sources.api]
+kind = "openapi"
+input = "contracts/openapi.json"
+exclude-operations = ["upload_attachment", "download_report"]
+
+[codegen.sources.control]
+kind = "openrpc"
+input = "contracts/openrpc.json"
+include-operations = ["projects.cancel", "projects.updates"]
+```
+
+`include-operations` is an optional non-empty allowlist; `exclude-operations`
+removes explicitly named operations. OpenAPI uses `operationId`, OpenRPC uses
+method/notification/subscription/socket names, and WebRTC uses session names.
+Selection happens before public `operations` name mappings. Unknown IDs,
+duplicate selectors, including and excluding the same ID, or an empty result
+fail explicitly. There are no wildcard selectors or automatic exclusions.
+
+Only selected operations and their referenced model closure reach the emitters;
+recursive models remain intact. Existing mappings for excluded operations may
+stay in the configuration. Saved inputs remain unchanged, and manifests retain
+the original input hashes plus the selection settings. Selection changes are
+covered by `--check`/`--diff`, ownership and stale-file cleanup.
+
+Unsupported operations still fail generation unless explicitly excluded. For
+example, leave file transfer on an existing adapter while adopting generated
+JSON/SSE/RPC calls, then remove those exclusions when support is available.
+
 ## Commands and ownership
 
 ```console
@@ -210,3 +245,14 @@ explicit. Python uses Pydantic validation. TypeScript models are static types, w
 checks for standard problem members and SSE controls, not a full JSON Schema
 validator. Replay, automatic manifest migration and structured JSON diagnostics
 remain future work.
+
+Python string constraints use Pydantic's default regex engine where supported,
+with compiled Python patterns for lookarounds and backreferences. This includes
+decimal-string schemas exported by earlier Pydantic versions. Constraints stay
+active in model fields, nested arrays and standalone type aliases; invalid
+patterns fail generation. Decimal wire values stay strings, preserving precision.
+
+TypeScript HTTP methods distinguish bodyless responses (`void`/`undefined`) from
+JSON `null` (`null`). Operations supporting both JSON and bodyless success
+statuses return the JSON type or `void`. Empty or malformed JSON and unexpected
+bodies for bodyless contracts raise `ProtocolError`.

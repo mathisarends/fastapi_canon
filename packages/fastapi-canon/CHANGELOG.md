@@ -64,6 +64,23 @@ All notable changes to `fastapi-canon` are documented in this file.
   shared canonical model declarations and one common error runtime per output.
   Connections are lazy; injected clients remain caller-owned.
 
+- Explicit `include-operations` and `exclude-operations` on common codegen
+  sources, applied before model planning and binding generation. Adopt part of
+  an existing OpenAPI/OpenRPC/WebRTC contract without modifying the export;
+  original input hashes and selection settings remain in the SDK manifest.
+
+### Fixed
+
+- Generate Python validation for valid string patterns using lookarounds or
+  backreferences, including decimal-string schemas from earlier Pydantic
+  exporters. Compiled Python patterns preserve validation in fields and aliases.
+- Preserve literal discriminator fields through nested union aliases, including
+  variants with several tag values, so generated Python SDKs import and validate.
+- Match TypeScript HTTP return values to their contracts: bodyless success
+  returns `undefined`, JSON `null` returns `null`, and mixed success statuses
+  expose a JSON-or-void union. Empty JSON and unexpected response bodies fail
+  explicitly. Regenerate SDKs to adopt these corrections.
+
 To adopt the common workflow, configure `codegen.sources`/`codegen.targets` in
 `fastapi-canon.toml` and choose a fresh SDK output. Specialized generator commands and their manifests
 remain available. See `docs/problems.md` and the root codegen guide.
