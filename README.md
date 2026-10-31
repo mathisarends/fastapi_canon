@@ -1,4 +1,4 @@
-# Canon
+# fastapi-canon
 
 One workspace for the FastAPI application stack: architecture conventions,
 feature composition and HTTP contracts, typed SSE, WebSocket RPC, and WebRTC
@@ -23,6 +23,16 @@ The [Canon architecture and public API](docs/canon.md) defines the shared
 namespaces and ownership rules. The [codegen discussion](docs/unified-canon-concept.md)
 collects candidate next steps for review before implementation.
 
+## Repository
+
+The canonical home for development, issues and future releases is
+[`mathisarends/fastapi_canon`](https://github.com/mathisarends/fastapi_canon).
+The consolidated source returns from `mathisarends/canon` with its complete Git
+history. The PyPI project remains `fastapi-canon`, and Python imports remain
+`fastapi_canon`. There is one maintained source repository, not a mirrored pair.
+See the [repository migration](docs/repository-migration.md) for the cutover
+sequence, publisher setup and historical release locations.
+
 ## Current releases
 
 The verified publications below belong to the earlier four-distribution layout.
@@ -36,9 +46,12 @@ remain historical releases. The unified source is not yet on PyPI.
 | `fastapi-rpckit` | 0.4.1 | [Release notes and artifacts](https://github.com/mathisarends/canon/releases/tag/fastapi-rpckit-v0.4.1) | [Install](https://pypi.org/project/fastapi-rpckit/0.4.1/) |
 | `fastapi-webrtc` | 0.3.0 | [Release notes and artifacts](https://github.com/mathisarends/canon/releases/tag/fastapi-webrtc-v0.3.0) | [Install](https://pypi.org/project/fastapi-webrtc/0.3.0/) |
 
-Package releases appear in this repository's [central release list](https://github.com/mathisarends/canon/releases).
-The table records verified publications. Future releases use one Canon version,
-tag, changelog and artifact set; earlier package releases remain available.
+The table records verified publications in the former
+[`canon` release list](https://github.com/mathisarends/canon/releases).
+Future releases use this repository's
+[release list](https://github.com/mathisarends/fastapi_canon/releases), one Canon
+version, tag, changelog and artifact set. Historical release URLs and assets stay
+at their original locations.
 
 ## Workspace
 
@@ -68,4 +81,5 @@ commands, [compatibility](docs/compatibility.md) for the tested scope, and
 [releases](docs/releases.md) for publication checks and historical releases.
 
 The imported repositories remain available in Git history. Current development
-and releases use `mathisarends/canon`; predecessor repositories are preserved.
+and future releases use `mathisarends/fastapi_canon`; historical releases and
+predecessor repositories are preserved.

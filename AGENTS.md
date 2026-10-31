@@ -7,6 +7,9 @@ and public namespace boundaries; `docs/unified-canon-concept.md` is a codegen
 discussion draft, not a description of implemented commands.
 Write all repository Markdown documentation in English, including changelogs,
 guides, and agent instructions.
+The canonical development and future release repository is
+`mathisarends/fastapi_canon`. Follow `docs/repository-migration.md` for the cutover;
+preserve historical release evidence in `mathisarends/canon`.
 
 ## Boundaries
 

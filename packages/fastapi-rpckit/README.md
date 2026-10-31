@@ -26,7 +26,7 @@ fastapi_canon.integrations.websockets makes the Python definition the single sou
 
 `fastapi-rpckit` is the FastAPI-first WebSocket RPC successor to
 [`pyrpckit`](https://github.com/mathisarends/pyrpckit), developed in the
-[Canon workspace](https://github.com/mathisarends/canon). FastAPI is a required
+[Canon workspace](https://github.com/mathisarends/fastapi_canon). FastAPI is a required
 dependency. This implementation now ships in Canon; SSE uses `fastapi_canon.integrations.sse`.
 The existing dispatch engine, OpenRPC contracts, binary/raw channels, and client
 generators are retained. The old repository remains available.
@@ -220,7 +220,7 @@ anything.
 
 ## Development
 
-Run from the [Canon workspace](https://github.com/mathisarends/canon) root with
+Run from the [Canon workspace](https://github.com/mathisarends/fastapi_canon) root with
 its single lockfile:
 
 ```bash

@@ -35,6 +35,9 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Added
 
+- Return unified development and future releases to `mathisarends/fastapi_canon`
+  with the complete imported Git history. Update package links and publisher
+  configuration; preserve historical release evidence in its original repository.
 - One `canon` command and `python -m fastapi_canon` entry point, including
   `canon check errors`. Root CLI help loads no transport generators.
 - Optional `codegen`, `aiortc` and `otel` dependencies in Canon.

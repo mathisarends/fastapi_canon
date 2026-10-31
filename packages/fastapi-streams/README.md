@@ -5,7 +5,7 @@ now ships in `fastapi-canon[sse]` (prepared 0.9.0, not yet published).
 See the [public API](../../docs/canon.md#public-namespaces) and
 [package migration guide](../fastapi-canon/docs/package-migration.md).
 
-[![CI](https://github.com/mathisarends/canon/actions/workflows/ci.yml/badge.svg)](https://github.com/mathisarends/canon/actions/workflows/ci.yml)
+[![CI](https://github.com/mathisarends/fastapi_canon/actions/workflows/ci.yml/badge.svg)](https://github.com/mathisarends/fastapi_canon/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](pyproject.toml)
 [![MIT License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -192,12 +192,12 @@ under `[tool.fastapi-streams]` in `pyproject.toml` and run
 
 ## Run the complete example
 
-The package is developed in the [Canon workspace](https://github.com/mathisarends/canon),
+The package is developed in the [Canon workspace](https://github.com/mathisarends/fastapi_canon),
 which shares one lockfile across its packages:
 
 ```sh
-git clone https://github.com/mathisarends/canon.git
-cd canon
+git clone https://github.com/mathisarends/fastapi_canon.git
+cd fastapi_canon
 uv sync --locked --all-packages --all-groups
 npm ci --ignore-scripts --prefix packages/fastapi-streams
 cd packages/fastapi-streams

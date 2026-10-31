@@ -4,6 +4,8 @@ Use Python 3.12–3.14, uv 0.9.2 or newer and Node.js 24. Run commands from the
 repository root; the workspace has one environment and one `uv.lock`.
 
 ```console
+git clone https://github.com/mathisarends/fastapi_canon.git
+cd fastapi_canon
 uv sync --locked --all-packages --all-groups
 npm ci --ignore-scripts --prefix packages/fastapi-streams
 npm ci --ignore-scripts --prefix packages/fastapi-webrtc

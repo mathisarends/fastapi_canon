@@ -79,7 +79,7 @@ def test_release_notes_resolve_links_against_the_release_commit(
     original = path.read_bytes()
     notes = release._release_notes(release_repo, package, "0.5.4", commit)
     assert (
-        f"https://github.com/mathisarends/canon/blob/{commit}/"
+        f"https://github.com/mathisarends/fastapi_canon/blob/{commit}/"
         "packages/fastapi-streams/CHANGELOG.md"
     ) in notes
     assert "../fastapi-streams" not in notes
@@ -102,7 +102,7 @@ def test_release_notes_retain_external_links_titles_and_fragments(
     )
     commit = "b" * 40
     notes = release._release_notes(release_repo, package, "0.4.0", commit)
-    base = f"https://github.com/mathisarends/canon/blob/{commit}"
+    base = f"https://github.com/mathisarends/fastapi_canon/blob/{commit}"
     assert (
         f'{base}/packages/fastapi-canon/docs/codegen.md#validation "Read this"' in notes
     )
@@ -275,11 +275,25 @@ def test_publication_accepts_final_changelog(release_repo: Path) -> None:
     assert report["version"] == "0.9.0"
 
 
-def test_github_release_requires_successful_ci_for_exact_commit(
+def test_github_release_rejects_former_repository(
     release_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
     monkeypatch.setenv("GITHUB_REPOSITORY", "mathisarends/canon")
+    monkeypatch.setattr(
+        release, "_gh", lambda endpoint: pytest.fail("Do not contact the former home")
+    )
+    with pytest.raises(ValueError, match="wrong repository"):
+        release.validate_release(
+            "fastapi-canon", "0.9.0", root=release_repo, github=True
+        )
+
+
+def test_github_release_requires_successful_ci_for_exact_commit(
+    release_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "mathisarends/fastapi_canon")
     monkeypatch.setenv("GITHUB_RUN_ID", "123")
     monkeypatch.setattr(release, "_gh", lambda endpoint: {"workflow_runs": []})
     with pytest.raises(ValueError, match="exact release commit"):
@@ -292,7 +306,7 @@ def test_github_release_rejects_existing_pypi_version(
     release_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
-    monkeypatch.setenv("GITHUB_REPOSITORY", "mathisarends/canon")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "mathisarends/fastapi_canon")
     monkeypatch.setenv("GITHUB_RUN_ID", "123")
 
     def github(endpoint: str, **kwargs):

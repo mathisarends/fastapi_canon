@@ -40,10 +40,10 @@ codegen = [
 canon = "fastapi_canon.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/mathisarends/canon/tree/main/packages/fastapi-canon"
-Repository = "https://github.com/mathisarends/canon"
-Documentation = "https://github.com/mathisarends/canon/tree/main/packages/fastapi-canon/docs"
-Issues = "https://github.com/mathisarends/canon/issues"
+Homepage = "https://github.com/mathisarends/fastapi_canon"
+Repository = "https://github.com/mathisarends/fastapi_canon"
+Documentation = "https://github.com/mathisarends/fastapi_canon/tree/main/packages/fastapi-canon/docs"
+Issues = "https://github.com/mathisarends/fastapi_canon/issues"
 
 [build-system]
 requires = ["hatchling"]

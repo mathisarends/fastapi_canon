@@ -5,6 +5,12 @@ in the prepared, unpublished Canon 0.9.0 source. The
 [codegen discussion](unified-canon-concept.md) describes possible next steps;
 its configuration and combined SDK examples are design candidates.
 
+The canonical repository for development and future releases is
+[`mathisarends/fastapi_canon`](https://github.com/mathisarends/fastapi_canon).
+The [repository migration](repository-migration.md) preserves the imported Git
+history and records the publisher cutover. Repository names do not change the
+`fastapi-canon` distribution or its `fastapi_canon` imports.
+
 ## Package and dependencies
 
 `fastapi-canon` is the only active library distribution. Its wheel contains

@@ -5,6 +5,12 @@ RPC/sockets, WebRTC and their client generators in one `fastapi-canon` wheel.
 It is not published yet. Earlier independent distributions remain available at
 their existing published versions.
 
+Development and future releases now use
+[`mathisarends/fastapi_canon`](https://github.com/mathisarends/fastapi_canon).
+The [repository migration](../../../docs/repository-migration.md) records the
+source history and publishing setup. The repository move does not rename the
+PyPI project or add further Python import changes.
+
 ## Installation
 
 ```console

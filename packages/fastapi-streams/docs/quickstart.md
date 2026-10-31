@@ -5,8 +5,8 @@
 ## Run the example
 
 ```sh
-git clone https://github.com/mathisarends/canon.git
-cd canon
+git clone https://github.com/mathisarends/fastapi_canon.git
+cd fastapi_canon
 uv sync --locked --all-packages --all-groups
 npm ci --ignore-scripts --prefix packages/fastapi-streams
 cd packages/fastapi-streams
