@@ -97,9 +97,10 @@ and application imports, then regenerate all clients to update their manifests.
 Binding plugins must declare `fastapi_canon.integrations.websockets.socket_bindings` entry
 points and import the Canon binding APIs.
 
-Wire formats, OpenAPI/OpenRPC vendor extensions, WebRTC signaling identifiers,
-and the generated client APIs are retained. Existing ownership manifests are
-retained so regeneration can remove stale generated files safely.
+The packaging migration retains WebRTC signaling identifiers and existing
+output ownership manifests. Canon 0.10.0 adds the shared application-error
+bindings and generated-client changes described in [canonical errors](problems.md).
+Regenerate clients and follow that guide when adopting the new stream profile.
 
 ## Further codegen work
 

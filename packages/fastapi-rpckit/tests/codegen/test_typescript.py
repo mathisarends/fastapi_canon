@@ -32,6 +32,7 @@ def test_the_generated_package_has_one_module_per_concern(
     assert set(files) == {
         MANIFEST,
         "core.ts",
+        "problem.ts",
         "namespaces/greeting.ts",
         "namespaces/index.ts",
         "client.ts",
@@ -301,7 +302,7 @@ def test_writing_is_idempotent_and_check_does_not_write(
 ) -> None:
     output = tmp_path / "generated"
 
-    assert len(generate_typescript_client(document, output, options())) == 9
+    assert len(generate_typescript_client(document, output, options())) == 10
     assert generate_typescript_client(document, output, options()) == ()
     (output / "client.ts").write_text("stale\n", encoding="utf-8")
 

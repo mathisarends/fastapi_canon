@@ -43,6 +43,7 @@ export function createFixturesApi(client: ClientOptions) {
       return stream<Types.FixtureEvent>(client, {
         path: "/nested/" + encodePath(input.itemId) + "",
         method: "GET",
+      canonStream: false,
         query,
         headers,
         events: {"discriminator": "type", "known": ["done", "nested"]},

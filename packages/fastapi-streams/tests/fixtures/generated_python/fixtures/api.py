@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from pydantic import TypeAdapter
 
@@ -14,6 +15,8 @@ class FixturesApi:
     _nested_events_item_id_adapter = TypeAdapter(int)
     _nested_events_labels_adapter = TypeAdapter(Models.NestedEventsLabels)
     _nested_events_event_adapter = TypeAdapter(Models.FixtureEvent)
+    _nested_events_problem_adapters: dict[str, TypeAdapter[Any]] = {
+    }
 
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
@@ -63,6 +66,8 @@ class FixturesApi:
             'GET',
             self._nested_events_event_adapter,
             operation_id='nested_events',
+            canon_stream=False,
+            problem_adapters=self._nested_events_problem_adapters,
             query=query,
             headers=headers,
             options=options,

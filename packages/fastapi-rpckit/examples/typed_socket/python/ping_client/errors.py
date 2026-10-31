@@ -3,19 +3,36 @@
 
 from typing import Any
 
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
-from ping_client.internal import RpcRemoteError
+from ping_client.internal import (
+    ProblemError,
+    ProtocolError,
+    RpcRemoteError,
+    parse_problem,
+)
 
 ERROR_TYPES: dict[str, type[RpcRemoteError]] = {}
+PROBLEM_TYPES: dict[str, tuple[type[ProblemError[Any]], TypeAdapter[Any]]] = {}
 
 
 def error_from_response(
     rpc_code: int,
     code: str,
     message: str,
-    details: Any,
-) -> RpcRemoteError:
+    details: Any = None,
+    problem: Any = None,
+) -> RpcRemoteError | ProblemError[Any]:
+    if problem is not None:
+        try:
+            parsed = parse_problem(problem, embedded=True)
+            binding = PROBLEM_TYPES.get(parsed.type)
+            if binding is None:
+                return ProblemError(parsed)
+            problem_type, problem_adapter = binding
+            return problem_type(problem_adapter.validate_python(problem))
+        except ValidationError as exc:
+            raise ProtocolError("Invalid RPC problem") from exc
     error_type = ERROR_TYPES.get(code)
     if error_type is None:
         return RpcRemoteError(rpc_code, code, message, details)

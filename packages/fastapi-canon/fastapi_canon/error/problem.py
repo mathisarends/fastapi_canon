@@ -1,6 +1,6 @@
 import math
 from collections.abc import Mapping
-from typing import Any, Self, cast
+from typing import Any, ClassVar, Self, cast
 
 from pydantic import (
     BaseModel,
@@ -22,7 +22,7 @@ from fastapi_canon.error.types import (
 class Problem(BaseModel):
     """The stable Problem Details profile emitted by fastapi-canon."""
 
-    model_config = ConfigDict(extra="allow", frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", frozen=True)
 
     __pydantic_extra__: dict[str, Any] = Field(init=False)
 

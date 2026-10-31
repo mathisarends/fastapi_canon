@@ -7,19 +7,21 @@ from collections.abc import AsyncGenerator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from functools import cache
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 import httpx
+from .problem import (
+    ProblemError,
+    ProtocolError,
+    TransportError,
+    parse_problem,
+)
 from pydantic import JsonValue, TypeAdapter, ValidationError
 from pydantic_core import ErrorDetails
 
 _JSON_ADAPTER = TypeAdapter[JsonValue](JsonValue)
 _LINE_END = re.compile(r"\r\n|\r|\n")
 DEFAULT_TIMEOUT = httpx.Timeout(None, connect=10.0)
-
-
-class TransportError(Exception):
-    pass
 
 
 class HttpError(TransportError):
@@ -116,24 +118,36 @@ def set_header(
 
 
 async def iter_sse(response: httpx.Response) -> AsyncGenerator[str, None]:
+    async for _, payload in _iter_frames(response):
+        yield payload
+
+
+async def _iter_frames(
+    response: httpx.Response, *, strict: bool = False
+) -> AsyncGenerator[tuple[str, str], None]:
     decoder = codecs.getincrementaldecoder("utf-8-sig")("strict")
     # Fragments of the current unterminated line, joined once it ends.
     pending: list[str] = []
     data: list[str] = []
     skip_lf = False
+    event = ""
 
-    def accept_line(current: str) -> str | None:
-        nonlocal data
+    def accept_line(current: str) -> tuple[str, str] | None:
+        nonlocal data, event
         if not current:
             if not data:
+                event = ""
                 return None
             payload, data = "\n".join(data), []
-            return payload
+            name, event = event, ""
+            return name, payload
         field, _, value = current.partition(":")
         if value.startswith(" "):
             value = value[1:]
         if field == "data":
             data.append(value)
+        elif field == "event":
+            event = value
         return None
 
     async for chunk in response.aiter_bytes():
@@ -163,8 +177,8 @@ async def iter_sse(response: httpx.Response) -> AsyncGenerator[str, None]:
     pending.append(decoder.decode(b"", final=True))
     if line := "".join(pending):
         accept_line(line)
-    if data:
-        yield "\n".join(data)
+    if data and not strict:
+        yield event, "\n".join(data)
 
 
 class Transport:
@@ -192,6 +206,8 @@ class Transport:
         adapter: TypeAdapter[T],
         *,
         operation_id: str | None = None,
+        canon_stream: bool = False,
+        problem_adapters: Mapping[str, TypeAdapter[Any]] | None = None,
         query: list[tuple[str, str]],
         headers: Mapping[str, str],
         body: bytes | None = None,
@@ -236,6 +252,27 @@ class Transport:
                         details = _JSON_ADAPTER.validate_json(text) if text else None
                     except ValidationError:
                         details = text
+                    if (
+                        response.headers.get("content-type", "")
+                        .split(";", 1)[0]
+                        .strip()
+                        .lower()
+                        == "application/problem+json"
+                    ):
+                        try:
+                            problem = parse_problem(details)
+                        except (ValidationError, ProtocolError) as exc:
+                            raise ProtocolError(
+                                "Invalid HTTP problem response"
+                            ) from exc
+                        if (
+                            problem.status is not None
+                            and problem.status != response.status_code
+                        ):
+                            raise ProtocolError(
+                                "Problem status differs from HTTP response"
+                            )
+                        raise ProblemError(problem) from failure
                     raise HttpError(response, details) from failure
                 media = (
                     response.headers.get("content-type", "")
@@ -247,7 +284,44 @@ class Transport:
                     raise TransportError(
                         f"Expected text/event-stream, received {media!r}"
                     )
-                async for payload in iter_sse(response):
+                async for event, payload in _iter_frames(response, strict=canon_stream):
+                    if canon_stream and event.startswith("canon."):
+                        if event == "canon.complete":
+                            try:
+                                complete = _JSON_ADAPTER.validate_json(payload)
+                            except ValidationError as exc:
+                                raise ProtocolError(
+                                    "Invalid canon.complete event"
+                                ) from exc
+                            if complete != {}:
+                                raise ProtocolError("Invalid canon.complete event")
+                            return
+                        if event == "canon.problem":
+                            try:
+                                problem = parse_problem(
+                                    _JSON_ADAPTER.validate_json(payload), embedded=True
+                                )
+                            except ValidationError as exc:
+                                raise ProtocolError(
+                                    "Invalid canon.problem event"
+                                ) from exc
+                            selected = (
+                                problem_adapters.get(problem.type)
+                                if problem_adapters
+                                else None
+                            )
+                            if selected is not None:
+                                try:
+                                    typed = selected.validate_python(
+                                        _JSON_ADAPTER.validate_json(payload)
+                                    )
+                                except ValidationError as exc:
+                                    raise ProtocolError(
+                                        "Invalid declared stream problem"
+                                    ) from exc
+                                raise ProblemError(typed)
+                            raise ProblemError(problem)
+                        raise ProtocolError("Unknown Canon control event")
                     try:
                         yield adapter.validate_json(payload)
                     except ValidationError as exc:
@@ -279,6 +353,8 @@ class Transport:
                             category=category,
                             validation_errors=details,
                         ) from exc
+                if canon_stream:
+                    raise TransportError("SSE connection ended without canon.complete")
         except httpx.HTTPError as exc:
             raise TransportError("SSE HTTP transport failed") from exc
         except UnicodeDecodeError as exc:

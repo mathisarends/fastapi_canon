@@ -5,6 +5,7 @@
     "client.ts",
     "index.ts",
     "transport/errors.ts",
+    "transport/problem.ts",
     "transport/sse.ts",
     "types.ts"
   ],

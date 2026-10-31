@@ -4,6 +4,8 @@ from typing import Any, Self
 
 from pydantic import ValidationError
 
+from .problem import ProblemError, ProtocolError, TransportError, parse_problem
+
 
 class RpcClientError(Exception):
     """Base error raised by the client."""
@@ -44,7 +46,7 @@ class RpcInternalError(RpcRemoteError):
     code = "internal_error"
 
 
-class RpcTransportError(RpcClientError):
+class RpcTransportError(TransportError, RpcClientError):
     """Raised when the connection cannot serve a request."""
 
 
@@ -172,3 +174,14 @@ class RpcNotificationValidationError(RpcClientError):
         super().__init__(f"Invalid notification for RPC method {method!r}: {error}")
         self.method = method
         self.validation_error = error
+
+
+def remote_error(
+    rpc_code: int, code: str, message: str, details: Any = None, problem: Any = None
+) -> RpcRemoteError | ProblemError[Any]:
+    if problem is not None:
+        try:
+            return ProblemError(parse_problem(problem, embedded=True))
+        except ValidationError as exc:
+            raise ProtocolError("Invalid RPC problem") from exc
+    return RpcRemoteError(rpc_code, code, message, details)

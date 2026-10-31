@@ -67,15 +67,15 @@ async def test_standalone_http_problem_preserves_details_and_supports_body_alias
             httpx.AsyncClient(transport=httpx.ASGITransport(app=app)) as http,
             sdk.Client("http://example.test", http_client=http) as client,
         ):
-            with pytest.raises(sdk.HttpError) as caught:
+            with pytest.raises(sdk.ProblemError) as caught:
                 _ = [item async for item in client.streams.events()]
         error = caught.value
-        assert error.status == 404
-        assert error.response.headers["content-type"] == "application/problem+json"
-        body = TypeAdapter(sdk.models.EventsErrorBody).validate_python(error.details)
+        assert error.problem.status == 404
+        details = error.problem.model_dump(exclude_unset=True)
+        body = TypeAdapter(sdk.models.EventsErrorBody).validate_python(details)
         assert isinstance(body, sdk.models.EventsError0)
-        legacy = TypeAdapter(sdk.models.EventsError).validate_python(error.details)
-        assert body.model_dump() == legacy.model_dump() == error.details
+        legacy = TypeAdapter(sdk.models.EventsError).validate_python(details)
+        assert body.model_dump() == legacy.model_dump() == details
         assert body.code == "missing"
         for invalid in ("<html>Bad gateway</html>", None, {}, {"code": "missing"}):
             with pytest.raises(ValidationError):

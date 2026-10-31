@@ -3,15 +3,26 @@
 // Regenerate it from the OpenRPC document instead.
 
 import { RpcRemoteError } from "./core";
+import { ProblemError, parseProblem } from "./problem";
+import type { Problem } from "./problem";
 
 const errorTypes: Readonly<Record<string, typeof RpcRemoteError>> = {};
+const problemTypes: Readonly<
+  Record<string, new (problem: any) => ProblemError>
+> = {};
 
 export function errorFromResponse(
   rpcCode: number,
   code: string,
   message: string,
   details?: unknown,
-): RpcRemoteError {
+  problem?: unknown,
+): RpcRemoteError | ProblemError {
+  if (problem !== undefined) {
+    const parsed = parseProblem(problem, true);
+    const ErrorType = problemTypes[parsed.type] ?? ProblemError<Problem>;
+    return new ErrorType(parsed);
+  }
   const ErrorType = errorTypes[code] ?? RpcRemoteError;
   return new ErrorType(rpcCode, code, message, details);
 }

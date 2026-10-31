@@ -21,23 +21,34 @@ All notable changes to `fastapi-canon` are documented in this file.
 - Prepare one Canon 0.10.0 version across the workspace and generated artifact
   metadata. This source version is not a publication.
 
+- Canon streams now send terminal `canon.problem` or `canon.complete` events.
+  Declare processing errors with `stream_raises=` and update manual consumers to
+  stop on either terminal event. Raw `StreamRouter` behavior is unchanged.
+- Regenerated SSE clients raise `ProblemError` for HTTP problem responses and
+  terminal stream problems. Catch that class instead of `HttpError` for problem
+  bodies. Unexpected EOF without completion is a transport error for Canon
+  streams. Regenerate Python and TypeScript clients after upgrading.
+- `ProtocolDefinitionError` now shares Canon's `ErrorConfigurationError` base.
+
 ### Added
 
-- `ErrorRegistry.from_app(app)` exposes the installed application catalog after
-  composition resolves feature-local type URIs.
-- `ErrorRegistry.problem_for(exception, include_status=False, instance=None)`
-  renders the shared public problem without evaluating HTTP header callbacks.
-  Unknown exceptions return `None`; unresolved mapped type URIs fail explicitly.
-- `ErrorRegistry.schema_for(error, include_status=False)` exports a detached,
-  self-contained schema whose `$id` is the problem type URI. Nested extension
-  references remain local. HTTP compilation and WebRTC admission reuse this
-  common schema compiler.
-- A root canonicalization decision record, including the agreed RFC 9457 model,
-  planned SSE and SDK conventions, open decisions, and implementation boundaries.
+- Shared `Error` definitions in RPC channel and operation `raises=`, with
+  `error_registry=` on `RpcChannel`. Canonical domain failures use JSON-RPC
+  `error.data.problem`, retaining the numeric JSON-RPC error code and message.
+- RPC routes contribute channel catalogs to composition. Export RPC contracts
+  with `service.contract(..., app=app)` to use composition's resolved type URIs.
+- SSE profile version 1, declared terminal problem schemas, safe processing
+  failure handling, generator cleanup, and explicit successful completion.
+- Python and TypeScript SDK problem/error runtimes from a common source;
+  `ProblemError.problem`, `TransportError`, and `ProtocolError`, plus known RPC
+  error subclasses selected by type URI. Unknown problems preserve extensions.
+- Typed RPC method decorators and default-context endpoints preserve normal
+  application type inference. The executable API example is checked with mypy.
+- An executable example defining one error and registering it with HTTP, SSE,
+  and RPC, and a root decision record for future implementation work.
 
-The combined client facade, RPC problem-envelope binding, and terminal SSE
-control-event profile remain subsequent work; this release does not implement
-those APIs or change their existing wire protocols.
+Combined SDK orchestration and shared cross-contract output ownership remain
+future work. The implemented error workflow is documented in `docs/problems.md`.
 
 ## 0.9.0 - unreleased
 

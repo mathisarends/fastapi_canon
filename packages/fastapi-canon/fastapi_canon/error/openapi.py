@@ -148,7 +148,36 @@ def compile_document(
         )
 
     for path, operation in iter_operations(result):
+        stream = operation.get("x-canon-stream")
+        if stream is not None:
+            if stream.get("version") != 1:
+                raise ErrorConfigurationError(
+                    "Canon streams require an installed error registry"
+                )
+            identities = stream.pop("errorIds", [])
+            lookup = (
+                {str(id(error)): error for error in registry.errors}
+                if registry is not None
+                else {}
+            )
+            if any(identity not in lookup for identity in identities):
+                raise ErrorConfigurationError("Canon stream declares an unknown error")
+            stream["problemEvent"] = "canon.problem"
+            stream["completeEvent"] = "canon.complete"
+            stream["problems"] = []
+            for identity in identities:
+                assert registry is not None
+                error = lookup[identity]
+                name = error.effective_schema_name + "Embedded"
+                schema = compile_problem_schema(registry, error, include_status=False)
+                _add_component(
+                    components, name, _rewrite_local_definitions(schema, name)
+                )
+                stream["problems"].append({"$ref": f"#/components/schemas/{name}"})
         responses = operation.setdefault("responses", {})
+        if stream is not None:
+            _compile_stream_contract(stream, responses, components, registry)
+
         _errors, http_statuses, _success = contracts_from_responses(
             path, responses, registry
         )
@@ -645,3 +674,61 @@ def _thaw(value: Any) -> Any:
     if isinstance(value, tuple):
         return [_thaw(item) for item in value]
     return value
+
+
+def _compile_stream_contract(
+    profile: dict[str, Any],
+    responses: dict[str, Any],
+    components: dict[str, Any],
+    registry: ErrorRegistry | None,
+) -> None:
+    base = registry.type_base if registry is not None else None
+    internal_type = (
+        f"{base}/internal_server_error"
+        if base
+        else "urn:fastapi-canon:internal_server_error"
+    )
+    internal = _base_problem_schema()
+    internal["properties"].pop("status")
+    internal["required"].remove("status")
+    internal["properties"]["type"]["const"] = internal_type
+    internal["properties"]["title"]["const"] = "Internal Server Error"
+    internal["properties"]["code"]["const"] = "internal_server_error"
+    name = "CanonInternalServerErrorEmbedded"
+    _add_component(components, name, internal)
+    problems = [*profile["problems"], {"$ref": f"#/components/schemas/{name}"}]
+    for status, response in responses.items():
+        media = response.get("content", {}).get("text/event-stream")
+        if not str(status).startswith("2") or not isinstance(media, dict):
+            continue
+        business = copy.deepcopy(media.get("itemSchema"))
+        if not isinstance(business, dict):
+            raise ErrorConfigurationError(
+                "Canon streams require a typed SSE item schema"
+            )
+        profile["businessItemSchema"] = copy.deepcopy(business)
+        business.setdefault("properties", {}).setdefault("event", {}).update(
+            {"not": {"pattern": "^canon\\."}}
+        )
+
+        def control(event: str, data: dict[str, Any]) -> dict[str, Any]:
+            return {
+                "type": "object",
+                "properties": {
+                    "event": {"type": "string", "const": event},
+                    "data": {
+                        "type": "string",
+                        "contentMediaType": "application/json",
+                        "contentSchema": data,
+                    },
+                },
+                "required": ["event", "data"],
+            }
+
+        media["itemSchema"] = {
+            "oneOf": [
+                business,
+                control("canon.problem", {"anyOf": problems}),
+                control("canon.complete", {"type": "object", "maxProperties": 0}),
+            ]
+        }

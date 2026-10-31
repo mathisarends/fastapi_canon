@@ -2,6 +2,7 @@ import json
 import re
 from importlib.resources import files
 
+from fastapi_canon.codegen.problems import problem_runtime
 from fastapi_canon.integrations.sse.codegen.documentation import operation_doc
 from fastapi_canon.integrations.sse.codegen.ir import (
     Array,
@@ -84,6 +85,9 @@ def render_type(type_: Type, prefix: str = "") -> str:
 
 def generate_typescript(contract: Contract) -> dict[str, str]:
     public_names = {
+        "Problem",
+        "ProblemError",
+        "ProtocolError",
         "Client",
         "ClientOptions",
         "RequestOptions",
@@ -132,7 +136,7 @@ def generate_typescript(contract: Contract) -> dict[str, str]:
         operation_doc=documentation,
         event_policy=event_policy,
     )
-    output: dict[str, str] = {}
+    output: dict[str, str] = {"transport/problem.ts": problem_runtime("typescript")}
     declarations: list[str] = []
     for declaration in contract.declarations:
         name, type_ = declaration.name, declaration.type
@@ -169,6 +173,8 @@ def generate_typescript(contract: Contract) -> dict[str, str]:
         'export type { Client } from "./client.js";',
         'export * from "./types.js";',
         'export type { ClientOptions, RequestOptions } from "./transport/sse.js";',
+        'export { ProblemError, ProtocolError } from "./transport/problem.js";',
+        'export type { Problem } from "./transport/problem.js";',
         "export { HttpError, isHttpError, TransportError, StreamParseError } "
         'from "./transport/errors.js";',
     ]

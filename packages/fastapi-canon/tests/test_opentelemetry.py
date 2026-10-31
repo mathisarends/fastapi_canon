@@ -339,7 +339,7 @@ def test_rpc_forwards_providers() -> None:
         options = Telemetry(tracer_provider=capture.provider)
         channel = RpcChannel("tasks")
 
-        @channel.method("ping")  # type: ignore[arg-type]  # RPCKit uses FunctionType
+        @channel.method("ping")
         async def ping() -> str:
             return "pong"
 

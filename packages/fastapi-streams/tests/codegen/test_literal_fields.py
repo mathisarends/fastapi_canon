@@ -14,9 +14,9 @@ from tests.codegen.helpers import load_models, schema_contract
 
 def test_single_constant_fields_remain_literals_and_preserve_python_defaults(tmp_path):
     contract = schema_contract(
-        {"$ref": "#/components/schemas/Problem"},
+        {"$ref": "#/components/schemas/DomainProblem"},
         {
-            "Problem": {
+            "DomainProblem": {
                 "type": "object",
                 "properties": {
                     "title": {"const": "Not found", "default": "Not found"},
@@ -32,22 +32,22 @@ def test_single_constant_fields_remain_literals_and_preserve_python_defaults(tmp
     typescript = generate_typescript(contract)["types.ts"]
     assert 'title?: "Not found";' in typescript
     assert 'type: "urn:example:not_found";' in typescript
-    assert "ProblemTitle" not in typescript
-    assert "ProblemType" not in typescript
-    assert "export const ProblemDecision" in typescript
+    assert "DomainProblemTitle" not in typescript
+    assert "DomainProblemType" not in typescript
+    assert "export const DomainProblemDecision" in typescript
     assert "export const SingleChoice" in typescript
     with load_models(tmp_path, generate_python(contract)) as models:
-        problem = models.Problem(
+        problem = models.DomainProblem(
             type="urn:example:not_found", decision="approve", named="only"
         )
         assert type(problem.title) is str
         assert problem.title == "Not found"
         assert "title" not in problem.model_dump(exclude_unset=True)
-        assert problem.decision is models.ProblemDecision.APPROVE
+        assert problem.decision is models.DomainProblemDecision.APPROVE
         assert problem.named is models.SingleChoice.ONLY
-        assert not hasattr(models, "ProblemTitle")
+        assert not hasattr(models, "DomainProblemTitle")
         with pytest.raises(ValidationError):
-            models.Problem(
+            models.DomainProblem(
                 type="urn:example:not_found",
                 decision="approve",
                 named="only",

@@ -17,6 +17,7 @@ from fastapi_canon import (
     ErrorRegistry,
     Feature,
 )
+from fastapi_canon.error.catalog import app_registry, problem_for, problem_schema
 
 
 class Missing(Exception):
@@ -62,7 +63,7 @@ def test_http_and_embedded_problems_share_identity_and_public_data() -> None:
     assert response.status_code == 404
     assert response.headers["X-Problem"] == "missing"
 
-    embedded = registry.problem_for(Expired("private database information"))
+    embedded = problem_for(registry, Expired("private database information"))
     assert embedded is not None
     assert embedded.status is None
     payload = embedded.as_dict()
@@ -70,10 +71,10 @@ def test_http_and_embedded_problems_share_identity_and_public_data() -> None:
     assert payload["replacement"] is None
     assert "private" not in response.text
     assert "status" not in payload
-    Draft202012Validator(registry.schema_for(missing)).validate(payload)
-    Draft202012Validator(registry.schema_for(missing, include_status=True)).validate(
-        response.json()
-    )
+    Draft202012Validator(problem_schema(registry, missing)).validate(payload)
+    Draft202012Validator(
+        problem_schema(registry, missing, include_status=True)
+    ).validate(response.json())
 
 
 def test_embedded_rendering_does_not_evaluate_http_headers() -> None:
@@ -84,7 +85,7 @@ def test_embedded_rendering_does_not_evaluate_http_headers() -> None:
         Missing, status=404, code="item_missing", title="Item missing", headers=headers
     )
     registry = ErrorRegistry(errors=[missing], type_base="urn:example:problems")
-    problem = registry.problem_for(Missing(), instance="urn:uuid:1234")
+    problem = problem_for(registry, Missing(), instance="urn:uuid:1234")
     assert problem is not None
     assert problem.instance == "urn:uuid:1234"
     assert problem.as_dict()["type"] == "urn:example:problems/item_missing"
@@ -97,28 +98,28 @@ def test_application_catalog_reuses_composition_resolution() -> None:
         Feature(name="items", errors=local),
         errors=ErrorOptions(type_base="https://api.example.test/problems"),
     ).apply(FastAPI())
-    registry = ErrorRegistry.from_app(app)
+    registry = app_registry(app)
     assert registry.errors == local.errors
-    problem = registry.problem_for(Missing())
+    problem = problem_for(registry, Missing())
     assert problem is not None
     assert problem.type == "https://api.example.test/problems/item_missing"
-    assert registry.schema_for(missing)["$id"] == problem.type
-    assert ErrorRegistry.from_app(app) is registry
+    assert problem_schema(registry, missing)["$id"] == problem.type
+    assert app_registry(app) is registry
     with pytest.raises(ErrorConfigurationError, match="no installed ErrorRegistry"):
-        ErrorRegistry.from_app(FastAPI())
+        app_registry(FastAPI())
 
 
 def test_registry_reports_unmapped_and_unresolved_problems_explicitly() -> None:
     missing = Error(Missing, status=404, code="item_missing", title="Item missing")
     registry = ErrorRegistry(errors=[missing])
-    assert registry.problem_for(Unknown()) is None
+    assert problem_for(registry, Unknown()) is None
     with pytest.raises(ErrorConfigurationError, match="resolved problem type URI"):
-        registry.problem_for(Missing())
+        problem_for(registry, Missing())
     with pytest.raises(ErrorConfigurationError, match="resolved problem type URI"):
-        registry.schema_for(missing)
+        problem_schema(registry, missing)
     foreign = Error(Unknown, status=404, code="unknown_item", title="Unknown item")
     with pytest.raises(ErrorConfigurationError, match="does not belong"):
-        registry.schema_for(foreign)
+        problem_schema(registry, foreign)
 
 
 @pytest.mark.parametrize("include_status", [True, False])
@@ -148,8 +149,8 @@ def test_shared_schema_keeps_nested_extension_references_local(
         type="urn:example:missing",
     )
     registry = ErrorRegistry(errors=[missing])
-    schema = registry.schema_for(missing, include_status=include_status)
-    problem = registry.problem_for(Missing(), include_status=include_status)
+    schema = problem_schema(registry, missing, include_status=include_status)
+    problem = problem_for(registry, Missing(), include_status=include_status)
     assert problem is not None
     assert schema["$id"] == "urn:example:missing"
     assert "#/components/" not in str(schema)
@@ -159,17 +160,19 @@ def test_shared_schema_keeps_nested_extension_references_local(
     validator.validate(problem.as_dict())
     validator.validate(schema["examples"][0])
     schema["properties"].clear()
-    assert registry.schema_for(missing, include_status=include_status)["properties"]
+    assert problem_schema(registry, missing, include_status=include_status)[
+        "properties"
+    ]
 
 
 @pytest.mark.parametrize("value", [1, None, "true"])
 def test_problem_binding_options_require_booleans(value: Any) -> None:
     registry = ErrorRegistry(errors=[])
     with pytest.raises(ErrorConfigurationError, match="include_status"):
-        registry.problem_for(Missing(), include_status=value)
+        problem_for(registry, Missing(), include_status=value)
     missing = Error(Missing, status=404, code="item_missing", title="Item missing")
     with pytest.raises(ErrorConfigurationError, match="include_status"):
-        registry.schema_for(missing, include_status=value)
+        problem_schema(registry, missing, include_status=value)
 
 
 def test_problem_instance_validation_is_shared_with_the_public_model() -> None:
@@ -184,7 +187,7 @@ def test_problem_instance_validation_is_shared_with_the_public_model() -> None:
     with pytest.raises(
         ErrorConfigurationError, match="invalid Problem Details payload"
     ):
-        registry.problem_for(Missing(), instance="contains whitespace")
+        problem_for(registry, Missing(), instance="contains whitespace")
 
 
 def test_same_status_problem_union_uses_resolved_type_uris() -> None:

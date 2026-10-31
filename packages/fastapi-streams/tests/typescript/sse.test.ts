@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createClient, HttpError, StreamParseError, TransportError } from "../../examples/agent_runs/generated/index.js";
+import { createClient, HttpError, ProblemError, ProtocolError, StreamParseError, TransportError } from "../../examples/agent_runs/generated/index.js";
 import { parseSSE, stream, appendQuery, setHeader } from "../../examples/agent_runs/generated/transport/sse.js";
 
 const encoder = new TextEncoder();
@@ -367,4 +367,47 @@ test("generated operations declare their known event tags", async () => {
   const client = createClient({ baseUrl: "http://example.test", fetch });
   const events = await collect(client.agentRuns.streamRunEvents({ runId: "run_abc" }, { unknownEvents: "ignore" }));
   assert.deepEqual(events, [{ type: "run.completed", run_id: "run_abc" }]);
+});
+
+
+const problem = {type: "urn:test:missing", title: "Missing", code: "item_missing", replacement: null, future: {enabled: true}};
+
+test("Canon completion is consumed at every byte boundary and closes the reader", async () => {
+  const raw = encoder.encode('data: {"text":"first"}\r\n\r\nevent: canon.complete\r\ndata: {}\r\n\r\ndata: invalid\n\n');
+  for (let cut = 0; cut <= raw.length; cut++) {
+    assert.deepEqual(await collect(parseSSE(bytes([raw.slice(0,cut),raw.slice(cut)]), undefined, true)), [{text:"first"}]);
+  }
+});
+
+test("Canon terminal problems retain public data and stop business iteration", async () => {
+  let calls = 0;
+  const options = {baseUrl:"https://test", fetch: async () => { calls++; return response(`data: {"text":"first"}\n\nevent: canon.problem\ndata: ${JSON.stringify(problem)}\n\n`); }};
+  const received: unknown[] = [];
+  await assert.rejects(async () => {
+    for await (const event of stream(options,{path:"/events",method:"GET",canonStream:true})) received.push(event);
+  }, error => error instanceof ProblemError && error.problem.replacement === null && error.problem.future !== undefined && error.message === "Missing");
+  assert.deepEqual(received,[{text:"first"}]);
+  assert.equal(calls,1);
+});
+
+test("Canon treats missing completion as transport failure and invalid controls as protocol failure", async () => {
+  for (const wire of ['data: {}\n\n', 'event: canon.complete\ndata: {}']) {
+    await assert.rejects(collect(parseSSE(bytes([encoder.encode(wire)]),undefined,true)), error => error instanceof TransportError && !(error instanceof ProtocolError));
+  }
+  for (const wire of [
+    'event: canon.complete\ndata: invalid\n\n',
+    'event: canon.complete\ndata: null\n\n',
+    'event: canon.future\ndata: {}\n\n',
+    'event: canon.problem\ndata: invalid\n\n',
+    'event: canon.problem\ndata: {}\n\n',
+    `event: canon.problem\ndata: ${JSON.stringify({...problem,status:404})}\n\n`,
+    ...[null, [], 1, {type:1}, {...problem,status:99}, {...problem,status:600}, {...problem,status:4.5}, {...problem,detail:null}, {...problem,instance:3}].map(value => `event: canon.problem\ndata: ${JSON.stringify(value)}\n\n`),
+  ]) await assert.rejects(collect(parseSSE(bytes([encoder.encode(wire)]),undefined,true)),ProtocolError);
+});
+
+test("HTTP problems use ProblemError and validate status without changing non-problem errors", async () => {
+  for (const payload of [{...problem,status:404}, {...problem,detail:"Choose another item."}]) {
+    await assert.rejects(collect(stream({baseUrl:"https://test",fetch:async()=>new Response(JSON.stringify(payload),{status:404,headers:{"Content-Type":"application/problem+json"}})},{path:"/events",method:"GET"})),error=>error instanceof ProblemError && error.problem.type === problem.type && error.problem.replacement === null);
+  }
+  await assert.rejects(collect(stream({baseUrl:"https://test",fetch:async()=>new Response(JSON.stringify({...problem,status:403}),{status:404,headers:{"Content-Type":"application/problem+json"}})},{path:"/events",method:"GET"})),ProtocolError);
 });

@@ -88,7 +88,7 @@ class StreamRouter(APIRouter):
         options.setdefault("response_description", "Stream of JSON events")
 
         def decorator(endpoint: Endpoint) -> Endpoint:
-            _validate_endpoint(endpoint)
+            validate_endpoint(endpoint)
             self.api_route(
                 path,
                 methods=selected,
@@ -100,20 +100,7 @@ class StreamRouter(APIRouter):
         return decorator
 
 
-def _has_any(annotation: Any, seen: frozenset[int] = frozenset()) -> bool:
-    if annotation is Any or any(
-        annotation is item for item in (object, dict, list, tuple, set)
-    ):
-        return True
-    if id(annotation) in seen:
-        return False
-    seen = seen | {id(annotation)}
-    if isinstance(annotation, TypeAliasType):
-        return _has_any(annotation.__value__, seen)
-    return any(_has_any(arg, seen) for arg in get_args(annotation))
-
-
-def _validate_endpoint(endpoint: Callable[..., Any]) -> None:
+def validate_endpoint(endpoint: Callable[..., Any]) -> None:
     try:
         annotation = get_type_hints(endpoint, include_extras=True).get("return")
     except (NameError, TypeError) as exc:
@@ -140,3 +127,16 @@ def _validate_endpoint(endpoint: Callable[..., Any]) -> None:
         TypeAdapter(item).json_schema(mode="serialization")
     except Exception as exc:
         raise TypeError(f"Unsupported stream item type: {item!r}") from exc
+
+
+def _has_any(annotation: Any, seen: frozenset[int] = frozenset()) -> bool:
+    if annotation is Any or any(
+        annotation is item for item in (object, dict, list, tuple, set)
+    ):
+        return True
+    if id(annotation) in seen:
+        return False
+    seen = seen | {id(annotation)}
+    if isinstance(annotation, TypeAliasType):
+        return _has_any(annotation.__value__, seen)
+    return any(_has_any(arg, seen) for arg in get_args(annotation))

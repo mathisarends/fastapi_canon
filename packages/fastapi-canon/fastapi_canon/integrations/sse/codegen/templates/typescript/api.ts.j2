@@ -48,6 +48,7 @@ export function {{ factory }}(client: ClientOptions) {
       return stream<{{ operation.event | ts_type('Types.') }}>(client, {
         path: {{ operation | path }},
         method: {{ operation.method | json }},
+      canonStream: {{ "true" if operation.canon_stream else "false" }},
         query,
         headers,
 {% if operation.body %}

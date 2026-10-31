@@ -2,7 +2,8 @@
 
 See [canonicalization decisions](CANONICALIZATION_DECISIONS.md) for the agreed
 target design and [shared problem contracts](packages/fastapi-canon/docs/problems.md)
-for the first implemented error-foundation step in the prepared 0.10.0 source.
+for the implemented HTTP, SSE, RPC, and generated-client error workflow in the
+prepared 0.10.0 source.
 
 One workspace for the FastAPI application stack: architecture conventions,
 feature composition and HTTP contracts, typed SSE, WebSocket RPC, and WebRTC

@@ -1,7 +1,7 @@
 {
   "generator": "fastapi-canon",
   "generatorVersion": "0.10.0",
-  "layoutVersion": 10,
+  "layoutVersion": 11,
   "language": "python",
   "contractSha256": "85a8208dc5aea2134ba3ff9a318efbc1e3d015cfef414619d7bbc00728484505",
   "files": [
@@ -17,6 +17,7 @@
     "internal/core.py",
     "internal/errors.py",
     "internal/metadata.py",
+    "internal/problem.py",
     "internal/transport.py",
     "internal/unset.py",
     "namespaces/__init__.py",

@@ -174,6 +174,8 @@ class Operation:
     summary: str = ""
     description: str = ""
     deprecated: bool = False
+    canon_stream: bool = False
+    problems: tuple[tuple[str, Type], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -228,7 +230,15 @@ def build_ir(
                     f"Expected one GET/POST SSE success response: {method} {path}"
                 )
             status, media = streams[0]
-            envelope = resolve_ref(document, media.get("itemSchema", {}))
+            profile = raw.get("x-canon-stream")
+            if profile is not None and not isinstance(profile, dict):
+                raise ContractError("Invalid Canon stream profile")
+            envelope = resolve_ref(
+                document,
+                cast(Document, profile).get("businessItemSchema", {})
+                if profile is not None
+                else media.get("itemSchema", {}),
+            )
             data = resolve_ref(document, envelope.get("properties", {}).get("data", {}))
             if (
                 data.get("contentMediaType") != "application/json"
@@ -335,6 +345,21 @@ def build_ir(
                                 code, types.parse(error_media["schema"]), media_type
                             )
                         )
+            problem_bindings: list[tuple[str, Type]] = []
+            profile = raw.get("x-canon-stream")
+            if profile is not None:
+                if (
+                    profile.get("version") != 1
+                    or profile.get("problemEvent") != "canon.problem"
+                    or profile.get("completeEvent") != "canon.complete"
+                ):
+                    raise ContractError("Unsupported Canon stream profile")
+                for problem in profile.get("problems", []):
+                    schema = resolve_ref(document, problem)
+                    type_uri = schema.get("properties", {}).get("type", {}).get("const")
+                    if not isinstance(type_uri, str):
+                        raise ContractError("Canon problems need a constant type URI")
+                    problem_bindings.append((type_uri, types.parse(problem)))
             operations.append(
                 Operation(
                     operation_id,
@@ -352,6 +377,8 @@ def build_ir(
                     raw.get("summary", ""),
                     raw.get("description", ""),
                     raw.get("deprecated", False),
+                    profile is not None,
+                    tuple(problem_bindings),
                 )
             )
     security: Document = document.get("components", {}).get("securitySchemes", {})

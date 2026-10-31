@@ -103,6 +103,7 @@ class ModelDecl:
     name: str
     fields: tuple[FieldDecl, ...]
     closed: bool = False
+    problem: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,6 +149,7 @@ class ErrorDecl:
     code: str
     message: str
     details: TypeExpr | None = None
+    problem_type: str | None = None
 
     @property
     def name(self) -> str:
@@ -519,7 +521,12 @@ def _model(
         _field(field_name, field_schema, field_name in required, discriminator)
         for field_name, field_schema in _type_field_first(schema.get("properties", {}))
     )
-    return ModelDecl(name, fields, closed=schema.get("additionalProperties") is False)
+    return ModelDecl(
+        name,
+        fields,
+        closed=schema.get("additionalProperties") is False,
+        problem=schema.get("x-canon-problem") is True,
+    )
 
 
 def _field(
@@ -620,12 +627,15 @@ def _error(error: dict[str, Any]) -> ErrorDecl:
     code = error.get("x-rpckit-code")
     if not isinstance(code, str) or not code:
         raise UnsupportedSchemaError("OpenRPC errors need a non-empty x-rpckit-code")
-    data_schema = error.get("x-rpckit-details-schema")
+    data_schema = error.get(
+        "x-canon-problem-schema", error.get("x-rpckit-details-schema")
+    )
     return ErrorDecl(
         rpc_code=error["code"],
         code=code,
         message=error["message"],
         details=None if data_schema is None else type_expression(data_schema),
+        problem_type=error.get("x-canon-problem-type"),
     )
 
 

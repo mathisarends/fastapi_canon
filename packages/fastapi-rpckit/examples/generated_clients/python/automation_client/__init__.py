@@ -5,6 +5,9 @@ from . import endpoints, models, sockets, streams
 from .client import AutomationClient
 from .endpoints import Endpoint, ServerName
 from .internal import (
+    Problem,
+    ProblemError,
+    ProtocolError,
     RpcClientCall,
     RpcClientCallOutcome,
     RpcClientError,
@@ -23,6 +26,7 @@ from .internal import (
     RpcStreamsUnavailableError,
     RpcTransport,
     RpcTransportError,
+    TransportError,
 )
 from .models import (
     CreateTaskParams,
@@ -78,6 +82,9 @@ __all__ = [
     "DeleteTaskParams",
     "Endpoint",
     "OpenTabParams",
+    "Problem",
+    "ProblemError",
+    "ProtocolError",
     "RpcClientCall",
     "RpcClientCallOutcome",
     "RpcClientError",
@@ -113,6 +120,7 @@ __all__ = [
     "TaskUpdated",
     "Tasks",
     "TasksUpdatedNotification",
+    "TransportError",
     "WebSocketTransport",
     "endpoints",
     "models",

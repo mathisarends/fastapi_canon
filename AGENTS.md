@@ -1,9 +1,9 @@
 # Canon workspace
 
 Read `CANONICALIZATION_DECISIONS.md` for the agreed target architecture and
-implementation scope. The shared problem foundation is documented in
-`packages/fastapi-canon/docs/problems.md`; the proposed combined SDK and terminal
-SSE profile remain future work. Verify implemented behavior against the source.
+implementation scope. Canonical error registration, SSE/RPC bindings, and generated-client handling
+are documented in `packages/fastapi-canon/docs/problems.md`. The proposed combined
+SDK facade remains future work. Verify implemented behavior against the source.
 
 Use `README.md` for the package inventory, `docs/contributing.md` for development
 commands and `docs/compatibility.md` for the tested dependency scope. Package

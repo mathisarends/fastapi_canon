@@ -5,6 +5,7 @@
     "fixtures/__init__.py",
     "fixtures/api.py",
     "models.py",
+    "problem.py",
     "py.typed",
     "runtime.py"
   ],

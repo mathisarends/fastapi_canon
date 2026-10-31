@@ -23,8 +23,9 @@ feature-client alternatives discussed earlier in the chat.
 
 The maintainer paused implementation to discuss and record this design, then
 explicitly authorized the first error-canonicalization PR. This first step is
-scoped to the shared RFC 9457 problem foundation; see the implementation update
-below. SDK orchestration and new protocol bindings remain later work. Publication
+expanded to shared RFC 9457 errors, RPC and terminal SSE bindings, and their
+generated-client handling; see the implementation update below. Combined SDK
+orchestration remains later work. Publication
 is not authorized.
 
 ## 2. One product and one composition model
@@ -118,8 +119,8 @@ Content-Type: application/problem+json
 Exception messages, rejected input, stack traces, credentials, and internal
 implementation details must not be exposed automatically. Unexpected server
 failures get a safe public problem while retaining useful internal diagnostics.
-The exact occurrence-ID policy and the required members of Canon's profile
-remain open.
+The exact occurrence-ID policy remains open. Canon's profile requires type,
+title, and code, and includes status only for an actual HTTP error response.
 
 ## 5. Shared semantics with explicit protocol bindings
 
@@ -128,8 +129,10 @@ lifecycle rules. Reuse problem identity and mapping through documented bindings.
 
 - HTTP: return an RFC 9457 HTTP problem response before the response starts.
 - JSON-RPC: preserve the JSON-RPC envelope, integer `error.code`, and
-  `error.message`. The discussed binding places the shared problem under
-  `error.data.problem`; the exact wrapper and numeric-code policy are provisional.
+  `error.message`. The implemented binding places the shared problem under
+  `error.data.problem`. Canonical application failures use server code -32000;
+  the problem type URI identifies the application failure. Existing protocol
+  errors retain their numeric JSON-RPC codes.
 - SSE: use the terminal problem-event profile described below after stream start.
 - WebSocket/WebRTC admission: use applicable pre-accept HTTP problem handling
   where the server and protocol support it. Accepted sessions retain their
@@ -157,7 +160,7 @@ start using the same catalog.
 | Unexpected connection termination | Client reports a transport failure; successful completion must not be inferred from EOF alone. |
 | Consumer cancels or disconnects | Propagate cancellation and clean up; do not manufacture a business problem. |
 
-Proposed declaration shape, accepted as the direction but not yet implemented:
+Declaration shape implemented by the first canonical error PR:
 
 ```python
 @router.stream(
@@ -198,9 +201,11 @@ A terminal problem does not trigger automatic retry/reconnect. A native browser
 `EventSource` needs an explicit `close()` to avoid unwanted reconnection;
 the generated adapter should handle that.
 
-The exact completion payload, profile version/metadata, reserved-name rules,
-resumption/replay behavior, and compatibility with native/unprofiled SSE remain
-to be designed. Existing SDKs cannot be assumed to understand these new frames.
+Profile version 1 uses canon.complete with an empty JSON object and reserves
+canon.* event names. OpenAPI describes all three frame variants and advertises
+the business and terminal problem schemas through x-canon-stream. Raw
+StreamRouter endpoints keep their unprofiled behavior. Regeneration is required
+for SDKs to understand Canon controls. Replay and resumption remain future work.
 See the [SSE processing model](https://html.spec.whatwg.org/multipage/server-sent-events.html#processing-model).
 
 ## 7. Final generated client direction: a domain-facing API
@@ -463,8 +468,7 @@ expand a narrowly scoped change into every possible emitter.
 
 Open details include the precise SDK constructor/connection API; public-group
 metadata and name mapping; shared model identity across contract formats;
-RPC numeric-code/wrapper rules; Canon profile required fields and occurrence
-identifiers; SSE profile versioning and replay semantics; config and manifest
+occurrence identifiers; SSE replay semantics; config and manifest
 syntax; output layout; runtime validation strategy; and the scope of a future
 ordinary REST emitter.
 
@@ -501,14 +505,22 @@ isolated PR, with current `origin/main` included. A fresh worktree at
 directly from fetched main `af2d5d3`. The interrupted broader port described in
 section 16 is preserved separately and is not the basis of this PR.
 
-The first step prepares Canon 0.10.0 according to the repository's minor-version
-policy. It supplies `ErrorRegistry.from_app()`, `problem_for()`, and `schema_for()`;
-uses resolved `type` URIs for compiled HTTP unions; supports embedded problems
-without an HTTP status; and preserves null extension values. HTTP compilation
-and WebRTC admission reuse the shared schema compiler. The implemented guide is
-`packages/fastapi-canon/docs/problems.md`.
+The maintainer expanded this PR to include the bindings and generated-client
+handling that make the shared error model useful to application authors. The
+public workflow is: define `Error`, put it in `ErrorRegistry`, provide that same
+registry to HTTP/stream routers and RPC channels, and declare `raises=` or
+`stream_raises=` on operations. Rendering, schema lookup, and installed-catalog
+access are internal adapter responsibilities, not new application-facing APIs.
 
-This foundation does not implement the RPC problem envelope, SSE terminal control
-frames, or combined generated client facade. Their design status above remains
-explicit. PR creation, test results, and remote main ancestry must be checked
-from the actual GitHub/Git state instead of inferred from this record.
+The PR prepares Canon 0.10.0, uses resolved type URIs for HTTP unions, preserves
+null extensions, binds RPC failures under `error.data.problem`, and implements
+version 1 of the SSE terminal problem/completion profile. Python and TypeScript
+generators consume these bindings and share the source of their standalone
+problem/error runtime. Separate generated packages still own separate runtime
+copies; a combined SDK facade and shared cross-contract output ownership remain
+future work. See `packages/fastapi-canon/docs/problems.md` for implemented user
+examples and migration steps.
+
+PR #6 is the implementation PR. Re-check its actual head, validation results,
+and remote main ancestry before relying on a historical status report. No
+publication is authorized by this work.

@@ -3,10 +3,13 @@ import re
 from collections.abc import Callable, Iterable, Mapping
 from contextlib import suppress
 from enum import IntEnum
+from functools import cache
 from typing import Any, ClassVar, get_type_hints
 
 from pydantic import BaseModel, ValidationError
 
+from fastapi_canon.error import Error, ErrorConfigurationError, ErrorRegistry, Problem
+from fastapi_canon.error.catalog import problem_for, resolved_registry
 from fastapi_canon.integrations.websockets.connection import (
     RpcReject,
     RpcRejection,
@@ -30,7 +33,7 @@ class RpcErrorCode(IntEnum):
     REQUEST_CANCELLED = -32800
 
 
-class ProtocolDefinitionError(Exception):
+class ProtocolDefinitionError(ErrorConfigurationError):
     """A handler, notification, or feature is not a valid protocol definition."""
 
 
@@ -55,6 +58,7 @@ class RpcError(Exception):
     rpc_code: ClassVar[int] = RpcErrorCode.SERVER_ERROR
     details_type: ClassVar[type[BaseModel] | None] = None
     _builtin: ClassVar[bool] = False
+    problem: Problem | None = None
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -209,7 +213,13 @@ def error_message(code: str | int) -> str:
         return f"Error {int(code)}"
 
 
-def declared_error(error: Any) -> type[RpcError]:
+def declared_error(error: Any, registry: ErrorRegistry | None = None) -> type[RpcError]:
+    if isinstance(error, Error):
+        if registry is None or not registry.contains(error):
+            raise ProtocolDefinitionError(
+                "Canonical raises must belong to the channel's error_registry"
+            )
+        return _canon_binding(error, registry).error_type
     if isinstance(error, RpcErrorBinding):
         return error.error_type
     if not (isinstance(error, type) and issubclass(error, RpcError)):
@@ -328,7 +338,32 @@ class RpcErrorBinding[ExceptionT: Exception]:
         return RpcReject(self.rejection, self.message_for(error))
 
 
-type RpcErrorDeclaration = type[RpcError] | RpcErrorBinding[Any]
+type RpcErrorDeclaration = type[RpcError] | RpcErrorBinding[Any] | Error[Any]
+
+
+class _CanonBinding(RpcErrorBinding[Exception]):
+    __slots__ = ("definition", "registry")
+
+    def __init__(self, definition: Error[Any], registry: ErrorRegistry) -> None:
+        super().__init__(
+            definition.exception, code=definition.code, message=definition.title
+        )
+        self.definition = definition
+        self.registry = registry
+
+    def to_error(self, error: Exception) -> RpcError:
+        registry = resolved_registry(self.registry)
+        if registry.resolve(error) is not self.definition:
+            raise ErrorConfigurationError(
+                "RPC operation did not declare the resolved problem type"
+            )
+        mapped = self.error_type()
+        mapped.problem = problem_for(registry, error)
+        if mapped.problem is None:
+            raise ProtocolDefinitionError(
+                "Canonical RPC error is absent from the catalog"
+            )
+        return mapped
 
 
 def _check_details_fields(exception: type[Exception], details: type[BaseModel]) -> None:
@@ -407,10 +442,15 @@ def bind_contracts(
 
 
 def error_declarations(
-    raises: Iterable[RpcErrorDeclaration], *, owner: str
+    raises: Iterable[RpcErrorDeclaration],
+    *,
+    owner: str,
+    registry: ErrorRegistry | None = None,
 ) -> tuple[type[RpcError], ...]:
     try:
-        errors = tuple(dict.fromkeys(declared_error(error) for error in raises))
+        errors = tuple(
+            dict.fromkeys(declared_error(error, registry) for error in raises)
+        )
     except ProtocolDefinitionError as error:
         raise ProtocolDefinitionError(f"{owner}: {error}") from error
     bind_contracts(
@@ -425,8 +465,9 @@ def merge_error_declarations(
     raises: Iterable[RpcErrorDeclaration],
     *,
     owner: str,
+    registry: ErrorRegistry | None = None,
 ) -> tuple[type[RpcError], ...]:
-    local = error_declarations(raises, owner=owner)
+    local = error_declarations(raises, owner=owner, registry=registry)
     overridden = {
         binding.exception
         for error in local
@@ -484,3 +525,8 @@ def contract_rejections(
         return None if contract is None else contract.reject(error)
 
     return reject
+
+
+@cache
+def _canon_binding(error: Error[Any], registry: ErrorRegistry) -> _CanonBinding:
+    return _CanonBinding(error, registry)

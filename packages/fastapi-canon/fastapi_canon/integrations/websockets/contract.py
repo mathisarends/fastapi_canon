@@ -2,11 +2,13 @@ import json
 import re
 from collections.abc import Mapping
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
+from fastapi_canon.error import ErrorRegistry
+from fastapi_canon.error.catalog import registry_scope
 from fastapi_canon.integrations.websockets.errors import (
     ProtocolDefinitionError,
     RpcErrorBinding,
@@ -57,6 +59,9 @@ class RpcContract:
     servers: tuple[Mapping[str, Any], ...] = ()
     binary_streams: tuple[Mapping[str, Any], ...] = ()
     sockets: tuple[Mapping[str, Any], ...] = ()
+    _error_registry: ErrorRegistry | None = field(
+        default=None, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
         if not self.title:
@@ -74,14 +79,15 @@ class RpcContract:
     def to_openrpc(self) -> dict[str, Any]:
         from fastapi_canon.integrations.websockets.schema.openrpc import render_openrpc
 
-        return render_openrpc(
-            self.protocol,
-            title=self.title,
-            description=self.description,
-            servers=self.servers,
-            binary_streams=self.binary_streams,
-            sockets=self.sockets,
-        )
+        with registry_scope(self._error_registry):
+            return render_openrpc(
+                self.protocol,
+                title=self.title,
+                description=self.description,
+                servers=self.servers,
+                binary_streams=self.binary_streams,
+                sockets=self.sockets,
+            )
 
     def to_json(self) -> str:
         return json.dumps(self.to_openrpc(), indent=2, ensure_ascii=False) + "\n"

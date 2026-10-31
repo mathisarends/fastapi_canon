@@ -16,7 +16,7 @@ from fastapi_canon.integrations.websockets.codegen.options import (
 )
 from fastapi_canon.integrations.websockets.codegen.writer import MANIFEST, write_files
 
-LAYOUT_VERSION = 10
+LAYOUT_VERSION = 11
 
 __all__ = [
     "ClientIr",

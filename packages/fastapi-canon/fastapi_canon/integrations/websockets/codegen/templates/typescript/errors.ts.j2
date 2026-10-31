@@ -1,23 +1,34 @@
 import { RpcRemoteError } from "./core";
+import { ProblemError, parseProblem } from "./problem";
+import type { Problem } from "./problem";
 {% if model_import %}{{ model_import }}
 {% endif %}
-{% for error in errors %}export class {{ error.code | schema_name }}Error extends RpcRemoteError {
+{% for error in errors %}export class {{ error.code | schema_name }}Error extends {% if error.problem_type %}ProblemError<{{ error.details | type }}>{% else %}RpcRemoteError{% endif %} {
   static readonly code = {{ error.code | literal }};
-{% if error.details is not none %}
-  declare readonly details: {{ error.details | type }};
+{% if error.details is not none and not error.problem_type %}  declare readonly details: {{ error.details | type }};
 {% endif %}}
-{% if not loop.last %}
-{% endif %}{% endfor %}
-{% if errors %}const errorTypes: Readonly<Record<string, typeof RpcRemoteError>> = {
-{% for error in errors %}  {{ error.code | property }}: {{ error.code | schema_name }}Error,
-{% endfor %}};{% else %}const errorTypes: Readonly<Record<string, typeof RpcRemoteError>> = {};{% endif %}
+{% endfor %}
+{% set legacy = errors | rejectattr("problem_type") | list %}{% set canonical = errors | selectattr("problem_type") | list %}const errorTypes: Readonly<Record<string, typeof RpcRemoteError>> = {% if legacy %}{
+{% for error in legacy %}  {{ error.code | property }}: {{ error.code | schema_name }}Error,
+{% endfor %}};{% else %}{};{% endif %}
+const problemTypes: Readonly<
+  Record<string, new (problem: any) => ProblemError>
+> = {% if canonical %}{
+{% for error in canonical %}  {{ error.problem_type | literal }}: {{ error.code | schema_name }}Error,
+{% endfor %}};{% else %}{};{% endif %}
 
 export function errorFromResponse(
   rpcCode: number,
   code: string,
   message: string,
   details?: unknown,
-): RpcRemoteError {
+  problem?: unknown,
+): RpcRemoteError | ProblemError {
+  if (problem !== undefined) {
+    const parsed = parseProblem(problem, true);
+    const ErrorType = problemTypes[parsed.type] ?? ProblemError<Problem>;
+    return new ErrorType(parsed);
+  }
   const ErrorType = errorTypes[code] ?? RpcRemoteError;
   return new ErrorType(rpcCode, code, message, details);
 }

@@ -1,23 +1,39 @@
-{% for error in errors %}class {{ error.code | schema_name }}Error(RpcRemoteError):
+{% for error in errors %}class {{ error.code | schema_name }}Error({% if error.problem_type %}ProblemError[{{ error.details | annotation }}]{% else %}RpcRemoteError{% endif %}):
     code: ClassVar[str] = {{ error.code | literal }}
-{% if error.details is not none %}    details: {{ error.details | annotation }}
+{% if error.details is not none %}{% if error.problem_type %}    problem_adapter = TypeAdapter({{ error.details | annotation }})
+{% else %}    details: {{ error.details | annotation }}
     details_adapter = TypeAdapter({{ error.details | annotation }})
-{% endif %}{% if not loop.last %}
+{% endif %}{% endif %}
 
-
-{% endif %}{% endfor %}
-
-{% if errors %}ERROR_TYPES: dict[str, type[RpcRemoteError]] = {
-{% for error in errors %}    {{ error.code | literal }}: {{ error.code | schema_name }}Error,
+{% endfor %}
+{% set legacy = errors | rejectattr("problem_type") | list %}{% set canonical = errors | selectattr("problem_type") | list %}{% if legacy %}ERROR_TYPES: dict[str, type[RpcRemoteError]] = {
+{% for error in legacy %}    {{ error.code | literal }}: {{ error.code | schema_name }}Error,
 {% endfor %}}{% else %}ERROR_TYPES: dict[str, type[RpcRemoteError]] = {}{% endif %}
+PROBLEM_TYPES: dict[str, tuple[type[ProblemError[Any]], TypeAdapter[Any]]] = {% if canonical %}{
+{% for error in canonical %}    {{ error.problem_type | literal }}: (
+        {{ error.code | schema_name }}Error,
+        {{ error.code | schema_name }}Error.problem_adapter,
+    ),
+{% endfor %}}{% else %}{}{% endif %}
 
 
 def error_from_response(
     rpc_code: int,
     code: str,
     message: str,
-    details: Any,
-) -> RpcRemoteError:
+    details: Any = None,
+    problem: Any = None,
+) -> RpcRemoteError | ProblemError[Any]:
+    if problem is not None:
+        try:
+            parsed = parse_problem(problem, embedded=True)
+            binding = PROBLEM_TYPES.get(parsed.type)
+            if binding is None:
+                return ProblemError(parsed)
+            problem_type, problem_adapter = binding
+            return problem_type(problem_adapter.validate_python(problem))
+        except ValidationError as exc:
+            raise ProtocolError("Invalid RPC problem") from exc
     error_type = ERROR_TYPES.get(code)
     if error_type is None:
         return RpcRemoteError(rpc_code, code, message, details)

@@ -1,3 +1,4 @@
+import { TransportError } from "./problem";
 import { errorFromResponse } from "./errors";
 import {
   RpcClientError,
@@ -386,7 +387,7 @@ export class WebSocketTransport implements RpcTransport {
       this.#scheduleHeartbeat();
     } catch (error) {
       this.#fail(
-        error instanceof RpcClientError
+        error instanceof RpcClientError || error instanceof TransportError
           ? error
           : new RpcTransportError("Invalid JSON-RPC message", { cause: error }),
       );
@@ -426,17 +427,26 @@ export class WebSocketTransport implements RpcTransport {
     this.#pending.delete(id);
     this.#cleanupPending(pending);
     if (isObject(message.error)) {
-      pending.reject(
-        errorFromResponse(
-          Number(message.error.code),
-          isObject(message.error.data) &&
-            typeof message.error.data.code === "string"
-            ? message.error.data.code
-            : "",
-          String(message.error.message ?? "Remote RPC error"),
-          isObject(message.error.data) ? message.error.data.details : undefined,
-        ),
-      );
+      try {
+        pending.reject(
+          errorFromResponse(
+            Number(message.error.code),
+            isObject(message.error.data) &&
+              typeof message.error.data.code === "string"
+              ? message.error.data.code
+              : "",
+            String(message.error.message ?? "Remote RPC error"),
+            isObject(message.error.data)
+              ? message.error.data.details
+              : undefined,
+            isObject(message.error.data)
+              ? message.error.data.problem
+              : undefined,
+          ),
+        );
+      } catch (error) {
+        pending.reject(error);
+      }
     } else if ("result" in message) pending.resolve(message.result);
     else
       throw new RpcTransportError("JSON-RPC response has no result or error");

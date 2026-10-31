@@ -25,6 +25,13 @@ The prepared, unpublished Canon 0.9.0 source combines the transport code in one
 wheel. Feature extras select third-party dependencies; no extra requires an
 earlier distribution. Base composition retains its lower dependency bounds.
 
+Prepared Canon 0.10.0 adds the [canonical error bindings and generated-client
+handling](../packages/fastapi-canon/docs/problems.md). The expanded implementation
+passed the current-dependency wheel matrix on Python 3.14 and the minimum matrix
+on Python 3.12 on 2026-10-31: eleven independent installations per matrix, with
+core Pydantic 2.9 support retained. These are source/artifact checks, not a release
+or a claim to have tested every combination allowed by the dependency ranges.
+
 Canon 0.8.0 adds router policies and optional source-based error-contract checking.
 Its policy contracts and installed checker are exercised by the current/minimum
 installed-wheel smoke matrices and public-index installation checks.

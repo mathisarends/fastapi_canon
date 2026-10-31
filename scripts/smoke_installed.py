@@ -579,7 +579,7 @@ def _router_policies() -> None:
 
 
 def _shared_problem_check() -> None:
-    from fastapi_canon import Error, ErrorRegistry
+    from fastapi_canon import CanonRouter, Composition, Error, ErrorRegistry, Feature
 
     class Missing(Exception):
         pass
@@ -587,31 +587,27 @@ def _shared_problem_check() -> None:
     missing = Error(
         Missing,
         status=404,
-        type="urn:canon:smoke:missing",
         code="item_missing",
         title="Item missing",
         extensions={"replacement": None},
     )
-    registry = ErrorRegistry(errors=[missing])
-    embedded = registry.problem_for(Missing("private"))
-    assert embedded is not None and embedded.status is None
-    payload = embedded.as_dict()
-    assert "status" not in payload
+    registry = ErrorRegistry(errors=[missing], type_base="urn:canon:smoke")
+    router = CanonRouter(error_registry=registry)
+
+    @router.get("/missing", raises=[missing])
+    async def fail() -> None:
+        raise Missing("private")
+
+    app = Composition(Feature(name="missing", routers=[router])).apply(FastAPI())
+    with TestClient(app) as client:
+        response = client.get("/missing")
+    payload = response.json()
+    assert response.status_code == payload["status"] == 404
+    assert response.headers["content-type"] == "application/problem+json"
     assert payload["replacement"] is None
-    assert "private" not in json.dumps(payload)
-    schema = registry.schema_for(missing)
-    assert schema["$id"] == payload["type"]
-    assert "status" not in schema["required"]
-    http = registry.problem_for(Missing(), include_status=True)
-    assert http is not None and http.status == 404
-    app = FastAPI()
-    registry.install(
-        app,
-        include_validation_error=False,
-        include_http_exceptions=False,
-        include_unhandled_error=False,
-    )
-    assert ErrorRegistry.from_app(app) is registry
+    assert "private" not in response.text
+    schema = app.openapi()["components"]["schemas"]["ItemMissingProblem"]
+    assert schema["properties"]["type"]["const"] == payload["type"]
 
 
 if __name__ == "__main__":

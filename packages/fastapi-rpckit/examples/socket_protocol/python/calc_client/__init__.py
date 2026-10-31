@@ -5,6 +5,9 @@ from . import endpoints, sockets
 from .client import CalculatorClient
 from .endpoints import Endpoint, ServerName
 from .internal import (
+    Problem,
+    ProblemError,
+    ProtocolError,
     RpcClientCall,
     RpcClientCallOutcome,
     RpcClientError,
@@ -23,6 +26,7 @@ from .internal import (
     RpcStreamsUnavailableError,
     RpcTransport,
     RpcTransportError,
+    TransportError,
 )
 from .namespaces import Calculator
 from .sockets import (
@@ -42,6 +46,9 @@ __all__ = [
     "Calculator",
     "CalculatorClient",
     "Endpoint",
+    "Problem",
+    "ProblemError",
+    "ProtocolError",
     "RpcClientCall",
     "RpcClientCallOutcome",
     "RpcClientError",
@@ -70,6 +77,7 @@ __all__ = [
     "SocketOpener",
     "SocketProtocol",
     "SocketTransport",
+    "TransportError",
     "WebSocketTransport",
     "endpoints",
     "sockets",

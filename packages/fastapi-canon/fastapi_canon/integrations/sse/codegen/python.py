@@ -3,6 +3,7 @@ from dataclasses import replace
 from importlib.resources import files
 from typing import Literal
 
+from fastapi_canon.codegen.problems import problem_runtime
 from fastapi_canon.integrations.sse.codegen.documentation import operation_doc
 from fastapi_canon.integrations.sse.codegen.ir import (
     Array,
@@ -113,7 +114,7 @@ def generate_python(
     groups: list[dict[str, str]] = []
     output: dict[str, str] = {}
     for name, operations in sorted(grouped.items()):
-        if name in {"models", "runtime", "client", "aclose"}:
+        if name in {"models", "runtime", "client", "problem", "aclose"}:
             raise ContractError(f"Reserved Python tag: {name}")
         if len(
             {python_identifier(operation.operation_id) for operation in operations}
@@ -147,17 +148,26 @@ def generate_python(
     output["client.py"] = env.get_template("python/client.py.j2").render(
         groups=groups, http_import=http_import
     )
+    output["problem.py"] = problem_runtime("python")
     output["runtime.py"] = (
         files(__package__)
         .joinpath("templates/python/runtime.py")
         .read_text(encoding="utf-8")
         .replace("\nimport httpx\n", f"\n{http_import}\n", 1)
+        .replace(
+            "from fastapi_canon.codegen.templates.problem import",
+            "from .problem import",
+        )
     )
     output["__init__.py"] = _HEADER + (
         "from .client import Client as Client\n"
+        "from .problem import (\n"
+        "    Problem as Problem, ProblemError as ProblemError,\n"
+        "    ProtocolError as ProtocolError, TransportError as TransportError,\n"
+        ")\n"
         "from .runtime import (\n"
         "    HttpError as HttpError, RequestOptions as RequestOptions,\n"
-        "    StreamParseError as StreamParseError, TransportError as TransportError,\n"
+        "    StreamParseError as StreamParseError,\n"
         ")\n"
     )
     for name, type_ in sorted(models.declarations.items()):

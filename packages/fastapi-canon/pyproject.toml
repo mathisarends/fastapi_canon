@@ -81,7 +81,7 @@ select = ["B", "E4", "E7", "E9", "F", "I", "RUF", "SIM", "UP"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["fastapi_canon", "tests"]
+files = ["fastapi_canon", "tests", "examples/canonical_errors"]
 exclude = ["fastapi_canon/integrations/(sse|websockets|webrtc)/"]
 pretty = true
 show_error_codes = true

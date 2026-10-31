@@ -18,6 +18,7 @@ from calc_client.internal import (
 from calc_client.internal.transport import validate_request_metadata
 
 from .errors import error_from_response
+from .internal.problem import ProblemError, ProtocolError, TransportError
 
 type JsonObject = dict[str, Any]
 _STREAM_ENDED = object()
@@ -127,7 +128,7 @@ class WebSocketTransport:
                 subprotocols=list(subprotocols) or None,
                 additional_headers=headers,
             )
-        except RpcClientError:
+        except (RpcClientError, ProblemError, TransportError):
             raise
         except Exception as error:
             raise RpcConnectError.from_exception(error) from error
@@ -206,7 +207,7 @@ class WebSocketTransport:
             elif not response.done():
                 self._cancel_request(request_id)
             raise
-        except RpcClientError:
+        except (RpcClientError, ProblemError, TransportError):
             raise
         except Exception as error:
             failure = RpcConnectionLostError.from_exception(
@@ -445,14 +446,18 @@ class WebSocketTransport:
             return
         if isinstance(error, dict):
             data = error.get("data")
-            response.set_exception(
-                error_from_response(
+            try:
+                mapped = error_from_response(
                     int(error.get("code", 0)),
                     str(data.get("code", "")) if isinstance(data, dict) else "",
                     str(error.get("message", "Remote RPC error")),
                     data.get("details") if isinstance(data, dict) else None,
+                    data.get("problem") if isinstance(data, dict) else None,
                 )
-            )
+            except ProtocolError as exc:
+                response.set_exception(exc)
+            else:
+                response.set_exception(mapped)
         elif "result" in message:
             response.set_result(message["result"])
         else:

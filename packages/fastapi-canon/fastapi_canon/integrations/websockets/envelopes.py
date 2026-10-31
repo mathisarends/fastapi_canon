@@ -1,4 +1,4 @@
-from typing import Any, Literal, Self
+from typing import Any, ClassVar, Literal, Self
 
 from pydantic import (
     BaseModel,
@@ -11,6 +11,7 @@ from pydantic import (
     field_validator,
 )
 
+from fastapi_canon.error import Problem
 from fastapi_canon.integrations.websockets._adapter import adapter
 from fastapi_canon.integrations.websockets.errors import RpcError
 from fastapi_canon.integrations.websockets.request_metadata import (
@@ -25,7 +26,9 @@ type RpcRequestId = str | int | None
 class RpcSchema(BaseModel):
     """Base model for protocol payloads: immutable and strict about extra keys."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True, serialize_by_alias=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="forbid", frozen=True, serialize_by_alias=True
+    )
 
 
 class RpcRequestEnvelope(RpcSchema):
@@ -48,7 +51,15 @@ class RpcRequestEnvelope(RpcSchema):
 class RpcErrorData(RpcSchema):
     code: int
     message: str
-    data: "RpcErrorPayload"
+    data: "RpcErrorPayload | RpcProblemPayload"
+
+
+class RpcProblemPayload(RpcSchema):
+    problem: Problem
+
+    @field_serializer("problem")
+    def _serialize_problem(self, problem: Problem) -> dict[str, Any]:
+        return problem.as_dict()
 
 
 class RpcErrorPayload(RpcSchema):
@@ -100,8 +111,12 @@ class RpcFailure(RpcSchema):
 
     @classmethod
     def from_error(cls, request_id: RpcRequestId, error: RpcError) -> Self:
-        payload = RpcErrorPayload(code=error.code, details=error.details)
-        payload._details_annotation = error.details_type
+        payload: RpcErrorPayload | RpcProblemPayload
+        if error.problem is not None:
+            payload = RpcProblemPayload(problem=error.problem)
+        else:
+            payload = RpcErrorPayload(code=error.code, details=error.details)
+            payload._details_annotation = error.details_type
         return cls(
             id=request_id,
             error=RpcErrorData(

@@ -6,6 +6,7 @@ from typing import Any, TypeVar
 from fastapi import FastAPI
 from fastapi.params import Depends as DependsParam
 
+from fastapi_canon.error.catalog import problem_schema
 from fastapi_canon.error.contracts import INSTALLED_REGISTRY_STATE_KEY
 from fastapi_canon.error.registry import AnyError, ErrorRegistry
 from fastapi_canon.error.types import ErrorConfigurationError
@@ -73,7 +74,7 @@ class CanonWebRtcRouter(CanonRouter, WebRtcRouter):
             for error in declared:
                 # Resolve against the composed registry, including its type_base.
                 # Identity checks also catch features that explicitly omit errors.
-                schema = registry.schema_for(error, include_status=True)
+                schema = problem_schema(registry, error, include_status=True)
                 type_uri = registry.type_uri_for(error)
                 result.append(
                     {

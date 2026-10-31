@@ -5,6 +5,7 @@
     "agent_runs/api.py",
     "client.py",
     "models.py",
+    "problem.py",
     "py.typed",
     "runtime.py"
   ],

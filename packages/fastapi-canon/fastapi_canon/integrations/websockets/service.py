@@ -4,10 +4,15 @@ from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from types import FunctionType, NoneType
-from typing import Any, overload
+from typing import TYPE_CHECKING, Any, overload
 from urllib.parse import unquote
 
 from pydantic import BaseModel
+
+from fastapi_canon.error.catalog import app_registry
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
 
 from fastapi_canon.integrations.websockets.channel import RpcChannel, request_name
 from fastapi_canon.integrations.websockets.connection import (
@@ -281,6 +286,26 @@ class RpcService:
         return self._rejects
 
     @overload
+    def socket(
+        self,
+        path: str,
+        /,
+        *,
+        channels: Sequence[RpcChannel],
+        name: str | None = None,
+        error_mapper: RpcErrorMapper | None = None,
+        middleware: Sequence[RpcMiddlewareLike] = (),
+        limits: RpcLimits | None = None,
+        subprotocol: str | None = None,
+        summary: str | None = None,
+        before_accept: RpcBeforeAccept | None = None,
+        path_model: type[BaseModel] | None = None,
+        context: type[None] = NoneType,
+        close_when_events_complete: bool = False,
+        rejects: Sequence[RpcErrorBinding[Any]] = (),
+    ) -> RpcEndpoint[None]: ...
+
+    @overload
     def socket[ContextT](
         self,
         path: str,
@@ -295,7 +320,7 @@ class RpcService:
         summary: str | None = None,
         before_accept: RpcBeforeAccept | None = None,
         path_model: type[BaseModel] | None = None,
-        context: type[ContextT] = NoneType,
+        context: type[ContextT],
         close_when_events_complete: bool = False,
         rejects: Sequence[RpcErrorBinding[Any]] = (),
     ) -> RpcEndpoint[ContextT]: ...
@@ -724,15 +749,21 @@ class RpcService:
         base_url: str,
         description: str = "Typed JSON-RPC API.",
         variables: Mapping[str, ServerVariable] | None = None,
+        app: "FastAPI | None" = None,
     ) -> RpcContract:
         from fastapi_canon.integrations.websockets.contract import contract_from_service
 
-        return contract_from_service(
+        contract = contract_from_service(
             self,
             title=title,
             base_url=base_url,
             description=description,
             variables=variables,
+        )
+        return (
+            replace(contract, _error_registry=app_registry(app))
+            if app is not None
+            else contract
         )
 
     def _ensure_mutable(self) -> None:

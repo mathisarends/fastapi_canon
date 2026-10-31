@@ -31,12 +31,16 @@ from .metadata import (
     RpcTransportDescriptor,
     resolve_url_template,
 )
+from .problem import Problem, ProblemError, ProtocolError, TransportError, parse_problem
 from .transport import RpcTransport
 from .unset import UNSET, UnsetType
 
 __all__ = [
     "ClientConnection",
     "JsonValue",
+    "Problem",
+    "ProblemError",
+    "ProtocolError",
     "RpcClientCall",
     "RpcClientCallOutcome",
     "RpcClientCore",
@@ -64,7 +68,9 @@ __all__ = [
     "RpcTransportError",
     "RpcTransportPool",
     "RpcTransportSource",
+    "TransportError",
     "UNSET",
     "UnsetType",
+    "parse_problem",
     "resolve_url_template",
 ]

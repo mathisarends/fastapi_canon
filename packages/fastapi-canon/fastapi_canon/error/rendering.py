@@ -1,3 +1,4 @@
+import math
 from collections.abc import Mapping
 from typing import Any, cast
 
@@ -40,6 +41,7 @@ def render_problem_payload(
 
     detail = _render_detail(error, exception)
     extensions = _render_extensions(error, exception)
+    extensions = {key: _json_extension(value) for key, value in extensions.items()}
     overlap = _RESERVED_MEMBERS.intersection(extensions)
     if overlap:
         names = ", ".join(sorted(overlap))
@@ -80,7 +82,7 @@ def _render_extensions(error: AnyError, exception: Exception) -> dict[str, JsonV
     if rendered is None:
         return {}
     if isinstance(rendered, BaseModel):
-        rendered = rendered.model_dump(mode="python", by_alias=False)
+        rendered = rendered.model_dump(mode="python", by_alias=True)
     if not isinstance(rendered, Mapping):
         msg = "extensions callback must return a mapping or BaseModel"
         raise ErrorConfigurationError(msg)
@@ -106,3 +108,19 @@ def _render_headers(error: AnyError, exception: Exception) -> dict[str, str]:
         msg = "headers callback must return a mapping"
         raise ErrorConfigurationError(msg)
     return dict(freeze_headers(rendered, path="rendered headers"))
+
+
+def _json_extension(value: Any) -> JsonValue:
+    if isinstance(value, Mapping):
+        if any(not isinstance(key, str) for key in value):
+            raise ErrorConfigurationError("extension object keys must be strings")
+        return {key: _json_extension(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_extension(item) for item in value]
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ErrorConfigurationError("extensions must contain finite JSON numbers")
+        return value
+    if value is None or isinstance(value, (str, bool, int)):
+        return value
+    raise ErrorConfigurationError("extensions must contain JSON-native values")
