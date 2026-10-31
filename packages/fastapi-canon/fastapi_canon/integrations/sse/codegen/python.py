@@ -202,6 +202,7 @@ class _Models:
     ) -> None:
         self.field_name = field_name or _field_name
         self.custom_fields = field_name is not None
+        self.python_patterns: set[str] = set()
         if collisions := _MODEL_SYMBOLS & {
             declaration.name for declaration in declarations
         }:
@@ -244,16 +245,26 @@ class _Models:
                     ):
                         from typing import Annotated
 
+                        pattern = dict(constraints)["pattern"]
+                        assert isinstance(pattern, str)
                         try:
-                            pattern = dict(constraints)["pattern"]
-                            assert isinstance(pattern, str)
                             TypeAdapter(Annotated[str, PydanticField(pattern=pattern)])
-                        except SchemaError as exc:
-                            raise ContractError(
-                                f"Unsupported string pattern: {exc}"
-                            ) from exc
+                        except SchemaError:
+                            # Pydantic's own Decimal JSON schemas use lookarounds.
+                            # A compiled pattern selects its Python regex engine,
+                            # including in standalone TypeAdapters and type aliases.
+                            try:
+                                re.compile(pattern)
+                            except re.error as exc:
+                                raise ContractError(
+                                    f"Unsupported string pattern: {exc}"
+                                ) from exc
+                            self.python_patterns.add(pattern)
                     arguments = ", ".join(
-                        f"{key}={value!r}" for key, value in constraints
+                        f"pattern=_re.compile({value!r})"
+                        if key == "pattern" and value in self.python_patterns
+                        else f"{key}={value!r}"
+                        for key, value in constraints
                     )
                     return f"Annotated[{annotation}, Field({arguments})]"
                 return annotation
@@ -514,6 +525,8 @@ class _Models:
             if re.search(r"\b" + name + r"\b", text)
         ]
         imports = [_HEADER, "from __future__ import annotations", ""]
+        if self.python_patterns:
+            imports.append("import re as _re")
         if any(isinstance(type_, StringEnum) for type_ in self.declarations.values()):
             imports.append("from enum import StrEnum")
         if typing_names:

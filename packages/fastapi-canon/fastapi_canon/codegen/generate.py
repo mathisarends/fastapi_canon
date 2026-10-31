@@ -74,6 +74,8 @@ def generate(
                     "operations": source.operations,
                     "identities": source.identities,
                     "names": source.names,
+                    "includeOperations": source.include_operations,
+                    "excludeOperations": source.exclude_operations,
                 }
                 for source, _ in inputs
             },

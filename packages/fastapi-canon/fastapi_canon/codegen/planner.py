@@ -7,9 +7,11 @@ from fastapi_canon.codegen.ir import GenerationError, Plan
 from fastapi_canon.codegen.names import camel, snake
 from fastapi_canon.codegen.readers import read_source
 from fastapi_canon.codegen.schema import SchemaRegistry
+from fastapi_canon.codegen.selection import select_operations
 
 
 def build_plan(inputs: tuple[tuple[SourceConfig, dict[str, Any]], ...]) -> Plan:
+    inputs = tuple(select_operations(config, document) for config, document in inputs)
     registry = SchemaRegistry()
     registry.add_sources(inputs)
     sources = tuple(

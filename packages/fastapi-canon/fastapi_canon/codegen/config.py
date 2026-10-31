@@ -21,6 +21,8 @@ class SourceConfig:
     operations: dict[str, str] = field(default_factory=dict)
     identities: dict[str, str] = field(default_factory=dict)
     names: dict[str, str] = field(default_factory=dict)
+    include_operations: tuple[str, ...] | None = None
+    exclude_operations: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -79,6 +81,8 @@ def load_config(path: Path) -> Configuration:
                 "operations",
                 "identities",
                 "names",
+                "include-operations",
+                "exclude-operations",
             },
             f"source {name}",
         )
@@ -117,6 +121,14 @@ def load_config(path: Path) -> Configuration:
                 source=values.get("source"),
                 output=_path(root, values.get("output")),
                 factory=values.get("factory", False),
+                include_operations=(
+                    _operation_list(values["include-operations"], name, "include")
+                    if "include-operations" in values
+                    else None
+                ),
+                exclude_operations=_operation_list(
+                    values.get("exclude-operations", []), name, "exclude"
+                ),
                 **mappings,
             )
         )
@@ -212,6 +224,19 @@ def _keys(value: Any, allowed: set[str], owner: str) -> None:
         raise GenerationError(
             f"Unknown or invalid settings in {owner}: {set(value) - allowed if isinstance(value, dict) else value}"
         )
+
+
+def _operation_list(raw: Any, source: str, action: str) -> tuple[str, ...]:
+    if (
+        not isinstance(raw, list)
+        or (action == "include" and not raw)
+        or any(not isinstance(value, str) or not value for value in raw)
+        or len(set(raw)) != len(raw)
+    ):
+        raise GenerationError(
+            f"Source {source} {action}-operations requires unique non-empty strings"
+        )
+    return tuple(raw)
 
 
 def _table(raw: dict[str, Any], name: str) -> dict[str, Any]:

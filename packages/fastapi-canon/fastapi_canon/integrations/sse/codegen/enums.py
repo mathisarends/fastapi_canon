@@ -49,9 +49,8 @@ def with_enums(contract: Contract) -> Contract:
         elif type_.discriminator:
             fields: set[tuple[str, str]] = set()
             values: set[str] = set()
-            for member in type_.members:
-                if not isinstance(member, Reference):
-                    break
+            members = _discriminator_models(type_.members, declarations)
+            for member in members or ():
                 model = declarations.get(member.name)
                 if not isinstance(model, Object):
                     break
@@ -83,9 +82,14 @@ def with_enums(contract: Contract) -> Contract:
                     if isinstance(part, LiteralType) and isinstance(part.value, str)
                 )
             else:
-                candidates.append(
-                    (name + identifier(type_.discriminator, upper=True), fields, values)
-                )
+                if members:
+                    candidates.append(
+                        (
+                            name + identifier(type_.discriminator, upper=True),
+                            fields,
+                            values,
+                        )
+                    )
     # Overlapping unions share one enum class, keeping Python narrowing consistent.
     while candidates:
         name, fields, values = candidates.pop(0)
@@ -154,6 +158,35 @@ def with_enums(contract: Contract) -> Contract:
             Declaration(name, type_) for name, type_ in sorted(declarations.items())
         ),
     )
+
+
+def _discriminator_models(
+    members: tuple[Type, ...],
+    declarations: dict[str, Type],
+    seen: frozenset[str] = frozenset(),
+) -> tuple[Reference, ...] | None:
+    result: list[Reference] = []
+    for member in members:
+        if not isinstance(member, Reference) or member.name in seen:
+            return None
+        model = declarations.get(member.name)
+        if isinstance(model, Object):
+            result.append(member)
+        elif isinstance(model, Union):
+            nested = _discriminator_models(
+                model.members, declarations, seen | {member.name}
+            )
+            if nested is None:
+                return None
+            result.extend(nested)
+        elif isinstance(model, Reference):
+            nested = _discriminator_models((model,), declarations, seen | {member.name})
+            if nested is None:
+                return None
+            result.extend(nested)
+        else:
+            return None
+    return tuple(result)
 
 
 def _members(values: set[str]) -> tuple[EnumMember, ...]:

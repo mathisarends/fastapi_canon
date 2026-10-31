@@ -61,7 +61,15 @@ def test_unsupported_constraints_are_diagnosed():
         schema_contract({"type": "string", "enum": ["a"], "minLength": 2})
 
 
-def test_unsupported_regex_fails_generation():
+def test_lookahead_uses_python_regex_and_preserves_validation(tmp_path):
     contract = schema_contract({"type": "string", "pattern": "(?=x)x"})
-    with pytest.raises(ContractError, match="Unsupported string pattern"):
-        generate_python(contract)
+    with load_models(tmp_path, generate_python(contract)) as models:
+        adapter = TypeAdapter(models.EventsEvent)
+        assert adapter.validate_python("x") == "x"
+        with pytest.raises(ValidationError):
+            adapter.validate_python("y")
+
+
+def test_invalid_regex_fails_generation():
+    with pytest.raises(ContractError, match="Invalid JSON Schema"):
+        generate_python(schema_contract({"type": "string", "pattern": "["}))

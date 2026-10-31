@@ -137,6 +137,7 @@ def _openapi(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
                     )
                 )
             successes = {}
+            bodyless = []
             streams = []
             for status, raw_response in raw.get("responses", {}).items():
                 if not status.startswith("2"):
@@ -147,6 +148,7 @@ def _openapi(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
                     streams.append((status, content["text/event-stream"]))
                 elif not content:
                     successes[status] = {"type": "null"}
+                    bodyless.append(status)
                 elif set(content) == {"application/json"}:
                     successes[status] = content["application/json"].get("schema", {})
                 else:
@@ -220,7 +222,7 @@ def _openapi(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
                     identity,
                     path=path,
                     method=method.upper(),
-                    metadata={"responses": successes},
+                    metadata={"responses": successes, "bodyless": bodyless},
                 )
                 interaction = "call"
             _parameter_names(parameters, config.name, identity)

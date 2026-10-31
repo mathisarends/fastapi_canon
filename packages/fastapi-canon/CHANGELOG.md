@@ -6,6 +6,13 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Breaking changes
 
+- Regenerated TypeScript HTTP clients return `undefined` for bodyless success
+  responses, `null` for JSON null, and a JSON-or-void union for mixed success
+  statuses. Regenerate SDKs and remove checks for `null` that meant "no HTTP
+  response body"; await bodyless calls normally or check for `undefined`.
+  Empty JSON and unexpected bodies for bodyless contracts now raise
+  `ProtocolError`; handle that error instead of accepting a silent null value.
+
 - Rename the console command from `canon` to `fastapi-canon`, including all
   transport and check subcommands. Update scripts and CI invocations; the Python
   module entry point remains `python -m fastapi_canon`. Common generation uses
@@ -63,6 +70,19 @@ All notable changes to `fastapi-canon` are documented in this file.
   HTTP binding, internal SSE/JSON-RPC/socket bindings, TypeScript WebRTC sessions,
   shared canonical model declarations and one common error runtime per output.
   Connections are lazy; injected clients remain caller-owned.
+
+- Explicit `include-operations` and `exclude-operations` on common codegen
+  sources, applied before model planning and binding generation. Adopt part of
+  an existing OpenAPI/OpenRPC/WebRTC contract without modifying the export;
+  original input hashes and selection settings remain in the SDK manifest.
+
+### Fixed
+
+- Generate Python validation for valid string patterns using lookarounds or
+  backreferences, including decimal-string schemas from earlier Pydantic
+  exporters. Compiled Python patterns preserve validation in fields and aliases.
+- Preserve literal discriminator fields through nested union aliases, including
+  variants with several tag values, so generated Python SDKs import and validate.
 
 To adopt the common workflow, configure `codegen.sources`/`codegen.targets` in
 `fastapi-canon.toml` and choose a fresh SDK output. Specialized generator commands and their manifests
