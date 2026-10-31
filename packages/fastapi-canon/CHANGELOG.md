@@ -6,6 +6,13 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Breaking changes
 
+- Regenerated TypeScript HTTP clients return `undefined` for bodyless success
+  responses, `null` for JSON null, and a JSON-or-void union for mixed success
+  statuses. Regenerate SDKs and remove checks for `null` that meant "no HTTP
+  response body"; await bodyless calls normally or check for `undefined`.
+  Empty JSON and unexpected bodies for bodyless contracts now raise
+  `ProtocolError`; handle that error instead of accepting a silent null value.
+
 - Rename the console command from `canon` to `fastapi-canon`, including all
   transport and check subcommands. Update scripts and CI invocations; the Python
   module entry point remains `python -m fastapi_canon`. Common generation uses
@@ -76,10 +83,6 @@ All notable changes to `fastapi-canon` are documented in this file.
   exporters. Compiled Python patterns preserve validation in fields and aliases.
 - Preserve literal discriminator fields through nested union aliases, including
   variants with several tag values, so generated Python SDKs import and validate.
-- Match TypeScript HTTP return values to their contracts: bodyless success
-  returns `undefined`, JSON `null` returns `null`, and mixed success statuses
-  expose a JSON-or-void union. Empty JSON and unexpected response bodies fail
-  explicitly. Regenerate SDKs to adopt these corrections.
 
 To adopt the common workflow, configure `codegen.sources`/`codegen.targets` in
 `fastapi-canon.toml` and choose a fresh SDK output. Specialized generator commands and their manifests
