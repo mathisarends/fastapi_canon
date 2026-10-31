@@ -7,7 +7,7 @@ from fastapi_canon._version import __version__
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="canon")
+    parser = argparse.ArgumentParser(prog="fastapi-canon")
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
     for name, description in (
@@ -38,7 +38,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         return webrtc_main(remaining)
     else:
-        checker = argparse.ArgumentParser(prog="canon check")
+        checker = argparse.ArgumentParser(prog="fastapi-canon check")
         checker.add_argument("kind", choices=("errors",))
         _, remaining = checker.parse_known_args(remaining)
         from fastapi_canon.check_error_contracts import _main as check_main

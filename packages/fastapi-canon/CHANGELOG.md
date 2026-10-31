@@ -6,6 +6,12 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Breaking changes
 
+- Rename the console command from `canon` to `fastapi-canon`, including all
+  transport and check subcommands. Update scripts and CI invocations; the Python
+  module entry point remains `python -m fastapi_canon`. Common generation uses
+  `fastapi-canon.toml` with `[codegen]`, or `[tool.fastapi-canon.codegen]` in
+  `pyproject.toml`. Move version, sources and targets into that codegen section.
+
 - Use the resolved RFC 9457 `type` URI as the discriminator for Canon's compiled
   same-status HTTP problem unions. Regenerate clients and update schema consumers
   that expected `propertyName: code`; `code` remains a stable Canon extension.
@@ -49,8 +55,8 @@ All notable changes to `fastapi-canon` are documented in this file.
 - An executable example defining one error and registering it with HTTP, SSE,
   and RPC, and a root decision record for future implementation work.
 
-- Version-1 `canon generate` configuration and a common operations/model plan for
-  OpenAPI, OpenRPC and WebRTC sources, with live export, saved/offline inputs,
+- Version-1 `fastapi-canon generate` configuration and a common operations/model
+  plan for OpenAPI, OpenRPC and WebRTC sources, with live export, saved/offline inputs,
   read-only drift checks, explicit identity/name conflict resolution and one
   ownership manifest per SDK output.
 - A generated domain facade (`client.projects.get/cancel/events`) with a JSON
@@ -58,8 +64,8 @@ All notable changes to `fastapi-canon` are documented in this file.
   shared canonical model declarations and one common error runtime per output.
   Connections are lazy; injected clients remain caller-owned.
 
-To adopt the common workflow, configure `sources`/`targets` in `canon.toml` and
-choose a fresh SDK output. Specialized generator commands and their manifests
+To adopt the common workflow, configure `codegen.sources`/`codegen.targets` in
+`fastapi-canon.toml` and choose a fresh SDK output. Specialized generator commands and their manifests
 remain available. See `docs/problems.md` and the root codegen guide.
 
 ## 0.9.0 - unreleased

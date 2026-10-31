@@ -1,6 +1,6 @@
 # Generate one domain SDK
 
-Prepared Canon 0.10.0 introduces `canon generate`. OpenAPI, OpenRPC and WebRTC
+Prepared Canon 0.10.0 introduces `fastapi-canon generate`. OpenAPI, OpenRPC and WebRTC
 contracts contribute operations to a common plan, model graph and error runtime.
 The generated public API follows domain names; protocol clients live under
 `internal/`. See the [decision record](../CANONICALIZATION_DECISIONS.md) and
@@ -8,27 +8,31 @@ The generated public API follows domain names; protocol clients live under
 
 ## Configuration
 
-Use `canon.toml`, or the same settings under `[tool.canon]` in `pyproject.toml`:
+Use `fastapi-canon.toml` with a `[codegen]` section. In `pyproject.toml`, prefix
+these tables with `tool.fastapi-canon`: `[tool.fastapi-canon.codegen]`,
+`[tool.fastapi-canon.codegen.sources.api]`, and so on. The package name scopes
+the configuration; `codegen` identifies the SDK generation settings.
 
 ```toml
+[codegen]
 version = 1
 
-[sources.api]
+[codegen.sources.api]
 kind = "openapi"
 source = "app:app"
 output = "contracts/openapi.json"
 
-[sources.control]
+[codegen.sources.control]
 kind = "openrpc"
 source = "app:contract"
 output = "contracts/openrpc.json"
 
-[targets.browser]
+[codegen.targets.browser]
 language = "typescript"
 sources = ["api", "control"]
 output = "frontend/generated"
 
-[targets.python]
+[codegen.targets.python]
 language = "python"
 sources = ["api", "control"]
 output = "python/api_client"
@@ -51,11 +55,16 @@ TypeScript needs fetch/DOM APIs and the ESNext.Disposable type library.
 ## Commands and ownership
 
 ```console
-canon generate --config canon.toml
-canon generate --config canon.toml --check --diff
-canon generate --config canon.toml --offline --check
-canon generate --config canon.toml --target browser
+fastapi-canon generate
+fastapi-canon generate --config fastapi-canon.toml
+fastapi-canon generate --config fastapi-canon.toml --check --diff
+fastapi-canon generate --config fastapi-canon.toml --offline --check
+fastapi-canon generate --config fastapi-canon.toml --target browser
 ```
+
+Without `--config`, the command reads `fastapi-canon.toml` in the current
+directory, then falls back to `pyproject.toml`. Python imports remain under
+`fastapi_canon`; command and configuration names use the distribution's hyphens.
 
 Live generation exports contracts before planning. Offline generation reads saved
 outputs and never imports application code. `--target` is repeatable. `--diff`
@@ -101,8 +110,8 @@ async with ApiClient("https://api.example.com") as client:
         show_problem(error.problem)
 ```
 
-Run the [complete example configuration](../packages/fastapi-canon/examples/canonical_errors/canon.toml)
-with `canon generate --config packages/fastapi-canon/examples/canonical_errors/canon.toml`.
+Run the [complete example configuration](../packages/fastapi-canon/examples/canonical_errors/fastapi-canon.toml)
+with `fastapi-canon generate --config packages/fastapi-canon/examples/canonical_errors/fastapi-canon.toml`.
 Its generated output goes into the example's ignored `dist/` directory.
 
 TypeScript output contains `index.ts`, `client.ts`, `models.ts`, `errors.ts`, and
@@ -122,11 +131,11 @@ first tag plus operation ID. JSON-RPC and WebRTC use declared operation/session
 names. Override explicitly when adapting existing contracts:
 
 ```toml
-[sources.api.operations]
+[codegen.sources.api.operations]
 get_project = "projects.get"
 watch_project = "projects.events"
 
-[sources.control.operations]
+[codegen.sources.control.operations]
 "maintenance.cancelProject" = "projects.cancel"
 ```
 
@@ -134,10 +143,10 @@ Conflicting normalized operation/group names fail. Similar-looking models do not
 merge automatically. Assign semantic identity with `x-canon-model-id`, `$id`, or:
 
 ```toml
-[sources.api.identities]
+[codegen.sources.api.identities]
 Project = "urn:example:project-output:v1"
 
-[sources.control.identities]
+[codegen.sources.control.identities]
 ProjectView = "urn:example:project-output:v1"
 ```
 

@@ -29,9 +29,9 @@ Install the locked Streams codegen dependencies with the repository's group:
 
 ```console
 uv sync --locked --all-packages --all-groups
-uv run --locked canon sse schema --app examples.streams.app:app --output openapi.json
-uv run --locked canon sse generate --schema openapi.json --language python --output generated/python
-uv run --locked canon sse generate --schema openapi.json --language typescript --output generated/typescript
+uv run --locked fastapi-canon sse schema --app examples.streams.app:app --output openapi.json
+uv run --locked fastapi-canon sse generate --schema openapi.json --language python --output generated/python
+uv run --locked fastapi-canon sse generate --schema openapi.json --language typescript --output generated/typescript
 ```
 
 An installed application can add `fastapi-canon[codegen]` and lock it

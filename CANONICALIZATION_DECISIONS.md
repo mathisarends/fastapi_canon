@@ -254,7 +254,7 @@ prefixes and URL paths do not prescribe the client's domain namespaces.
 
 ## 8. Common generation and model identity
 
-`canon generate --config canon.toml` is the canonical workflow. Live sources export
+`fastapi-canon generate --config fastapi-canon.toml` is the canonical workflow. Live sources export
 reviewable protocol contracts; saved inputs and `--offline` avoid application
 imports. A common plan resolves operations, schemas and errors before language
 and binding emitters render one SDK. The exact configuration and supported scope
@@ -302,8 +302,13 @@ not claim complete JSON Schema runtime validation.
 
 ## 10. Determinism, ownership, and supported scope
 
-Version-1 `canon.toml` configuration (or `[tool.canon]` in `pyproject.toml`) names
-`sources` and language `targets`. Paths resolve relative to the configuration.
+Version-1 configuration lives under `[codegen]` in `fastapi-canon.toml`, or
+`[tool.fastapi-canon.codegen]` in `pyproject.toml`, and names `sources` and language
+`targets`. The CLI is `fastapi-canon generate`: the distribution name scopes the
+tool, and the subcommand scopes SDK generation. Do not introduce a generic
+`canon` executable or a separate generator product. Without `--config`, look
+for the dedicated file first, then `pyproject.toml` in the current directory.
+Paths resolve relative to the configuration.
 Unknown settings, incompatible schemas, ambiguous names and unsupported targets
 fail explicitly. Validate/render all selected targets before writing. Exit codes
 are 0 success, 1 drift, 2 invalid configuration/contracts/dependencies.

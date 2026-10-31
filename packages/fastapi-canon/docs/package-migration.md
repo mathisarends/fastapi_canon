@@ -73,23 +73,26 @@ and `.webrtc`. There are no parallel short namespace aliases. See the
 
 ## Commands
 
+In 0.10.0, replace the previous `canon` executable with `fastapi-canon` in scripts
+and CI. Subcommand options stay the same.
+
 ```console
-uv run canon --help
-uv run canon --version
-uv run canon check errors src --strict
+uv run fastapi-canon --help
+uv run fastapi-canon --version
+uv run fastapi-canon check errors src --strict
 
-uv run canon sse schema --app app.main:app --output contracts/openapi.json
-uv run canon sse generate --schema contracts/openapi.json --language typescript --output frontend/generated/sse
-uv run canon sse sync --config pyproject.toml --check --diff
+uv run fastapi-canon sse schema --app app.main:app --output contracts/openapi.json
+uv run fastapi-canon sse generate --schema contracts/openapi.json --language typescript --output frontend/generated/sse
+uv run fastapi-canon sse sync --config pyproject.toml --check --diff
 
-uv run canon websockets schema app.contracts:contract --output contracts/openrpc.json
-uv run canon websockets generate --config rpcgen.toml --check
+uv run fastapi-canon websockets schema app.contracts:contract --output contracts/openrpc.json
+uv run fastapi-canon websockets generate --config rpcgen.toml --check
 
-uv run canon webrtc contract --app app.main:app --output contracts/webrtc.json
-uv run canon webrtc generate --contract contracts/webrtc.json --output frontend/generated/webrtc --check
+uv run fastapi-canon webrtc contract --app app.main:app --output contracts/webrtc.json
+uv run fastapi-canon webrtc generate --contract contracts/webrtc.json --output frontend/generated/webrtc --check
 ```
 
-`python -m fastapi_canon` accepts the same arguments as `canon`. Each transport
+`python -m fastapi_canon` accepts the same arguments as `fastapi-canon`. Each transport
 retains its existing command options, strict diagnostics, configuration format
 and owned output directory. SSE's `[tool.fastapi-streams]` table and WebSocket
 `rpcgen.toml` are retained for this first packaging step. Update command names
@@ -104,9 +107,10 @@ Regenerate clients and follow that guide when adopting the new stream profile.
 
 ## Common codegen workflow
 
-Prepared 0.10.0 adds version-1 `canon generate` configuration, shared model/error
+Prepared 0.10.0 adds version-1 `fastapi-canon generate` configuration, shared model/error
 identity and a domain SDK facade. JSON HTTP calls, SSE, JSON-RPC and sessions can
-contribute to one output per language. Follow the
+contribute to one output per language. Put generation settings in `[codegen]` in
+`fastapi-canon.toml`, or `[tool.fastapi-canon.codegen]` in `pyproject.toml`. Follow the
 [codegen guide](../../../docs/unified-canon-concept.md) and choose a fresh output
 when adopting the common workflow. Specialized generator commands remain
 available with their own configuration and ownership; never point multiple

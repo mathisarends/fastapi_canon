@@ -120,8 +120,8 @@ when the browser only watches.
 ## Browser client
 
 ```console
-canon webrtc contract --app app:app --output contract.json
-canon webrtc generate --contract contract.json --output src/rtc --client-name PracticeRtcClient
+fastapi-canon webrtc contract --app app:app --output contract.json
+fastapi-canon webrtc generate --contract contract.json --output src/rtc --client-name PracticeRtcClient
 ```
 
 ```ts

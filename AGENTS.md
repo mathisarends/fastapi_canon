@@ -2,7 +2,7 @@
 
 Read `CANONICALIZATION_DECISIONS.md` for the agreed target architecture and
 implementation scope. Canonical error registration, SSE/RPC bindings, and generated-client handling
-are documented in `packages/fastapi-canon/docs/problems.md`. The common `canon generate` workflow, domain facade and shared model/error
+are documented in `packages/fastapi-canon/docs/problems.md`. The common `fastapi-canon generate` workflow, domain facade and shared model/error
 runtime are implemented; see `docs/unified-canon-concept.md`. Verify implemented behavior against the source.
 
 Use `README.md` for the package inventory, `docs/contributing.md` for development

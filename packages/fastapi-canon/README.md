@@ -45,9 +45,9 @@ outside the library's intended architecture.
 
 The prepared 0.10.0 source includes SSE, WebSockets and WebRTC in the same wheel.
 Install feature dependencies with `fastapi-canon[sse,websockets,webrtc]` and
-generation tooling with `fastapi-canon[codegen]`. Use `canon generate` for one
+generation tooling with `fastapi-canon[codegen]`. Use `fastapi-canon generate` for one
 domain SDK with shared models and errors; see the [codegen guide](../../docs/unified-canon-concept.md).
-Specialized `canon sse`, `canon websockets` and `canon webrtc` commands remain available.
+Specialized `fastapi-canon sse`, `fastapi-canon websockets` and `fastapi-canon webrtc` commands remain available.
 See the [migration guide](docs/package-migration.md); this version is not yet
 published.
 

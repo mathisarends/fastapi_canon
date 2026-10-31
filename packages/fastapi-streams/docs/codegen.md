@@ -5,13 +5,13 @@
 ## Export and generate
 
 ```sh
-uv run canon sse schema \
+uv run fastapi-canon sse schema \
   --app examples.agent_runs:app --output tests/fixtures/agent_runs.openapi.json
 
-uv run canon sse generate \
+uv run fastapi-canon sse generate \
   --schema tests/fixtures/agent_runs.openapi.json --language typescript --output frontend/generated
 
-uv run canon sse generate \
+uv run fastapi-canon sse generate \
   --schema tests/fixtures/agent_runs.openapi.json --language python --output myapp/generated
 ```
 
@@ -43,11 +43,11 @@ HTTPX is the default. To generate a Python client using HTTPX2 instead, opt in
 when generating and checking it:
 
 ```sh
-uv run canon sse generate \
+uv run fastapi-canon sse generate \
   --schema tests/fixtures/agent_runs.openapi.json --language python \
   --python-http-client httpx2 --output myapp/generated
 
-uv run canon sse check \
+uv run fastapi-canon sse check \
   --schema tests/fixtures/agent_runs.openapi.json --language python \
   --python-http-client httpx2 --output myapp/generated
 ```
@@ -98,11 +98,11 @@ is available from `fastapi_canon.integrations.sse.codegen.diagnostics`.
 ## Check drift in CI
 
 ```sh
-uv run canon sse check \
+uv run fastapi-canon sse check \
   --app examples.agent_runs:app --schema tests/fixtures/agent_runs.openapi.json \
   --language typescript --output examples/agent_runs/generated
 
-uv run canon sse check \
+uv run fastapi-canon sse check \
   --app examples.agent_runs:app --schema tests/fixtures/agent_runs.openapi.json \
   --language python --output examples/agent_runs/generated_python
 ```
@@ -143,9 +143,9 @@ diagnostics = "reports/python.json"         # optional
 ```
 
 ```sh
-uv run canon sse sync            # export the schema, then regenerate every client
-uv run canon sse sync --check    # read-only CI check of schema and all clients
-uv run canon sse sync --check --diff
+uv run fastapi-canon sse sync            # export the schema, then regenerate every client
+uv run fastapi-canon sse sync --check    # read-only CI check of schema and all clients
+uv run fastapi-canon sse sync --check --diff
 ```
 
 Paths and the app import resolve relative to the configuration file. `sync` runs
@@ -270,7 +270,7 @@ omission, not JSON null. Server-side validation remains necessary for every clie
 `generate`, `generate --check` and `check` accept these options:
 
 ```sh
-uv run canon sse check --schema openapi.json --language python \
+uv run fastapi-canon sse check --schema openapi.json --language python \
   --output generated --diagnostics reports/python.json --strict \
   --allow-diagnostics reviewed-python.json
 ```

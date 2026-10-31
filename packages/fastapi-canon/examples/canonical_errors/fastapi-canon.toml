@@ -1,21 +1,22 @@
+[codegen]
 version = 1
 
-[sources.api]
+[codegen.sources.api]
 kind = "openapi"
 source = "app:app"
 output = "contracts/openapi.json"
 
-[sources.control]
+[codegen.sources.control]
 kind = "openrpc"
 source = "app:contract"
 output = "contracts/openrpc.json"
 
-[targets.browser]
+[codegen.targets.browser]
 language = "typescript"
 sources = ["api", "control"]
 output = "dist/generated/typescript"
 
-[targets.python]
+[codegen.targets.python]
 language = "python"
 sources = ["api", "control"]
 output = "dist/generated/python/api_client"

@@ -67,7 +67,7 @@ with_transport = "websocket"
 Generate everything together:
 
 ```bash
-canon websockets generate --config rpcgen.toml
+fastapi-canon websockets generate --config rpcgen.toml
 ```
 
 Paths are resolved relative to the config file. Client generation reads the
@@ -78,7 +78,7 @@ Run the same command in CI with `--check`. It exits nonzero and lists stale
 files instead of writing them:
 
 ```bash
-canon websockets generate --config rpcgen.toml --check
+fastapi-canon websockets generate --config rpcgen.toml --check
 ```
 
 Generated directories are owned by the generator and should not be edited by
@@ -92,10 +92,10 @@ regeneration.
 The schema and client stages can also run separately:
 
 ```bash
-canon websockets schema my_api:contract \
+fastapi-canon websockets schema my_api:contract \
   --output schema/tasks.openrpc.json
 
-canon websockets generate schema/tasks.openrpc.json \
+fastapi-canon websockets generate schema/tasks.openrpc.json \
   --language python \
   --output src/tasks_client \
   --package tasks_client \

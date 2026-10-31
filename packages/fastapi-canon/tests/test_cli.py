@@ -8,14 +8,14 @@ from fastapi_canon import __version__
 from fastapi_canon.cli import main
 
 
-@pytest.mark.parametrize("transport", ["sse", "websockets", "webrtc"])
-def test_transport_help_uses_the_canon_command(
+@pytest.mark.parametrize("transport", ["sse", "websockets", "webrtc", "generate"])
+def test_subcommand_help_uses_the_fastapi_canon_command(
     transport: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
     with pytest.raises(SystemExit) as exit_info:
         main([transport, "--help"])
     assert exit_info.value.code == 0
-    assert f"canon {transport}" in capsys.readouterr().out
+    assert f"fastapi-canon {transport}" in capsys.readouterr().out
 
 
 def test_version_is_shared_by_all_features() -> None:

@@ -47,14 +47,22 @@ def load_config(path: Path) -> Configuration:
         parsed = tomllib.loads(path.read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError) as exc:
         raise GenerationError(f"Cannot read {path}: {exc}") from exc
-    raw = (
-        parsed.get("tool", {}).get("canon", {})
-        if path.name == "pyproject.toml"
-        else parsed
-    )
+    sections: tuple[str, ...]
+    if path.name == "pyproject.toml":
+        sections = ("tool", "fastapi-canon", "codegen")
+    else:
+        _keys(parsed, {"codegen"}, str(path))
+        sections = ("codegen",)
+    raw = parsed
+    for section in sections:
+        raw = raw.get(section, {})
+        if not isinstance(raw, dict):
+            raise GenerationError(f"{'.'.join(sections)} must be a table")
     _keys(raw, {"version", "sources", "targets"}, str(path))
     if type(raw.get("version")) is not int or raw["version"] != 1:
-        raise GenerationError("Canon generation configuration requires version = 1")
+        raise GenerationError(
+            "FastAPI Canon codegen configuration requires version = 1"
+        )
     root = path.parent
     sources: list[SourceConfig] = []
     for name, values in _table(raw, "sources").items():

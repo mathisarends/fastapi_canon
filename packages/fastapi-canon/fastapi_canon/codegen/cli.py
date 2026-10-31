@@ -9,8 +9,12 @@ from fastapi_canon.codegen.config import load_config
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="canon generate")
-    parser.add_argument("--config", type=Path)
+    parser = argparse.ArgumentParser(prog="fastapi-canon generate")
+    parser.add_argument(
+        "--config",
+        type=Path,
+        help="Configuration path (default: fastapi-canon.toml, then pyproject.toml)",
+    )
     parser.add_argument("--target", action="append", default=[])
     parser.add_argument(
         "--offline",
@@ -28,8 +32,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         from fastapi_canon.codegen.generate import generate
 
         path = args.config or (
-            Path("canon.toml")
-            if Path("canon.toml").exists()
+            Path("fastapi-canon.toml")
+            if Path("fastapi-canon.toml").exists()
             else Path("pyproject.toml")
         )
         changed, report = generate(
@@ -43,5 +47,5 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(report)
         return int(changed and (args.check or args.diff))
     except Exception as exc:
-        print(f"canon generate: {exc}", file=sys.stderr)
+        print(f"fastapi-canon generate: {exc}", file=sys.stderr)
         return 2

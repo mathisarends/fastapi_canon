@@ -137,10 +137,10 @@ let `Composition(..., errors=ErrorOptions(type_base=...))` supply it. Passing
 `app=app` when creating the RPC contract uses those same resolved type URIs for
 code generation. A standalone RPC contract can use a fully resolved registry.
 
-Use `canon generate --config canon.toml` to export the app and its RPC contract
+Use `fastapi-canon generate --config fastapi-canon.toml` to export the app and its RPC contract
 and generate one domain SDK with shared models and one error runtime. The
 [common codegen guide](../../../docs/unified-canon-concept.md) and
-[example configuration](../examples/canonical_errors/canon.toml) show the complete
+[example configuration](../examples/canonical_errors/fastapi-canon.toml) show the complete
 workflow. Specialized SSE/RPC generator commands remain available for separate
 SDK outputs. Generated runtimes do not depend on Canon.
 

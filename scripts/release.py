@@ -183,7 +183,7 @@ def artifact_hashes(
                 raise ValueError(f"Wheel is missing {transport} codegen templates")
         entries = configparser.ConfigParser()
         entries.read_string(archive.read(f"{stem}.dist-info/entry_points.txt").decode())
-        if entries["console_scripts"]["canon"] != "fastapi_canon.cli:main":
+        if entries["console_scripts"]["fastapi-canon"] != "fastapi_canon.cli:main":
             raise ValueError("Wheel CLI entry point does not match Canon")
     with tarfile.open(directory / f"{stem}.tar.gz") as archive:
         member = archive.extractfile(f"{stem}/PKG-INFO")

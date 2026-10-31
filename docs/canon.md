@@ -109,14 +109,14 @@ There is one installed command, `canon`, also available as
 
 | Command | Responsibility |
 | --- | --- |
-| `canon generate` | Plan contracts together and generate one domain SDK with shared models/errors |
-| `canon sse` | Export OpenAPI/SSE contracts and generate Python/TypeScript clients |
-| `canon websockets` | Export OpenRPC/socket contracts and generate Python/TypeScript clients |
-| `canon webrtc` | Export session contracts and generate TypeScript browser clients |
-| `canon check errors` | Check HTTP error declarations without importing application code |
+| `fastapi-canon generate` | Plan contracts together and generate one domain SDK with shared models/errors |
+| `fastapi-canon sse` | Export OpenAPI/SSE contracts and generate Python/TypeScript clients |
+| `fastapi-canon websockets` | Export OpenRPC/socket contracts and generate Python/TypeScript clients |
+| `fastapi-canon webrtc` | Export session contracts and generate TypeScript browser clients |
+| `fastapi-canon check errors` | Check HTTP error declarations without importing application code |
 
 The specialized emitters retain their configuration, runtime options and ownership
-manifests. The preferred `canon generate` workflow plans sources together and
+manifests. The preferred `fastapi-canon generate` workflow plans sources together and
 owns one combined SDK output per target. It includes a JSON HTTP binding as well
 as internal SSE, JSON-RPC, socket and TypeScript WebRTC bindings. Generated files
 are changed through generators/templates and checked for drift.

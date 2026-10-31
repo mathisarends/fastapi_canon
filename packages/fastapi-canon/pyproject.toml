@@ -37,7 +37,7 @@ codegen = [
 ]
 
 [project.scripts]
-canon = "fastapi_canon.cli:main"
+fastapi-canon = "fastapi_canon.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/mathisarends/fastapi_canon"

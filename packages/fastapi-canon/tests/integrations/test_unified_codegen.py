@@ -15,6 +15,7 @@ import httpx
 import pytest
 
 from examples.canonical_errors.app import app, contract, endpoint
+from fastapi_canon.cli import main
 from fastapi_canon.codegen.config import (
     Configuration,
     SourceConfig,
@@ -256,7 +257,7 @@ def test_generation_is_offline_deterministic_owned_and_preflighted(
             json.dumps(document), encoding="utf-8"
         )
     config = Configuration(
-        tmp_path / "canon.toml",
+        tmp_path / "fastapi-canon.toml",
         tuple(
             replace(source, input=tmp_path / (source.name + ".json"))
             for source, _ in inputs
@@ -350,9 +351,46 @@ def test_model_and_operation_conflicts_require_explicit_resolution() -> None:
 
 
 def test_example_configuration_loads() -> None:
-    path = Path(__file__).resolve().parents[2] / "examples/canonical_errors/canon.toml"
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "examples/canonical_errors/fastapi-canon.toml"
+    )
     config = load_config(path)
     assert {target.language for target in config.targets} == {"python", "typescript"}
+
+
+@pytest.mark.parametrize("filename", ["fastapi-canon.toml", "pyproject.toml"])
+def test_codegen_configuration_discovery_and_package_namespace(
+    filename: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "openapi.json").write_text(
+        json.dumps(export_schema(app)), encoding="utf-8"
+    )
+    section = (
+        "tool.fastapi-canon.codegen" if filename == "pyproject.toml" else "codegen"
+    )
+    configuration = f"""[{section}]
+version = 1
+[{section}.sources.api]
+kind = "openapi"
+input = "openapi.json"
+[{section}.targets.browser]
+language = "typescript"
+sources = ["api"]
+output = "generated"
+"""
+    if filename == "pyproject.toml":
+        configuration = '[project]\nname = "example"\nversion = "9.0"\n' + configuration
+    else:
+        # The dedicated file takes precedence over unrelated project metadata.
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "example"\nversion = "9.0"\n', encoding="utf-8"
+        )
+    (tmp_path / filename).write_text(configuration, encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    assert main(["generate", "--offline"]) == 0
+    assert (tmp_path / "generated/index.ts").is_file()
+    assert main(["generate", "--offline", "--check"]) == 0
 
 
 def test_http_binding_preserves_absent_and_null_json_and_parameter_encoding(

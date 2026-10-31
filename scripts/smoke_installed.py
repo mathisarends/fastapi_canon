@@ -63,6 +63,7 @@ def main() -> None:
     if "fastapi-canon" in selected:
         from fastapi_canon import CanonRouter
 
+        _cli("generate")
         _shared_problem_check()
         http = CanonRouter()
 
@@ -292,7 +293,7 @@ def _canon_check() -> None:
 
 def _cli(name: str) -> None:
     executable = Path(sys.executable).with_name(
-        "canon.exe" if sys.platform == "win32" else "canon"
+        "fastapi-canon.exe" if sys.platform == "win32" else "fastapi-canon"
     )
     subprocess.run(
         [str(executable), name, "--help"], check=True, capture_output=True, timeout=30
@@ -350,18 +351,19 @@ def _unified_codegen() -> None:
     with tempfile.TemporaryDirectory(prefix="canon-unified-") as temporary:
         root = Path(temporary)
         (root / "openapi.json").write_text(json.dumps(document), encoding="utf-8")
-        (root / "canon.toml").write_text(
-            """version = 1
-[sources.api]
+        (root / "fastapi-canon.toml").write_text(
+            """[codegen]
+version = 1
+[codegen.sources.api]
 kind = "openapi"
 source = "must_not_import:app"
 output = "openapi.json"
-[targets.python]
+[codegen.targets.python]
 language = "python"
 sources = ["api"]
 output = "artifact_sdk"
 package = "artifact_sdk"
-[targets.browser]
+[codegen.targets.browser]
 language = "typescript"
 sources = ["api"]
 output = "browser"
@@ -369,13 +371,12 @@ output = "browser"
             encoding="utf-8",
         )
         command = [
-            sys.executable,
-            "-I",
-            "-m",
-            "fastapi_canon",
+            str(
+                Path(sys.executable).with_name(
+                    "fastapi-canon.exe" if sys.platform == "win32" else "fastapi-canon"
+                )
+            ),
             "generate",
-            "--config",
-            str(root / "canon.toml"),
             "--offline",
         ]
         subprocess.run(command, cwd=temporary, check=True, timeout=30)
