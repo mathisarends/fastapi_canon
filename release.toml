@@ -1,0 +1,9 @@
+repository = "mathisarends/fastapi_canon"
+workflow = "release.yml"
+environment = "pypi"
+
+[[package]]
+name = "fastapi-canon"
+directory = "packages/fastapi-canon"
+module = "fastapi_canon"
+tag_prefix = "fastapi-canon-v"

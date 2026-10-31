@@ -1,0 +1,17 @@
+{% for route in routes %}{% filter wrap_constructor %}{{ route | route_declaration }}
+    method={{ route.rpc_name | literal }},
+{% if route.idempotent %}    idempotent=True,
+{% endif %}    result_adapter=TypeAdapter({{ route.result | annotation }}),
+    params_adapter=TypeAdapter({{ route | route_params }}),
+{% if route.server is not none %}    server={{ route.server | literal }},
+{% endif %}){% endfilter %}
+{% if not loop.last or notifications %}
+{% endif %}{% endfor %}{% for event in notifications %}{% filter wrap_constructor %}{{ event | notification_declaration }}
+    method={{ event.rpc_name | literal }},
+    message_adapter=TypeAdapter({{ event.message | annotation }}),
+    payload_adapter=TypeAdapter({{ event.payload | annotation }}),
+{% if event.errors %}    error_mapper=error_from_response,
+{% endif %}{% if event.server is not none %}    server={{ event.server | literal }},
+{% endif %}){% endfilter %}
+{% if not loop.last %}
+{% endif %}{% endfor %}

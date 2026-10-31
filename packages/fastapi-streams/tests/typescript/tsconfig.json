@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "rootDir": "../..",
+    "outDir": "dist"
+  },
+  "include": ["*.ts", "../../examples/agent_runs/generated/**/*.ts", "../../examples/agent_runs/consume.ts", "../../examples/agent_runs/errors.ts", "../fixtures/generated/**/*.ts"]
+}

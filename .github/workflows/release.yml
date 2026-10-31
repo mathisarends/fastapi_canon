@@ -1,0 +1,170 @@
+name: Release package
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Library distribution to release
+        type: choice
+        required: true
+        options: [fastapi-canon]
+      version:
+        description: Exact prepared version, for example 0.1.0
+        type: string
+        required: true
+      dry_run:
+        description: Check/build only; create no PyPI upload, tag or GitHub release
+        type: boolean
+        default: true
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.package }}-${{ inputs.version }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_PACKAGE: ${{ inputs.package }}
+  RELEASE_VERSION: ${{ inputs.version }}
+
+jobs:
+  prepare:
+    name: Validate and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Require main
+        run: |
+          if [[ "$GITHUB_REF" != refs/heads/main ]]; then
+            echo 'Dispatch release.yml from main.' >&2
+            exit 1
+          fi
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          version: '0.9.2'
+          enable-cache: true
+      - run: uv sync --locked --all-packages --all-groups --python 3.14
+      - name: Validate metadata, exact-commit CI, tag and PyPI version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          args=(validate --package "$RELEASE_PACKAGE" --version "$RELEASE_VERSION" --github)
+          if [[ "$DRY_RUN" == false ]]; then args+=(--publish); fi
+          uv run --locked python scripts/release.py "${args[@]}"
+          echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" >> "$GITHUB_ENV"
+      - run: npm ci --ignore-scripts --prefix packages/fastapi-streams
+      - run: npm ci --ignore-scripts --prefix packages/fastapi-webrtc
+      - name: Build only the selected upload artifacts
+        run: uv build --package "$RELEASE_PACKAGE" --out-dir dist/release
+      - name: Verify actual upload wheels with current dependencies
+        run: uv run --locked python scripts/check_distributions.py --artifacts dist/release
+      - name: Verify actual upload wheels with minimum direct dependencies
+        run: uv run --locked python scripts/check_distributions.py --artifacts dist/release --python 3.12 --dependencies minimum
+      - name: Verify installed Streams CLI/backends
+        run: uv run --locked python scripts/check_streams_artifacts.py --artifacts dist/release
+      - name: Verify installed WebRTC CLI and compile its generated client
+        run: uv run --locked python scripts/check_webrtc_artifacts.py --artifacts dist/release
+      - name: Record verified artifact hashes
+        run: uv run --locked python scripts/release.py artifacts --package "$RELEASE_PACKAGE" --version "$RELEASE_VERSION"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: release-${{ inputs.package }}-${{ inputs.version }}
+          path: |
+            dist/release/*
+            dist/release-report/*
+          if-no-files-found: warn
+          overwrite: true
+          retention-days: 90
+
+  publish:
+    name: Publish verified artifacts to PyPI
+    if: ${{ !inputs.dry_run }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: pypi
+      url: https://pypi.org/project/${{ inputs.package }}/${{ inputs.version }}/
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.14'
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          version: '0.9.2'
+      - run: uv sync --locked --all-packages --all-groups --python 3.14
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-${{ inputs.package }}-${{ inputs.version }}
+          path: dist
+      - name: Verify downloaded hashes and inspect existing PyPI files
+        id: publication
+        run: uv run --locked python scripts/release.py state --package "$RELEASE_PACKAGE" --version "$RELEASE_VERSION"
+      - name: Stage verified files separately from the immutable artifacts
+        if: steps.publication.outputs.state != 'complete'
+        run: |
+          mkdir -p dist/pypi-upload
+          cp dist/release/*.whl dist/release/*.tar.gz dist/pypi-upload/
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        if: steps.publication.outputs.state != 'complete'
+        with:
+          packages-dir: dist/pypi-upload/
+          skip-existing: true
+      - name: Verify PyPI hashes and fresh public-index installs
+        run: uv run --locked python scripts/release.py verify-pypi --package "$RELEASE_PACKAGE" --version "$RELEASE_VERSION"
+
+  finish:
+    name: Create matching tag and GitHub release
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.14'
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          version: '0.9.2'
+      - run: uv sync --locked --all-packages --all-groups --python 3.14
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-${{ inputs.package }}-${{ inputs.version }}
+          path: dist
+      - name: Finalize matching GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: uv run --locked python scripts/release.py finish --package "$RELEASE_PACKAGE" --version "$RELEASE_VERSION"

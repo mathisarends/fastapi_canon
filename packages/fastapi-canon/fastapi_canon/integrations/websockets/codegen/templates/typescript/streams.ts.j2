@@ -1,0 +1,436 @@
+{% if with_websocket %}import { RpcStreamClosed, RpcStreamFailed, RpcStreamRefused } from "./core";
+{% else %}import { RpcStreamClosed } from "./core";
+{% endif %}
+export type BinaryStreamDirection =
+  "server-to-client" | "client-to-server" | "bidirectional";
+
+{{ "BinaryStreamName" | union_alias(streams | map(attribute="name")) }}
+
+export type BinaryStreamEndpoint = {
+  readonly name: BinaryStreamName;
+  readonly url: string | URL;
+  readonly direction: BinaryStreamDirection;
+  readonly contentType?: string;
+  readonly inputContentType?: string;
+  readonly subprotocols?: readonly string[];
+};
+
+export type BinaryFrame = ArrayBuffer | ArrayBufferView;
+
+/** The text message that ends a stream's input; output keeps flowing. */
+export type BinaryInputEnd = { readonly type: "end" };
+
+export type BinaryStreamTransport = {
+  receive(): Promise<ArrayBuffer>;
+  close(): Promise<void>;
+  send?(frame: BinaryFrame): Promise<void>;
+  endInput?(): Promise<void>;
+};
+
+/** A stream transport that can also send frames to the server. */
+export type BinaryInputTransport = BinaryStreamTransport & {
+  send(frame: BinaryFrame): Promise<void>;
+  endInput(): Promise<void>;
+};
+
+export type BinaryStreamOpener = (
+  endpoint: BinaryStreamEndpoint,
+) => Promise<BinaryStreamTransport>;
+
+/** Raised when the server did not close a completed upload in time. */
+export class RpcStreamTimeout extends Error {
+  readonly timeoutMs: number;
+
+  constructor(timeoutMs: number) {
+    super(`The server did not close the binary stream within ${timeoutMs} ms`);
+    this.timeoutMs = timeoutMs;
+  }
+}
+
+/** Receives the frames of a server-to-client stream. */
+export class BinaryReceiver implements AsyncIterable<ArrayBuffer> {
+  readonly #transport: BinaryStreamTransport;
+
+  constructor(transport: BinaryStreamTransport) {
+    this.#transport = transport;
+  }
+
+  receive(): Promise<ArrayBuffer> {
+    return this.#transport.receive();
+  }
+
+  async *[Symbol.asyncIterator](): AsyncIterator<ArrayBuffer> {
+    try {
+      while (true) yield await this.receive();
+    } catch (error) {
+      if (!(error instanceof RpcStreamClosed)) throw error;
+    }
+  }
+
+  close(): Promise<void> {
+    return this.#transport.close();
+  }
+
+  [Symbol.asyncDispose](): Promise<void> {
+    return this.close();
+  }
+}
+
+/** Sends and receives frames concurrently on a bidirectional stream. */
+export class BinaryChannel extends BinaryReceiver {
+  readonly #input: BinaryInputTransport;
+  #inputEnded = false;
+
+  constructor(transport: BinaryInputTransport) {
+    super(transport);
+    this.#input = transport;
+  }
+
+  /** Send one frame. */
+  send(frame: BinaryFrame): Promise<void> {
+    if (this.#inputEnded) return Promise.reject(inputEnded());
+    return this.#input.send(frame);
+  }
+
+  /** Tell the server that no more frames follow; output keeps flowing. */
+  endInput(): Promise<void> {
+    if (this.#inputEnded) return Promise.reject(inputEnded());
+    this.#inputEnded = true;
+    return this.#input.endInput();
+  }
+}
+
+/**
+ * Sends the frames of a client-to-server stream. Call `end()` to complete it;
+ * closing or disposing without `end()` aborts the stream.
+ */
+export class BinarySender {
+  readonly #transport: BinaryInputTransport;
+  #inputEnded = false;
+
+  constructor(transport: BinaryInputTransport) {
+    this.#transport = transport;
+  }
+
+  /** Send one frame. */
+  send(frame: BinaryFrame): Promise<void> {
+    if (this.#inputEnded) return Promise.reject(inputEnded());
+    return this.#transport.send(frame);
+  }
+
+  /**
+   * End the input and wait until the server accepted it by closing. Rejects
+   * with `RpcStreamTimeout` after `timeoutMs` (default 30 s); pass `Infinity`
+   * to wait without a limit.
+   */
+  async end(options: { readonly timeoutMs?: number } = {}): Promise<void> {
+    const timeoutMs = options.timeoutMs ?? 30_000;
+    const completion = this.#complete();
+    if (!Number.isFinite(timeoutMs)) return completion;
+    completion.catch(() => undefined);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new RpcStreamTimeout(timeoutMs)),
+        timeoutMs,
+      );
+    });
+    try {
+      await Promise.race([completion, timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async #complete(): Promise<void> {
+    if (!this.#inputEnded) {
+      this.#inputEnded = true;
+      await this.#transport.endInput();
+    }
+    try {
+      await this.#transport.receive();
+    } catch (error) {
+      if (error instanceof RpcStreamClosed) return;
+      throw error;
+    }
+    throw new Error("The server sent a frame on a client-to-server stream");
+  }
+
+  close(): Promise<void> {
+    return this.#transport.close();
+  }
+
+  [Symbol.asyncDispose](): Promise<void> {
+    return this.close();
+  }
+}
+
+function inputEnded(): RpcStreamClosed {
+  return new RpcStreamClosed("The binary input already ended");
+}
+
+export type BinaryStreamInfo = {
+  readonly name: BinaryStreamName;
+  readonly url: string;
+  readonly direction: BinaryStreamDirection;
+  readonly contentType?: string;
+  readonly inputContentType?: string;
+  readonly subprotocols?: readonly string[];
+  readonly variables?: Readonly<
+    Record<
+      string,
+      {
+        readonly default: string;
+        readonly enum?: readonly string[];
+      }
+    >
+  >;
+};
+
+export const binaryStreams = {
+{% for stream in streams %}  {{ stream.name | identifier }}: {
+    name: {{ stream.name | literal }},
+    url: {{ stream.url | literal }},
+    direction: {{ stream.direction | literal }},
+{% if stream.content_type is not none %}    contentType: {{ stream.content_type | literal }},
+{% endif %}{% if stream.input_content_type is not none %}    inputContentType: {{ stream.input_content_type | literal }},
+{% endif %}{% if stream.subprotocols %}    subprotocols: {{ stream.subprotocols | array }},
+{% endif %}{% if stream.variables %}    variables: {
+{% for variable in stream.variables %}      {{ variable.name | property }}: {
+        default: {{ variable.default | literal }},
+{% if variable.enum %}        enum: {{ variable.enum | array }},
+{% endif %}      },
+{% endfor %}    },
+{% endif %}  },
+{% endfor %}} as const satisfies Record<string, BinaryStreamInfo>;
+
+export type StreamVariables = Readonly<Record<string, string | undefined>>;
+
+/** Fill a stream URL from the call's values, then the client's connect values. */
+export function resolveStreamEndpoint(
+  stream: BinaryStreamInfo,
+  connected: StreamVariables = {},
+  values: StreamVariables = {},
+): BinaryStreamEndpoint {
+  return {
+    name: stream.name,
+    url: resolveUrl(stream, connected, values),
+    direction: stream.direction,
+    contentType: stream.contentType,
+    inputContentType: stream.inputContentType,
+    subprotocols: stream.subprotocols,
+  };
+}
+
+function resolveUrl(
+  stream: BinaryStreamInfo,
+  connected: StreamVariables,
+  values: StreamVariables,
+): string {
+  let url = stream.url;
+  for (const [name, variable] of Object.entries(stream.variables ?? {})) {
+    const value = values[name] ?? connected[name] ?? variable.default;
+    if (variable.enum !== undefined && !variable.enum.includes(value)) {
+      throw new Error(
+        `Invalid value for binary stream variable ${name}: ${value}`,
+      );
+    }
+    url = url.replaceAll(`{${name}}`, value);
+  }
+  return url;
+}
+{% if with_websocket %}export type BinaryWebSocketFactory = (
+  url: string | URL,
+  protocols?: readonly string[],
+) => BinaryWebSocket;
+
+export type BinaryWebSocketOptions = {
+  readonly incomingQueueSize?: number;
+  readonly socketFactory?: BinaryWebSocketFactory;
+};
+
+type BinaryCloseEvent = { readonly code?: number; readonly reason?: string };
+
+type BinaryWebSocket = {
+  binaryType: string;
+  readonly readyState: number;
+  send(data: string | BinaryFrame): void;
+  close(): void;
+  addEventListener(
+    type: "open" | "close" | "error",
+    listener: (event?: BinaryCloseEvent) => void,
+  ): void;
+  addEventListener(
+    type: "message",
+    listener: (event: { readonly data: unknown }) => void,
+  ): void;
+};
+
+export class BinaryWebSocketStream implements BinaryStreamTransport {
+  readonly endpoint: BinaryStreamEndpoint;
+  readonly #socket: BinaryWebSocket;
+  readonly #frames: BinaryFrameQueue;
+  #closed = false;
+
+  private constructor(
+    socket: BinaryWebSocket,
+    endpoint: BinaryStreamEndpoint,
+    incomingQueueSize: number,
+  ) {
+    this.#socket = socket;
+    this.endpoint = endpoint;
+    this.#frames = new BinaryFrameQueue(incomingQueueSize);
+    socket.binaryType = "arraybuffer";
+    socket.addEventListener("message", (event) => {
+      try {
+        if (event.data instanceof ArrayBuffer) this.#frames.push(event.data);
+        else throw new Error("The binary WebSocket returned a text frame");
+      } catch (error) {
+        this.#fail(
+          error instanceof Error ? error : new Error("Invalid binary frame"),
+        );
+        socket.close();
+      }
+    });
+    socket.addEventListener("error", () =>
+      this.#fail(new Error("The binary WebSocket connection failed")),
+    );
+    socket.addEventListener("close", (event) => {
+      const code = event?.code ?? 1000;
+      if (code === 1000 || code === 1001) this.#end();
+      else {
+        const failure = code === 1008 ? RpcStreamRefused : RpcStreamFailed;
+        this.#fail(new failure(code, event?.reason ?? ""));
+      }
+    });
+  }
+
+  static async open(
+    endpoint: BinaryStreamEndpoint,
+    options: BinaryWebSocketOptions = {},
+  ): Promise<BinaryWebSocketStream> {
+    const socketFactory =
+      options.socketFactory ?? defaultBinaryWebSocketFactory;
+    const incomingQueueSize = options.incomingQueueSize ?? 100;
+    if (!Number.isInteger(incomingQueueSize) || incomingQueueSize <= 0) {
+      throw new Error("incomingQueueSize must be a positive integer");
+    }
+    const socket = socketFactory(endpoint.url, endpoint.subprotocols);
+    socket.binaryType = "arraybuffer";
+    await waitForOpen(socket);
+    return new BinaryWebSocketStream(socket, endpoint, incomingQueueSize);
+  }
+
+  receive(): Promise<ArrayBuffer> {
+    if (this.#closed)
+      return Promise.reject(new RpcStreamClosed("The binary stream is closed"));
+    return this.#frames.receive();
+  }
+
+  send(frame: BinaryFrame): Promise<void> {
+    if (this.#closed)
+      return Promise.reject(new RpcStreamClosed("The binary stream is closed"));
+    this.#socket.send(frame);
+    return Promise.resolve();
+  }
+
+  endInput(): Promise<void> {
+    if (this.#closed)
+      return Promise.reject(new RpcStreamClosed("The binary stream is closed"));
+    const end: BinaryInputEnd = { type: "end" };
+    this.#socket.send(JSON.stringify(end));
+    return Promise.resolve();
+  }
+
+  async close(): Promise<void> {
+    if (this.#closed) return;
+    this.#closed = true;
+    this.#socket.close();
+    this.#end();
+  }
+
+  #end(): void {
+    this.#closed = true;
+    this.#frames.fail(new RpcStreamClosed("The binary stream is closed"));
+  }
+
+  #fail(error: Error): void {
+    if (this.#closed) return;
+    this.#closed = true;
+    this.#frames.fail(error);
+  }
+}
+
+class BinaryFrameQueue {
+  readonly #capacity: number;
+  readonly #values: ArrayBuffer[] = [];
+  readonly #waiters: Array<{
+    readonly resolve: (value: ArrayBuffer) => void;
+    readonly reject: (error: unknown) => void;
+  }> = [];
+  #failure?: unknown;
+
+  constructor(capacity: number) {
+    this.#capacity = capacity;
+  }
+
+  receive(): Promise<ArrayBuffer> {
+    const value = this.#values.shift();
+    if (value !== undefined) return Promise.resolve(value);
+    if (this.#failure !== undefined) return Promise.reject(this.#failure);
+    return new Promise((resolve, reject) =>
+      this.#waiters.push({ resolve, reject }),
+    );
+  }
+
+  push(value: ArrayBuffer): void {
+    const waiter = this.#waiters.shift();
+    if (waiter !== undefined) waiter.resolve(value);
+    else {
+      if (this.#values.length === this.#capacity) {
+        throw new Error("The binary WebSocket frame queue overflowed");
+      }
+      this.#values.push(value);
+    }
+  }
+
+  fail(error: unknown): void {
+    if (this.#failure !== undefined) return;
+    this.#failure = error;
+    for (const waiter of this.#waiters.splice(0)) waiter.reject(error);
+  }
+}
+
+function defaultBinaryWebSocketFactory(
+  url: string | URL,
+  protocols?: readonly string[],
+): BinaryWebSocket {
+  const constructor = (
+    globalThis as unknown as {
+      readonly WebSocket?: new (
+        url: string | URL,
+        protocols?: readonly string[],
+      ) => BinaryWebSocket;
+    }
+  ).WebSocket;
+  if (constructor === undefined) {
+    throw new Error(
+      "No global WebSocket implementation is available; provide socketFactory",
+    );
+  }
+  return new constructor(url, protocols);
+}
+
+function waitForOpen(socket: BinaryWebSocket): Promise<void> {
+  if (socket.readyState === 1) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    socket.addEventListener("open", () => resolve());
+    socket.addEventListener("error", () =>
+      reject(new Error("Binary WebSocket open failed")),
+    );
+    socket.addEventListener("close", () =>
+      reject(new Error("Binary WebSocket closed")),
+    );
+  });
+}
+{% endif %}

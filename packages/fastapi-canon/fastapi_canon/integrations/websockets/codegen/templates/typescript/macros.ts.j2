@@ -1,0 +1,33 @@
+{% macro operation(route, root) %}{% if route.summary %}  /** {{ route.summary | comment }} */
+{% endif %}{{ route | operation_signature }}
+{{ route | operation_call(root) }}
+  }
+{% endmacro %}
+
+{% macro notification(event, root) %}{% if event.summary %}  /** {{ event.summary | comment }} */
+{% endif %}  {{ event.operation_name | identifier }}({% if event.subscription and event.params_model is not none %}params: {{ event.params_model }}{% endif %}): AsyncIterable<{{ event.payload | type }}> {
+{% if event.subscription %}    return {{ "this.#rpc" if root else "this.rpc" }}.subscribeRemote(notifications.{{ event | route_key }}{% if event.params_model is not none %}, params{% endif %});
+{% else %}{% if event | compact_notification(root) %}    return {{ "this.#rpc" if root else "this.rpc" }}.notifications(notifications.{{ event | route_key }});
+{% else %}    return {{ "this.#rpc" if root else "this.rpc" }}.notifications(
+      notifications.{{ event | route_key }},
+    );
+{% endif %}{% endif %}  }
+{% endmacro %}
+
+{% macro stream(item, root) %}{% set rpc = "this.#rpc" if root else "this.rpc" %}{% if item.summary %}  /** {{ item.summary | comment }} */
+{% endif %}{{ item | stream_signature }}
+    return {{ rpc }}.openStream(
+{{ item | stream_endpoint(rpc) }}
+      (transport) => new {{ item | stream_connection }}(transport),
+    );
+  }
+{% endmacro %}
+
+{% macro socket_method(item, root) %}{% set rpc = "this.#rpc" if root else "this.rpc" %}{% if item.summary %}  /** {{ item.summary | comment }} */
+{% endif %}{{ item | socket_handle_signature }}
+    return {{ rpc }}.openSocket(
+{{ item | socket_handle_endpoint(rpc) }}
+{{ item | socket_handle_connect }}
+    );
+  }
+{% endmacro %}

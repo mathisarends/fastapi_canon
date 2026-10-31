@@ -1,0 +1,23 @@
+{
+  "generator": "fastapi-canon",
+  "generatorVersion": "0.9.0",
+  "layoutVersion": 10,
+  "language": "typescript",
+  "contractSha256": "37366233e8061d0ddb246fbc75939bf9c611ecf8f52f62dc7ca95e2cba39787f",
+  "files": [
+    ".rpcgen/manifest.json",
+    "client.ts",
+    "core.ts",
+    "endpoints.ts",
+    "errors.ts",
+    "index.ts",
+    "models.ts",
+    "namespaces/browser.ts",
+    "namespaces/index.ts",
+    "namespaces/tasks.ts",
+    "routes.ts",
+    "sockets.ts",
+    "streams.ts",
+    "transport.ts"
+  ]
+}

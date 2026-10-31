@@ -1,0 +1,37 @@
+import json
+from collections.abc import AsyncIterator, Mapping
+from typing import Any, Protocol
+
+
+class RpcTransport(Protocol):
+    """The connection the client speaks through."""
+
+    async def request(
+        self,
+        method: str,
+        params: dict[str, Any] | None = None,
+        *,
+        metadata: Mapping[str, str] | None = None,
+    ) -> Any: ...
+
+    def notifications(self) -> AsyncIterator[dict[str, Any]]: ...
+
+    async def close(self) -> None: ...
+
+
+def validate_request_metadata(value: object) -> dict[str, str]:
+    if not isinstance(value, Mapping) or any(
+        key not in ("traceparent", "tracestate", "baggage") or not isinstance(item, str)
+        for key, item in value.items()
+    ):
+        raise ValueError("Request meta must contain only supported string fields")
+    result = dict(value)
+    try:
+        size = len(
+            json.dumps(result, ensure_ascii=False, separators=(",", ":")).encode()
+        )
+    except UnicodeEncodeError as error:
+        raise ValueError("Request meta must contain valid Unicode") from error
+    if size > 4096:
+        raise ValueError("Request meta exceeds 4096 UTF-8 bytes")
+    return result

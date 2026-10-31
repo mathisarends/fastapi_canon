@@ -1,0 +1,30 @@
+{% for error in errors %}class {{ error.code | schema_name }}Error(RpcRemoteError):
+    code: ClassVar[str] = {{ error.code | literal }}
+{% if error.details is not none %}    details: {{ error.details | annotation }}
+    details_adapter = TypeAdapter({{ error.details | annotation }})
+{% endif %}{% if not loop.last %}
+
+
+{% endif %}{% endfor %}
+
+{% if errors %}ERROR_TYPES: dict[str, type[RpcRemoteError]] = {
+{% for error in errors %}    {{ error.code | literal }}: {{ error.code | schema_name }}Error,
+{% endfor %}}{% else %}ERROR_TYPES: dict[str, type[RpcRemoteError]] = {}{% endif %}
+
+
+def error_from_response(
+    rpc_code: int,
+    code: str,
+    message: str,
+    details: Any,
+) -> RpcRemoteError:
+    error_type = ERROR_TYPES.get(code)
+    if error_type is None:
+        return RpcRemoteError(rpc_code, code, message, details)
+    adapter = getattr(error_type, "details_adapter", None)
+    if adapter is not None:
+        try:
+            details = adapter.validate_python(details)
+        except ValidationError:
+            return RpcRemoteError(rpc_code, code, message, details)
+    return error_type(rpc_code, code, message, details)

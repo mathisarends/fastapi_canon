@@ -1,0 +1,94 @@
+class ServerName(StrEnum):
+{% for server in servers %}    {{ server.name | constant }} = {{ server.name | literal }}
+{% endfor %}
+
+
+@dataclass(frozen=True, slots=True)
+class Endpoint:
+    server: ServerName
+    url: str
+    subprotocols: tuple[str, ...] = ()
+
+
+_SERVERS = {
+{% for server in servers %}    ServerName.{{ server.name | constant }}: RpcServerInfo(
+        name={{ server.name | literal }},
+        url={{ server.url | literal }},
+{% if server.summary %}        summary={{ server.summary | literal }},
+{% endif %}{% if server.description %}        description={{ server.description | literal }},
+{% endif %}{% if server.variables %}        variables={
+{% for variable in server.variables %}            {{ variable.name | literal }}: RpcServerVariable(
+                default={{ variable.default | literal }},
+{% if variable.description %}                description={{ variable.description | literal }},
+{% endif %}{% if variable.enum %}                enum={{ variable.enum | tuple_literal }},
+{% endif %}            ),
+{% endfor %}        },
+{% endif %}{% if server.transport is not none %}        transport=RpcTransportDescriptor(
+            type={{ server.transport.type | literal }},
+{% if server.transport.message_encoding is not none %}            message_encoding={{ server.transport.message_encoding | literal }},
+{% endif %}{% if server.transport.subprotocols %}            subprotocols={{ server.transport.subprotocols | tuple_literal }},
+{% endif %}{% if server.transport.options %}            options={{ server.transport.options | options_literal }},
+{% endif %}        ),
+{% endif %}    ),
+{% endfor %}}
+
+
+def endpoint(
+    server: ServerName, values: Mapping[str, str | None] | None = None
+) -> Endpoint:
+    """Resolve one declared server, ignoring variables it does not declare."""
+    info = _SERVERS[server]
+    supplied = {
+        name: value
+        for name, value in (values or {}).items()
+        if name in info.variables and value is not None
+    }
+    return Endpoint(
+        server=server,
+        url=info.resolve(supplied),
+        subprotocols=info.transport.subprotocols if info.transport else (),
+    )
+{% for server in servers %}
+
+{% if server.variables %}def {{ server.name | identifier }}(
+    *,
+{% for variable in server.variables %}    {{ variable.name | identifier }}: {{ variable | variable_annotation }} = {{ variable.default | literal }},
+{% endfor %}) -> Endpoint:
+    return endpoint(
+        ServerName.{{ server.name | constant }},
+        {
+{% for variable in server.variables %}            {{ variable.name | literal }}: {{ variable.name | identifier }},
+{% endfor %}        },
+    )
+{% else %}def {{ server.name | identifier }}() -> Endpoint:
+    return endpoint(ServerName.{{ server.name | constant }})
+{% endif %}
+{% endfor %}
+
+def resolve_endpoints(
+    variables: Mapping[str, str | None] | None = None,
+    overrides: Mapping[ServerName, str | Endpoint] | None = None,
+) -> tuple[Endpoint, ...]:
+    """Resolve every declared server, then apply the caller's overrides."""
+    resolved = {server: endpoint(server, variables) for server in _SERVERS}
+    for server, override in (overrides or {}).items():
+        if server not in resolved:
+            raise ValueError(f"Unknown server {server!r}")
+        if isinstance(override, Endpoint) and override.server != server:
+            raise ValueError(
+                f"Endpoint override for {server!r} declares {override.server!r}"
+            )
+        resolved[server] = (
+            override
+            if isinstance(override, Endpoint)
+            else replace(resolved[server], url=_websocket_url(override))
+        )
+    return tuple(resolved.values())
+
+
+def _websocket_url(url: str) -> str:
+    if url.startswith("https://"):
+        return "wss://" + url[8:]
+    if url.startswith("http://"):
+        return "ws://" + url[7:]
+    return url

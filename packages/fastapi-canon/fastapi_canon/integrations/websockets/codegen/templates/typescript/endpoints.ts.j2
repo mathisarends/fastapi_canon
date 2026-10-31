@@ -1,0 +1,147 @@
+export type RpcTransportDescriptor =
+  | {
+      readonly type: "websocket";
+      readonly messageEncoding: "json";
+      readonly subprotocols?: readonly string[];
+    }
+  | {
+      readonly type: string;
+      readonly subprotocols?: readonly string[];
+      readonly [option: string]: unknown;
+    };
+
+type RpcServerVariable = {
+  readonly default: string;
+  readonly description?: string;
+  readonly enum?: readonly string[];
+};
+
+type RpcServerInfo = {
+  readonly name: string;
+  readonly url: string;
+  readonly summary?: string;
+  readonly description?: string;
+  readonly variables?: Readonly<Record<string, RpcServerVariable>>;
+  readonly transport?: RpcTransportDescriptor;
+};
+
+export type ServerName = {% for server in servers %}{{ " | " if not loop.first else "" }}{{ server.name | literal }}{% endfor %};
+
+export type Endpoint = {
+  readonly server: ServerName;
+  readonly url: string | URL;
+  readonly subprotocols?: readonly string[];
+};
+
+export type ServerVariables = Readonly<Record<string, string | undefined>>;
+
+export type EndpointOverrides = Partial<
+  Record<ServerName, string | URL | Endpoint>
+>;
+
+{% if servers | length == 1 %}const serverNames: readonly ServerName[] = [{{ servers[0].name | literal }}];
+{% else %}const serverNames: readonly ServerName[] = [
+{% for server in servers %}  {{ server.name | literal }},
+{% endfor %}];
+{% endif %}
+
+export const servers = {
+{% for server in servers %}  {{ server.name | identifier }}: {
+    name: {{ server.name | literal }},
+    url: {{ server.url | literal }},
+{% if server.summary %}    summary: {{ server.summary | literal }},
+{% endif %}{% if server.description %}    description: {{ server.description | literal }},
+{% endif %}{% if server.transport is not none %}    transport: {
+      type: {{ server.transport.type | literal }},
+{% if server.transport.message_encoding is not none %}      messageEncoding: {{ server.transport.message_encoding | literal }},
+{% endif %}{% if server.transport.subprotocols %}      subprotocols: {{ server.transport.subprotocols | array }},
+{% endif %}{% for name, value in server.transport.options %}      {{ name | property }}: {{ value | literal }},
+{% endfor %}    },
+{% endif %}{% if server.variables %}    variables: {
+{% for variable in server.variables %}      {{ variable.name | property }}: {
+        default: {{ variable.default | literal }},
+{% if variable.description %}        description: {{ variable.description | literal }},
+{% endif %}{% if variable.enum %}        enum: {{ variable.enum | array }},
+{% endif %}      },
+{% endfor %}    },
+{% endif %}  },
+{% endfor %}} as const satisfies Record<string, RpcServerInfo>;
+
+{% for server in servers %}function {{ server.name | identifier }}({% if server.variables %}
+  variables: {
+{% for variable in server.variables %}    {{ variable.name | property }}?: {{ variable | server_variable_type }};
+{% endfor %}  } = {},
+{% endif %}): Endpoint {
+  return endpoint({{ server.name | literal }}{% if server.variables %}, variables{% endif %});
+}
+
+{% endfor %}export const endpoints = {
+{% for server in servers %}  {{ server.name | identifier }},
+{% endfor %}} as const;
+
+/** Resolve one declared server, ignoring variables it does not declare. */
+export function endpoint(
+  server: ServerName,
+  variables: ServerVariables = {},
+): Endpoint {
+  const info: RpcServerInfo = servers[server];
+  return {
+    server,
+    url: resolveUrl(info, variables),
+    subprotocols: info.transport?.subprotocols ?? [],
+  };
+}
+
+/** Resolve every declared server, then apply the caller's overrides. */
+export function resolveEndpoints(
+  variables: ServerVariables = {},
+  overrides: EndpointOverrides = {},
+): readonly Endpoint[] {
+  const resolved = new Map<ServerName, Endpoint>(
+    serverNames.map((name) => [name, endpoint(name, variables)]),
+  );
+  for (const [name, override] of Object.entries(overrides)) {
+    const server = name as ServerName;
+    const declared = resolved.get(server);
+    if (declared === undefined) throw new Error(`Unknown server ${name}`);
+    if (override === undefined) continue;
+    if (
+      typeof override !== "string" &&
+      !(override instanceof URL) &&
+      override.server !== server
+    ) {
+      throw new Error(
+        `Endpoint override for ${server} declares ${override.server}`,
+      );
+    }
+    resolved.set(
+      server,
+      typeof override === "string" || override instanceof URL
+        ? { ...declared, url: websocketUrl(override) }
+        : {
+            ...override,
+            subprotocols: override.subprotocols ?? declared.subprotocols,
+          },
+    );
+  }
+  return [...resolved.values()];
+}
+
+function websocketUrl(value: string | URL): string {
+  const url = String(value);
+  if (url.startsWith("https://")) return `wss://${url.slice(8)}`;
+  if (url.startsWith("http://")) return `ws://${url.slice(7)}`;
+  return url;
+}
+
+function resolveUrl(server: RpcServerInfo, values: ServerVariables): string {
+  let url = server.url;
+  for (const [name, variable] of Object.entries(server.variables ?? {})) {
+    const value = values[name] ?? variable.default;
+    if (variable.enum !== undefined && !variable.enum.includes(value)) {
+      throw new Error(`Invalid value for server variable ${name}: ${value}`);
+    }
+    url = url.replaceAll(`{${name}}`, value);
+  }
+  return url;
+}

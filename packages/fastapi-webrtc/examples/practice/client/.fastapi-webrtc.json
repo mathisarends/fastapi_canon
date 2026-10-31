@@ -1,0 +1,16 @@
+{
+  "files": [
+    "client.ts",
+    "index.ts",
+    "models.ts",
+    "runtime.ts"
+  ],
+  "generation": {
+    "client_name": "PracticeRtcClient",
+    "contract_hash_encoding": "canonical-json-v1",
+    "contract_sha256": "55e7a716659218d0d7e6c14071cf7d99936a04db3a35ad9a3ddc76ba564e6203",
+    "generator": "fastapi-canon",
+    "generator_version": "0.9.0",
+    "target": "typescript"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "fastapi-webrtc-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tests/typescript/tsconfig.json --noEmit && tsc -p tests/browser/tsconfig.json --noEmit",
+    "test": "tsc -p tests/typescript/tsconfig.json && node --test tests/typescript/dist/tests/typescript/*.test.js",
+    "test:coverage": "tsc -p tests/typescript/tsconfig.json && node --test --experimental-test-coverage --test-coverage-include=**/examples/practice/client/*.js --test-coverage-lines=90 --test-coverage-branches=80 --test-coverage-functions=90 --test-reporter=spec --test-reporter-destination=stdout tests/typescript/dist/tests/typescript/*.test.js",
+    "test:browser": "tsc -p tests/browser/tsconfig.json && playwright test -c tests/browser/playwright.config.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}

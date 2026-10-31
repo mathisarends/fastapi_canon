@@ -1,0 +1,23 @@
+import { RpcRemoteError } from "./core";
+{% if model_import %}{{ model_import }}
+{% endif %}
+{% for error in errors %}export class {{ error.code | schema_name }}Error extends RpcRemoteError {
+  static readonly code = {{ error.code | literal }};
+{% if error.details is not none %}
+  declare readonly details: {{ error.details | type }};
+{% endif %}}
+{% if not loop.last %}
+{% endif %}{% endfor %}
+{% if errors %}const errorTypes: Readonly<Record<string, typeof RpcRemoteError>> = {
+{% for error in errors %}  {{ error.code | property }}: {{ error.code | schema_name }}Error,
+{% endfor %}};{% else %}const errorTypes: Readonly<Record<string, typeof RpcRemoteError>> = {};{% endif %}
+
+export function errorFromResponse(
+  rpcCode: number,
+  code: string,
+  message: string,
+  details?: unknown,
+): RpcRemoteError {
+  const ErrorType = errorTypes[code] ?? RpcRemoteError;
+  return new ErrorType(rpcCode, code, message, details);
+}

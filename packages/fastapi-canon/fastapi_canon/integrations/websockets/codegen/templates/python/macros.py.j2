@@ -1,0 +1,94 @@
+{% macro operation(route) %}    async def {{ route.operation_name | identifier }}({% if not route.params %}self{% else %}
+        self,
+        *,
+{% for parameter in route.params %}        {{ parameter.name | identifier }}: {{ parameter | parameter_annotation }},
+{% endfor %}    {% endif %}) -> {{ route.result | annotation }}:
+{% set description = route.summary or route.description %}{% if description %}        """{{ description | docstring }}"""
+{% endif %}{% if route.params_model is not none %}{% if route.params | direct_params %}        params = {{ route.params_model | schema_name }}(
+{% for parameter in route.params %}            {{ parameter.name | identifier }}={{ parameter.name | identifier }},
+{% endfor %}        )
+{% else %}        values: dict[str, object] = {}
+{% for parameter in route.params %}{% if parameter.required %}        values[{{ parameter.name | literal }}] = {{ parameter.name | identifier }}
+{% else %}        if {{ parameter.name | identifier }} is not UNSET:
+            values[{{ parameter.name | literal }}] = {{ parameter.name | identifier }}
+{% endif %}{% endfor %}        params = {{ route.params_model | schema_name }}.model_validate(values)
+{% endif %}{% endif %}        {{ "await" if route.result | null_type else "return await" }} self._rpc.request(
+            {{ route.method_member }},
+{% if route.params_model is not none %}            params=params,
+{% endif %}        )
+{% endmacro %}
+
+{% macro notification(event) %}{% if event.subscription %}    def {{ event.operation_name | identifier }}({% if not event.params %}self{% else %}
+        self,
+        *,
+{% for parameter in event.params %}        {{ parameter.name | identifier }}: {{ parameter | parameter_annotation }},
+{% endfor %}    {% endif %}) -> AsyncIterator[{{ event.payload | annotation }}]:
+{% if event.summary %}        """{{ event.summary | docstring }}"""
+{% endif %}{% if event.params_model is not none %}{% if event.params | direct_params %}        params = {{ event.params_model | schema_name }}(
+{% for parameter in event.params %}            {{ parameter.name | identifier }}={{ parameter.name | identifier }},
+{% endfor %}        )
+{% else %}        values: dict[str, object] = {}
+{% for parameter in event.params %}{% if parameter.required %}        values[{{ parameter.name | literal }}] = {{ parameter.name | identifier }}
+{% else %}        if {{ parameter.name | identifier }} is not UNSET:
+            values[{{ parameter.name | literal }}] = {{ parameter.name | identifier }}
+{% endif %}{% endfor %}        params = {{ event.params_model | schema_name }}.model_validate(values)
+{% endif %}{% endif %}        return self._rpc.subscribe_remote({{ event.rpc_name | constant }}{% if event.params_model is not none %}, params=params{% endif %})
+{% else %}    def {{ event.operation_name | identifier }}(self) -> AsyncIterator[{{ event.payload | annotation }}]:
+{% if event.summary %}        """{{ event.summary | docstring }}"""
+{% endif %}        return self._rpc.subscribe({{ event.rpc_name | constant }})
+{% endif %}{% endmacro %}
+
+{% macro stream(item) %}{% set inline_signature = "    def " ~ (item.operation_name | identifier) ~ "(self) -> AbstractAsyncContextManager[" ~ (item | stream_connection) ~ "]:" %}{% if not item.call_variables and inline_signature | length <= 88 %}{{ inline_signature }}
+{% else %}    def {{ item.operation_name | identifier }}(
+        self,
+{% if item.call_variables %}        *,
+{% for variable in item.call_variables %}        {{ variable.name | identifier }}: {{ variable | variable_annotation }} | None = None,
+{% endfor %}{% endif %}    ) -> AbstractAsyncContextManager[{{ item | stream_connection }}]:
+{% endif %}{% if item.summary %}        """{{ item.summary | docstring }}"""
+{% endif %}        return open_binary_stream(
+            resolve_stream_endpoint(
+                BINARY_STREAMS[BinaryStreamName.{{ item.name | constant }}],
+                self._rpc.variables,
+{% if item.call_variables %}                {
+{% for variable in item.call_variables %}                    {{ variable.name | literal }}: {{ variable.name | identifier }},
+{% endfor %}                },
+{% endif %}            ),
+            self._rpc.stream_opener,
+            {{ item | stream_connection }},
+        )
+{% endmacro %}
+
+{% macro socket_method(item) %}{% set binding = item | socket_binding %}{% set binding_module = "_socket_binding_" ~ binding.module if binding else "" %}{% set returns = binding_module ~ "." ~ binding.session if binding else item | socket_return_type %}{% set inline_signature = "    def " ~ (item.operation_name | identifier) ~ "(self) -> AbstractAsyncContextManager[" ~ returns ~ "]:" %}{% if not item.call_variables and inline_signature | length <= 88 %}{{ inline_signature }}
+{% else %}    def {{ item.operation_name | identifier }}(
+        self,
+{% if item.call_variables %}        *,
+{% for variable in item.call_variables %}        {{ variable.name | identifier }}: {{ variable | variable_annotation }} | None = None,
+{% endfor %}{% endif %}{% if ("    ) -> AbstractAsyncContextManager[" ~ returns ~ "]:") | length > 88 %}    ) -> AbstractAsyncContextManager[
+        {{ returns }}
+    ]:
+{% else %}    ) -> AbstractAsyncContextManager[{{ returns }}]:
+{% endif %}
+{% endif %}{% if item.summary %}        """{{ item.summary | docstring }}"""
+{% endif %}{% if binding %}        return {{ binding_module }}.{{ binding.open }}(
+            open_socket(
+                resolve_socket_endpoint(
+                    SOCKETS[SocketName.{{ item.name | constant }}],
+                    self._rpc.variables,
+{% if item.call_variables %}                    {
+{% for variable in item.call_variables %}                        {{ variable.name | literal }}: {{ variable.name | identifier }},
+{% endfor %}                    },
+{% endif %}                ),
+                self._rpc.socket_opener,
+            )
+        )
+{% else %}        return open_socket(
+            resolve_socket_endpoint(
+                SOCKETS[SocketName.{{ item.name | constant }}],
+                self._rpc.variables,
+{% if item.call_variables %}                {
+{% for variable in item.call_variables %}                    {{ variable.name | literal }}: {{ variable.name | identifier }},
+{% endfor %}                },
+{% endif %}            ),
+            self._rpc.socket_opener,
+        )
+{% endif %}{% endmacro %}

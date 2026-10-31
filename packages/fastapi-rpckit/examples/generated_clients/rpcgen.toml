@@ -1,0 +1,16 @@
+version = 1
+
+[contract]
+source = "automation:contract"
+output = "automation.openrpc.json"
+
+[[clients]]
+language = "python"
+output = "python/automation_client"
+package = "automation_client"
+with_transport = "websocket"
+
+[[clients]]
+language = "typescript"
+output = "typescript"
+with_transport = "websocket"

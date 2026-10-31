@@ -1,0 +1,74 @@
+export { {{ client_name }} } from "./client";
+{% if nodes %}export * from "./namespaces";
+{% endif %}export {
+  RpcClientError,
+  RpcConnectError,
+  RpcConnectionLostError,
+  RpcRemoteError,
+  RpcRequestTimeoutError,
+  RpcResponseValidationError,
+  RpcTransportError,
+} from "./core";
+export type {
+  JsonValue,
+  RpcClientCore,
+  RpcClientMiddleware,
+  RpcClientCall,
+  RpcClientCallOutcome,
+  RpcConnectionState,
+  RpcNotificationOverflowHandler,
+  RpcRouteInfo,
+  RpcRequestOptions,
+  RpcTransport,
+} from "./core";
+export * from "./errors";
+{% if routes or notifications %}export {{ "{ routes, notifications }" if routes and notifications else "{ routes }" if routes else "{ notifications }" }} from "./routes";
+{% endif %}{% if servers %}export { endpoints, servers } from "./endpoints";
+export type { Endpoint, ServerName } from "./endpoints";
+{% endif %}{% if with_websocket %}export { WebSocketTransport } from "./transport";
+export type {
+  WebSocketCredentials,
+  WebSocketCredentialsProvider,
+  WebSocketFactory,
+  WebSocketOptions,
+} from "./transport";
+{% endif %}{% if binary_streams or sockets %}export {
+  RpcStreamClosed,
+  RpcStreamFailed,
+  RpcStreamRefused,
+  RpcStreamsUnavailableError,
+} from "./core";
+{% endif %}{% if binary_streams %}export {
+  BinaryChannel,
+  BinaryReceiver,
+  BinarySender,
+  RpcStreamTimeout,
+  binaryStreams,
+  resolveStreamEndpoint,
+} from "./streams";
+export type {
+  BinaryInputEnd,
+  BinaryInputTransport,
+  BinaryStreamDirection,
+  BinaryStreamEndpoint,
+  BinaryStreamName,
+  BinaryStreamTransport,
+} from "./streams";
+{% if with_websocket %}export { BinaryWebSocketStream } from "./streams";
+export type { BinaryWebSocketFactory, BinaryWebSocketOptions } from "./streams";
+{% endif %}{% endif %}{% if sockets %}export { Socket, sockets, resolveSocketEndpoint } from "./sockets";
+export type {
+  SocketMessage,
+  SocketMessageType,
+  SocketEndpoint,
+  SocketName,
+  SocketOpener,
+  SocketProtocol,
+  SocketTransport,
+} from "./sockets";
+{% if with_websocket %}export { SocketConnectionStream } from "./sockets";
+export type {
+  SocketConnectionFactory,
+  SocketConnectionOptions,
+} from "./sockets";
+{% endif %}{% endif %}{% if models %}export type * from "./models";{% endif %}

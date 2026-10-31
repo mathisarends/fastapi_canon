@@ -1,0 +1,172 @@
+{
+  "contract_version": 1,
+  "protocol": 1,
+  "subprotocol": "fastapi-webrtc.v1",
+  "sessions": [
+    {
+      "name": "clock",
+      "path": "/rtc/clock",
+      "role": "offerer",
+      "description": "Watch a synthetic video track and receive a tick on every interval.",
+      "parameters": [
+        {
+          "name": "interval_ms",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "maximum": 5000,
+            "minimum": 50,
+            "default": 250
+          }
+        }
+      ],
+      "media": {
+        "audio": null,
+        "video": "send",
+        "max_incoming_tracks": 4
+      },
+      "channels": [
+        {
+          "name": "ticks",
+          "id": 0,
+          "negotiated": true,
+          "ordered": true,
+          "max_retransmits": null,
+          "max_packet_life_time_ms": null,
+          "max_message_bytes": 65536,
+          "receive_format": "none",
+          "send_format": "json",
+          "receive_schema": null,
+          "send_schema": {
+            "$ref": "#/definitions/Tick"
+          }
+        }
+      ]
+    },
+    {
+      "name": "practice",
+      "path": "/rtc/lessons/{lesson_id}",
+      "role": "answerer",
+      "description": "Speak with the tutor: audio is echoed back and prompts receive feedback.",
+      "parameters": [
+        {
+          "name": "lesson_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "token",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        }
+      ],
+      "media": {
+        "audio": "send_receive",
+        "video": null,
+        "max_incoming_tracks": 4
+      },
+      "channels": [
+        {
+          "name": "messages",
+          "id": 0,
+          "negotiated": true,
+          "ordered": true,
+          "max_retransmits": null,
+          "max_packet_life_time_ms": null,
+          "max_message_bytes": 65536,
+          "receive_format": "json",
+          "send_format": "json",
+          "receive_schema": {
+            "$ref": "#/definitions/Prompt"
+          },
+          "send_schema": {
+            "$ref": "#/definitions/Feedback"
+          }
+        }
+      ]
+    }
+  ],
+  "definitions": {
+    "Feedback": {
+      "description": "The tutor's answer to a prompt.",
+      "properties": {
+        "lesson": {
+          "title": "Lesson",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "words": {
+          "description": "Number of words in the prompt.",
+          "title": "Words",
+          "type": "integer"
+        },
+        "audio_frames": {
+          "default": 0,
+          "description": "Audio frames received from the learner so far.",
+          "title": "Audio Frames",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "lesson",
+        "text",
+        "words",
+        "audio_frames"
+      ],
+      "title": "Feedback",
+      "type": "object"
+    },
+    "Prompt": {
+      "description": "A sentence the learner typed.",
+      "properties": {
+        "text": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "Prompt",
+      "type": "object"
+    },
+    "Tick": {
+      "properties": {
+        "sequence": {
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "lesson_count": {
+          "title": "Lesson Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "sequence",
+        "lesson_count"
+      ],
+      "title": "Tick",
+      "type": "object"
+    }
+  }
+}

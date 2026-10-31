@@ -1,0 +1,206 @@
+{% from "typescript/macros.ts.j2" import operation, notification, stream, socket_method with context %}{% for line in imports %}{{ line }}
+{% endfor %}
+export class {{ client_name }} {
+{% for node in nodes %}  readonly {{ node.segment | identifier }}: {{ node.path | api_class }};
+{% endfor %}{% if nodes %}
+{% endif %}  readonly #rpc: RpcClientCore;
+
+  get closed(): Promise<unknown> {
+    return this.#rpc.closed;
+  }
+  get state(): RpcConnectionState {
+    return this.#rpc.state;
+  }
+  get states(): ReadonlyMap<string, RpcConnectionState> {
+    return this.#rpc.states;
+  }
+
+  get droppedNotifications(): number {
+    return this.#rpc.droppedNotifications;
+  }
+
+  constructor(
+{% if servers %}    transport:
+      | RpcTransport
+      | Readonly<Record<ServerName, RpcTransport>>
+      | RpcTransportSource,
+{% else %}    transport: RpcTransport | RpcTransportSource,
+{% endif %}    options?: {
+      readonly closeTransport?: boolean;
+
+      readonly middleware?: readonly RpcClientMiddleware[];
+      readonly retryAttempts?: number;
+      readonly retryAttemptTimeoutMs?: number;
+      readonly notificationQueueSize?: number;
+      readonly onOverflow?: RpcNotificationOverflowHandler;
+{% if binary_streams %}      readonly streamOpener?: BinaryStreamOpener;
+{% endif %}{% if sockets %}      readonly socketOpener?: SocketOpener;
+{% endif %}{% if binary_streams or sockets %}      readonly variables?: Readonly<Record<string, string>>;
+{% endif %}    },
+  ) {
+    this.#rpc = new RpcClientCore(transport, {
+      ...options,
+      supportsMetadata: {{ "true" if request_metadata else "false" }},
+    });
+{% for node in nodes %}    this.{{ node.segment | identifier }} = new {{ node.path | api_class }}(this.#rpc);
+{% endfor %}  }
+
+  /** Build a client on transports the caller owns, for tests and adapters. */
+  static withTransports(
+{% if servers %}    transports: RpcTransport | Readonly<Record<ServerName, RpcTransport>>,
+{% else %}    transports: RpcTransport,
+{% endif %}    options?: {
+      readonly closeTransport?: boolean;
+
+      readonly middleware?: readonly RpcClientMiddleware[];
+      readonly retryAttempts?: number;
+      readonly retryAttemptTimeoutMs?: number;
+      readonly notificationQueueSize?: number;
+      readonly onOverflow?: RpcNotificationOverflowHandler;
+{% if binary_streams %}      readonly streamOpener?: BinaryStreamOpener;
+{% endif %}{% if sockets %}      readonly socketOpener?: SocketOpener;
+{% endif %}{% if binary_streams or sockets %}      readonly variables?: Readonly<Record<string, string>>;
+{% endif %}    },
+  ): {{ client_name }} {
+    return new {{ client_name }}(transports, options);
+  }
+{% if with_websocket %}
+  /** Connect to every declared server, opening each socket on first use. */
+  static async connect(
+    options: {
+{% for variable in variables %}      readonly {{ variable.name | property }}?: {{ variable | server_variable_type }};
+{% endfor %}{% if servers | length == 1 %}      readonly url?: string | URL;
+{% endif %}      readonly servers?: EndpointOverrides;
+      readonly lazy?: boolean;
+      readonly requestTimeoutMs?: number | null;
+      readonly heartbeatIntervalMs?: number | null;
+      readonly heartbeatTimeoutMs?: number;
+      readonly consecutiveTimeoutLimit?: number;
+      readonly notificationQueueSize?: number;
+      readonly notificationOverflow?: "drop_oldest" | "close";
+      readonly onOverflow?: RpcNotificationOverflowHandler;
+      readonly socketFactory?: WebSocketFactory;
+      readonly credentials?: WebSocketCredentialsProvider;
+      readonly reconnect?: boolean;
+      readonly reconnectInitialDelayMs?: number;
+      readonly reconnectMaxDelayMs?: number;
+      readonly reconnectMaxAttempts?: number | null;
+      readonly reconnectShouldRetry?: (error: unknown) => boolean;
+      readonly reconnectRandom?: () => number;
+      readonly onStateChange?: (
+        server: ServerName,
+        state: RpcConnectionState,
+        error?: unknown,
+      ) => void;
+{% if binary_streams %}      readonly streamSocketFactory?: BinaryWebSocketFactory;
+      readonly streamQueueSize?: number;
+{% endif %}{% if sockets %}      readonly socketConnectionFactory?: SocketConnectionFactory;
+      readonly socketQueueSize?: number;
+{% endif %}
+      readonly middleware?: readonly RpcClientMiddleware[];
+      readonly retryAttempts?: number;
+      readonly retryAttemptTimeoutMs?: number;
+    } = {},
+  ): Promise<{{ client_name }}> {
+{% if variables %}    const variables: Record<string, string | undefined> = {
+{% for variable in variables %}      {{ variable.name | property }}: options.{{ variable.name | property }},
+{% endfor %}    };
+{% else %}    const variables: Record<string, string | undefined> = {};
+{% endif %}
+{% if servers | length == 1 %}    const overrides: EndpointOverrides = { ...options.servers };
+    if (options.url !== undefined) {
+      overrides[{{ servers[0].name | literal }}] ??= options.url;
+    }
+{% endif %}    const pool = new RpcTransportPool({
+      endpoints: [...resolveEndpoints(variables, {{ "overrides" if servers | length == 1 else "options.servers" }})],
+      reconnect: options.reconnect,
+      reconnectInitialDelayMs: options.reconnectInitialDelayMs,
+      reconnectMaxDelayMs: options.reconnectMaxDelayMs,
+      reconnectMaxAttempts:
+        options.reconnectMaxAttempts === undefined &&
+        options.credentials !== undefined
+          ? 3
+          : options.reconnectMaxAttempts,
+      reconnectShouldRetry: options.reconnectShouldRetry,
+      reconnectRandom: options.reconnectRandom,
+      onStateChange: (server, state, error) =>
+        options.onStateChange?.(server as ServerName, state, error),
+      requestTimeoutMs: options.requestTimeoutMs,
+      open: (endpoint, signal) =>
+        WebSocketTransport.open(endpoint.url, {
+          subprotocols: endpoint.subprotocols,
+          requestTimeoutMs: options.requestTimeoutMs,
+          heartbeatIntervalMs:
+            options.heartbeatIntervalMs === undefined
+              ? {{ "30_000" if heartbeat else "null" }}
+              : options.heartbeatIntervalMs,
+          heartbeatTimeoutMs: options.heartbeatTimeoutMs,
+          consecutiveTimeoutLimit: options.consecutiveTimeoutLimit,
+          notificationQueueSize: options.notificationQueueSize,
+          notificationOverflow: options.notificationOverflow,
+          onOverflow: options.onOverflow,
+          socketFactory: options.socketFactory,
+          credentials: options.credentials,
+          signal,
+        }),
+    });
+    if (!options.lazy) await pool.openAll();
+    return new {{ client_name }}(pool, {
+      middleware: options.middleware,
+      retryAttempts: options.retryAttempts,
+      retryAttemptTimeoutMs: options.retryAttemptTimeoutMs,
+      notificationQueueSize: options.notificationQueueSize,
+      onOverflow: options.onOverflow,
+{% if binary_streams %}      streamOpener: async (endpoint) => {
+        const credentials = await resolveWebSocketCredentials(
+          endpoint.url,
+          endpoint.subprotocols,
+          options.credentials,
+        );
+        return BinaryWebSocketStream.open(
+          { ...endpoint, ...credentials },
+          {
+            socketFactory: options.streamSocketFactory,
+            incomingQueueSize: options.streamQueueSize,
+          },
+        );
+      },
+{% endif %}{% if sockets %}      socketOpener: async (endpoint) => {
+        const credentials = await resolveWebSocketCredentials(
+          endpoint.url,
+          endpoint.subprotocols,
+          options.credentials,
+        );
+        return SocketConnectionStream.open(
+          { ...endpoint, ...credentials },
+          {
+            socketFactory: options.socketConnectionFactory,
+            incomingQueueSize: options.socketQueueSize,
+          },
+        );
+      },
+{% endif %}{% if binary_streams or sockets %}      variables: definedVariables(variables),
+{% endif %}    });
+  }
+{% endif %}{% for route in operations %}
+{{ operation(route, true) }}{% endfor %}{% for event in notifications %}
+{{ notification(event, true) }}{% endfor %}{% for item in streams %}
+{{ stream(item, true) }}{% endfor %}{% for item in root_sockets %}
+{{ socket_method(item, true) }}{% endfor %}
+  close(): Promise<void> {
+    return this.#rpc.close();
+  }
+
+  [Symbol.asyncDispose](): Promise<void> {
+    return this.close();
+  }
+}
+{% if with_websocket and (binary_streams or sockets) %}
+function definedVariables(
+  values: Readonly<Record<string, string | undefined>>,
+): Readonly<Record<string, string>> {
+  return Object.fromEntries(
+    Object.entries(values).filter(([, value]) => value !== undefined),
+  ) as Record<string, string>;
+}
+{% endif %}

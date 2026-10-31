@@ -1,0 +1,5 @@
+node_modules/
+tests/typescript/dist/
+tests/browser/dist/
+tests/browser/results/
+tests/browser/report/

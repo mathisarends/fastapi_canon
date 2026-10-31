@@ -1,0 +1,16 @@
+{% from "typescript/macros.ts.j2" import operation, notification, stream, socket_method with context %}{% for line in imports %}{{ line }}
+{% endfor %}
+{% for node in nodes %}export class {{ node.path | api_class }} {
+{% for child in node.children %}  readonly {{ child.segment | identifier }}: {{ child.path | api_class }};
+{% endfor %}{% if node.children %}
+  constructor(private readonly rpc: RpcClientCore) {
+{% for child in node.children %}    this.{{ child.segment | identifier }} = new {{ child.path | api_class }}(rpc);
+{% endfor %}  }
+{% else %}  constructor(private readonly rpc: RpcClientCore) {}
+{% endif %}{% for route in node.operations %}
+{{ operation(route, false) }}{% endfor %}{% for event in node.notifications %}
+{{ notification(event, false) }}{% endfor %}{% for item in node.streams %}
+{{ stream(item, false) }}{% endfor %}{% for item in node.sockets %}
+{{ socket_method(item, false) }}{% endfor %}}{% if not loop.last %}
+
+{% endif %}{% endfor %}

@@ -1,0 +1,371 @@
+import asyncio
+import logging
+import random
+from collections.abc import Awaitable, Callable, Iterable, Mapping
+from math import isfinite
+from types import MappingProxyType
+from typing import Protocol
+
+from .errors import (
+    RpcConnectError,
+    RpcConnectionLostError,
+    RpcTransportError,
+)
+from .metadata import RpcConnectionState
+from .transport import RpcTransport
+
+
+class _Closable(Protocol):
+    async def close(self) -> None: ...
+
+
+class _ConnectionEndpoint[ServerT: str](Protocol):
+    @property
+    def server(self) -> ServerT: ...
+
+    @property
+    def url(self) -> str: ...
+
+    @property
+    def subprotocols(self) -> tuple[str, ...]: ...
+
+
+class _TransportFactory(Protocol):
+    def __call__(
+        self,
+        url: str,
+        /,
+        *,
+        subprotocols: tuple[str, ...],
+        request_timeout: float | None,
+        notification_queue_size: int,
+        notification_overflow: str,
+    ) -> Awaitable[RpcTransport]: ...
+
+
+class RpcTransportPool[ServerT: str]:
+    """Shared connection attempts and proactive recovery per configured server."""
+
+    def __init__(
+        self,
+        *,
+        endpoints: Iterable[_ConnectionEndpoint[ServerT]],
+        transport_factory: _TransportFactory,
+        request_timeout: float | None = 30.0,
+        notification_queue_size: int = 100,
+        notification_overflow: str = "drop_oldest",
+        reconnect: bool = False,
+        reconnect_initial_delay: float = 0.25,
+        reconnect_max_delay: float = 5.0,
+        reconnect_max_attempts: int | None = None,
+        reconnect_should_retry: Callable[[Exception], bool] | None = None,
+        reconnect_random: Callable[[], float] | None = None,
+        on_state_change: Callable[
+            [ServerT, RpcConnectionState, BaseException | None], None
+        ]
+        | None = None,
+    ) -> None:
+        if (
+            not isfinite(reconnect_initial_delay)
+            or not isfinite(reconnect_max_delay)
+            or reconnect_initial_delay <= 0
+            or reconnect_max_delay < reconnect_initial_delay
+        ):
+            raise ValueError("Invalid reconnect backoff delays")
+        if reconnect_max_attempts is not None and (
+            type(reconnect_max_attempts) is not int or reconnect_max_attempts < 0
+        ):
+            raise ValueError("reconnect_max_attempts must be non-negative or None")
+        self._endpoints = {endpoint.server: endpoint for endpoint in endpoints}
+        self._transport_factory = transport_factory
+        self._request_timeout = request_timeout
+        self._notification_queue_size = notification_queue_size
+        self._notification_overflow = notification_overflow
+        self.reconnect = reconnect
+        self._reconnect_initial_delay = reconnect_initial_delay
+        self._reconnect_max_delay = reconnect_max_delay
+        self._max_attempts = reconnect_max_attempts
+        self._should_retry = reconnect_should_retry
+        self._random = reconnect_random or random.random
+        self._on_state_change = on_state_change
+        self._transports: dict[ServerT, RpcTransport] = {}
+        self._connecting: dict[ServerT, asyncio.Task[RpcTransport]] = {}
+        self._ever_connected: set[ServerT] = set()
+        self._states = {name: RpcConnectionState.CONNECTING for name in self._endpoints}
+        self._failures: dict[ServerT, BaseException | None] = {}
+        self._closing = asyncio.Event()
+        self._closed_future: asyncio.Future[BaseException | None] | None = None
+
+    @property
+    def request_timeout(self) -> float | None:
+        return self._request_timeout
+
+    def retry_delay(self, retry: int) -> float:
+        fraction = self._random()
+        if not isfinite(fraction) or not 0 <= fraction <= 1:
+            raise ValueError("reconnect_random must return a value between 0 and 1")
+        return fraction * min(
+            self._reconnect_initial_delay * 2 ** min(retry - 1, 30),
+            self._reconnect_max_delay,
+        )
+
+    @property
+    def states(self) -> Mapping[ServerT, RpcConnectionState]:
+        return MappingProxyType(dict(self._states))
+
+    @property
+    def state(self) -> RpcConnectionState:
+        if self._closing.is_set() or self._failures:
+            return RpcConnectionState.CLOSED
+        if RpcConnectionState.RECONNECTING in self._states.values():
+            return RpcConnectionState.RECONNECTING
+        if RpcConnectionState.CONNECTED in self._states.values():
+            return RpcConnectionState.CONNECTED
+        return RpcConnectionState.CONNECTING
+
+    @property
+    def closed(self) -> asyncio.Future[BaseException | None]:
+        if self._closed_future is None:
+            self._closed_future = asyncio.get_running_loop().create_future()
+        return self._closed_future
+
+    def _transition(self, name, state, error=None, *, first=False):
+        if self._closing.is_set() and state != RpcConnectionState.CLOSED:
+            return
+        if not first and self._states[name] == state:
+            return
+        self._states[name] = state
+        if self._on_state_change is not None:
+            try:
+                self._on_state_change(name, state, error)
+            except Exception:
+                logging.getLogger(__name__).exception("RPC state callback failed")
+
+    def _retryable(self, error: BaseException) -> bool:
+        if not isinstance(error, Exception):
+            return False
+        if self._should_retry is not None:
+            try:
+                return bool(self._should_retry(error))
+            except Exception:
+                logging.getLogger(__name__).exception("RPC retry classifier failed")
+                return False
+        if isinstance(error, RpcConnectError):
+            return not error.permanent
+        if isinstance(error, RpcConnectionLostError):
+            if error.code == 1008:
+                return error.reason == "credentials_expired"
+            return error.code not in (1002, 1003, 1007, 1008, 1009)
+        return False
+
+    def _terminal(self, name, error):
+        self._failures[name] = error
+        if not self.closed.done():
+            self.closed.set_result(error)
+        self._transition(name, RpcConnectionState.CLOSED, error)
+
+    def _transport_closed(self, name, transport, result):
+        if self._closing.is_set() or self._transports.get(name) is not transport:
+            return
+        self._transports.pop(name, None)
+        error = result.result()
+        if (
+            error is None
+            or not self.reconnect
+            or not self._retryable(error)
+            or self._max_attempts == 0
+        ):
+            self._terminal(name, error)
+            return
+        self._transition(name, RpcConnectionState.RECONNECTING, error)
+        self._start(name)
+
+    def _start(self, name):
+        task = self._connecting.get(name)
+        if task is None or task.done():
+            task = asyncio.create_task(self._connect(name))
+            self._connecting[name] = task
+
+            def done(result):
+                if self._connecting.get(name) is result:
+                    self._connecting.pop(name, None)
+                if not result.cancelled():
+                    error = result.exception()  # Proactive failures can have no waiter.
+                    if (
+                        error is not None
+                        and name not in self._failures
+                        and not self._closing.is_set()
+                    ):
+                        self._terminal(name, error)
+
+            task.add_done_callback(done)
+        return task
+
+    async def get(self, server: str | None) -> RpcTransport:
+        if self._closing.is_set():
+            raise RpcConnectionLostError(sent=False, reason="The RPC client is closed")
+        name = self._server_name(server)
+        if name in self._failures:
+            raise self._failures[name] or RpcConnectionLostError(
+                sent=False, reason="The RPC server connection is closed"
+            )
+        transport = self._transports.get(name)
+        if transport is not None:
+            closed = getattr(transport, "closed", None)
+            if isinstance(closed, asyncio.Future) and closed.done():
+                self._transport_closed(name, transport, closed)
+                if name in self._failures:
+                    raise self._failures[name] or RpcConnectionLostError(sent=False)
+            else:
+                return transport
+        try:
+            return await asyncio.shield(self._start(name))
+        except asyncio.CancelledError:
+            if self._closing.is_set() and not asyncio.current_task().cancelling():
+                raise RpcConnectionLostError(
+                    sent=False, reason="The RPC client is closed"
+                ) from None
+            raise
+
+    async def _connect(self, name):
+        recovering = name in self._ever_connected
+        if not recovering:
+            self._transition(name, RpcConnectionState.CONNECTING, first=True)
+        delay = self._reconnect_initial_delay
+        attempts = 0
+        endpoint = self._endpoints[name]
+        while not self._closing.is_set():
+            attempts += 1
+            waiting = asyncio.timeout(self._request_timeout)
+            try:
+                async with waiting:
+                    transport = await self._transport_factory(
+                        endpoint.url,
+                        subprotocols=endpoint.subprotocols,
+                        request_timeout=self._request_timeout,
+                        notification_queue_size=self._notification_queue_size,
+                        notification_overflow=self._notification_overflow,
+                    )
+            except Exception as error:
+                if isinstance(error, TimeoutError) and waiting.expired():
+                    mapped = RpcConnectError("RPC connection attempt timed out")
+                    mapped.__cause__ = error
+                    error = mapped
+                if (
+                    not recovering
+                    or not self.reconnect
+                    or not self._retryable(error)
+                    or (
+                        self._max_attempts is not None
+                        and attempts >= self._max_attempts
+                    )
+                ):
+                    self._terminal(name, error)
+                    raise error
+                fraction = self._random()
+                if not isfinite(fraction) or not 0 <= fraction <= 1:
+                    error = ValueError(
+                        "reconnect_random must return a value between 0 and 1"
+                    )
+                    self._terminal(name, error)
+                    raise error
+                await asyncio.sleep(fraction * delay)
+                delay = min(self._reconnect_max_delay, delay * 2)
+                continue
+            if self._closing.is_set():
+                await transport.close()
+                raise RpcConnectionLostError(
+                    sent=False, reason="The RPC client is closed"
+                )
+            self._transports[name] = transport
+            self._ever_connected.add(name)
+            self._transition(name, RpcConnectionState.CONNECTED)
+            closed = getattr(transport, "closed", None)
+            if isinstance(closed, asyncio.Future):
+                closed.add_done_callback(
+                    lambda result, transport=transport: self._transport_closed(
+                        name, transport, result
+                    )
+                )
+            return transport
+        raise RpcConnectionLostError(sent=False, reason="The RPC client is closed")
+
+    async def open_all(self) -> None:
+        waiters = [asyncio.create_task(self.get(server)) for server in self._endpoints]
+        try:
+            await asyncio.gather(*waiters)
+        except BaseException:
+            await self.close()
+            raise
+        finally:
+            await asyncio.gather(*waiters, return_exceptions=True)
+
+    async def close(self) -> None:
+        if self._closing.is_set():
+            return
+        self._closing.set()
+        if not self.closed.done():
+            self.closed.set_result(None)
+        for name in self._endpoints:
+            self._transition(name, RpcConnectionState.CLOSED)
+        tasks = tuple(self._connecting.values())
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        self._connecting.clear()
+        transports = tuple(self._transports.values())
+        self._transports.clear()
+        await asyncio.gather(
+            *(transport.close() for transport in transports), return_exceptions=True
+        )
+
+    def _server_name(self, server: str | None) -> ServerT:
+        if server is not None:
+            for name in self._endpoints:
+                if name == server:
+                    return name
+            raise RpcTransportError(f"No endpoint is configured for server {server!r}")
+        if len(self._endpoints) == 1:
+            return next(iter(self._endpoints))
+        raise RpcTransportError(
+            "The route has no server and cannot be dispatched across "
+            "multiple transports"
+        )
+
+
+class ClientConnection[ClientT: _Closable, ServerT: str]:
+    """The client of a ``connect`` call, entered, awaited, or opened.
+
+    ``async with`` closes the client again; awaiting the connection or calling
+    ``open()`` hands it to the caller, who closes it.
+    """
+
+    def __init__(
+        self,
+        *,
+        client_factory: Callable[[RpcTransportPool[ServerT]], ClientT],
+        pool: RpcTransportPool[ServerT],
+        eager: bool = False,
+    ) -> None:
+        self._client_factory = client_factory
+        self._pool = pool
+        self._eager = eager
+        self._client: ClientT | None = None
+
+    async def open(self) -> ClientT:
+        if self._client is not None:
+            raise RuntimeError("A client connection cannot be opened more than once")
+        if self._eager:
+            await self._pool.open_all()
+        self._client = self._client_factory(self._pool)
+        return self._client
+
+    async def __aenter__(self) -> ClientT:
+        return await self.open()
+
+    def __await__(self):
+        return self.open().__await__()
+
+    async def __aexit__(self, *args: object) -> None:
+        if self._client is not None:
+            await self._client.close()

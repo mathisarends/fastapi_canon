@@ -1,0 +1,250 @@
+{
+  "openrpc": "1.4.1",
+  "info": {
+    "title": "Typed Socket",
+    "version": "1.0.0",
+    "description": "Typed JSON-RPC API."
+  },
+  "servers": [
+    {
+      "name": "rpc",
+      "url": "ws://{host}/rpc",
+      "x-rpckit-transport": {
+        "type": "websocket",
+        "messageEncoding": "json",
+        "frameType": "text"
+      },
+      "variables": {
+        "host": {
+          "default": "{host}"
+        }
+      }
+    }
+  ],
+  "methods": [
+    {
+      "name": "messages.health",
+      "paramStructure": "by-name",
+      "params": [],
+      "result": {
+        "name": "result",
+        "schema": {
+          "type": "boolean"
+        }
+      },
+      "x-rpc-request-schema": {
+        "$ref": "#/components/schemas/HealthRequest"
+      },
+      "servers": [
+        {
+          "name": "rpc",
+          "url": "ws://{host}/rpc",
+          "x-rpckit-transport": {
+            "type": "websocket",
+            "messageEncoding": "json",
+            "frameType": "text"
+          },
+          "variables": {
+            "host": {
+              "default": "{host}"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "components": {
+    "schemas": {
+      "Ping": {
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "const": "ping",
+            "default": "ping",
+            "title": "Type",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "title": "Ping",
+        "type": "object"
+      },
+      "Pong": {
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "const": "pong",
+            "default": "pong",
+            "title": "Type",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "title": "Pong",
+        "type": "object"
+      },
+      "HealthRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "title": "HealthRequest",
+        "properties": {
+          "jsonrpc": {
+            "const": "2.0",
+            "type": "string"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "method": {
+            "const": "messages.health",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": false,
+            "type": "object"
+          },
+          "meta": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "propertyNames": {
+              "enum": [
+                "traceparent",
+                "tracestate",
+                "baggage"
+              ]
+            },
+            "maxProperties": 3,
+            "x-rpc-max-bytes": 4096
+          }
+        },
+        "required": [
+          "jsonrpc",
+          "method"
+        ]
+      },
+      "MessagesPingClientMessage": {
+        "$ref": "#/components/schemas/Ping"
+      },
+      "MessagesPingServerMessage": {
+        "$ref": "#/components/schemas/Pong"
+      },
+      "MessagesSessionClientMessage": {
+        "$ref": "#/components/schemas/Ping"
+      },
+      "MessagesSessionServerMessage": {
+        "$ref": "#/components/schemas/Pong"
+      }
+    }
+  },
+  "x-rpc-protocol-version": 1,
+  "x-rpc-heartbeat": {
+    "method": "$/ping",
+    "params": {},
+    "result": null
+  },
+  "x-rpc-request-metadata": {
+    "version": 1,
+    "location": "envelope",
+    "member": "meta",
+    "maxBytes": 4096,
+    "allowedKeys": [
+      "traceparent",
+      "tracestate",
+      "baggage"
+    ]
+  },
+  "x-rpc-request-cancellation": {
+    "method": "$/cancelRequest",
+    "notification": true,
+    "params": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "error": {
+      "code": -32800,
+      "x-rpckit-code": "request_cancelled"
+    }
+  },
+  "x-rpc-notifications": [],
+  "x-rpc-subscriptions": [],
+  "x-rpc-notification-types": [],
+  "x-rpckit-sockets": [
+    {
+      "name": "messages.ping",
+      "url": "ws://{host}/messages/ping",
+      "messageTypes": [
+        "text"
+      ],
+      "variables": {
+        "host": {
+          "default": "{host}"
+        }
+      },
+      "messages": {
+        "client": {
+          "$ref": "#/components/schemas/MessagesPingClientMessage"
+        },
+        "server": {
+          "$ref": "#/components/schemas/MessagesPingServerMessage"
+        }
+      }
+    },
+    {
+      "name": "messages.session",
+      "url": "ws://{host}/messages/session",
+      "messageTypes": [
+        "text"
+      ],
+      "variables": {
+        "host": {
+          "default": "{host}"
+        }
+      },
+      "messages": {
+        "client": {
+          "$ref": "#/components/schemas/MessagesSessionClientMessage"
+        },
+        "server": {
+          "$ref": "#/components/schemas/MessagesSessionServerMessage"
+        }
+      }
+    }
+  ]
+}

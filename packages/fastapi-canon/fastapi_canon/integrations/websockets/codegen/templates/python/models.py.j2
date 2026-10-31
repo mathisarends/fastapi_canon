@@ -1,0 +1,21 @@
+{% if models %}class {{ base_model_name }}(BaseModel):
+    model_config = ConfigDict(validate_by_name=True)
+{% if declarations %}
+
+
+{% endif %}{% endif %}{% for declaration in declarations %}{% if declaration | enum_decl %}class {{ declaration.name | schema_name }}({{ "IntEnum" if declaration.integral else "StrEnum" }}):
+{% for member in declaration.members %}    {{ member.name }} = {{ member.value | literal }}
+{% else %}    pass
+{% endfor %}{% elif declaration | model_decl %}class {{ declaration.name | schema_name }}({{ base_model_name }}):
+{% if declaration.closed %}    model_config = ConfigDict(extra="forbid")
+{% endif %}{% for field in declaration.fields %}{{ field | field_line }}
+{% else %}    pass
+{% endfor %}{% else %}{{ declaration | type_alias }}
+{% endif %}{% if not loop.last %}
+
+
+{% endif %}{% endfor %}{% if declarations and models %}
+
+
+{% endif %}{% for model in models %}{{ model.name | schema_name }}.model_rebuild()
+{% endfor %}

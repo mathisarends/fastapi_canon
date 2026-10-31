@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage*.xml
+coverage*.lcov
+htmlcov/
+dist/
+node_modules/
+tests/typescript/dist/
+*.egg-info/

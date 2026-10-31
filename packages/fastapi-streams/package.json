@@ -1,0 +1,14 @@
+{
+  "name": "fastapi-streams-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tests/typescript/tsconfig.json --noEmit",
+    "test": "tsc -p tests/typescript/tsconfig.json && node --test tests/typescript/dist/tests/typescript/*.test.js",
+    "test:coverage": "tsc -p tests/typescript/tsconfig.json && node --test --experimental-test-coverage --test-coverage-include=**/examples/agent_runs/generated/transport/*.js --test-coverage-lines=95 --test-coverage-branches=90 --test-coverage-functions=90 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage-typescript.lcov tests/typescript/dist/tests/typescript/*.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}

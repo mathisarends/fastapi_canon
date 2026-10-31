@@ -1,0 +1,12 @@
+{% for declaration in declarations %}{% if declaration | enum_decl %}export const {{ declaration.name | schema_name }} = {
+{% for member in declaration.members %}  {{ member.name }}: {{ member.value | literal }},
+{% endfor %}} as const;
+
+{{ declaration.name | enum_type_alias }}
+{% elif declaration | model_decl %}{% if declaration.fields %}export type {{ declaration.name | schema_name }} = {
+{% for field in declaration.fields %}  {{ field.name | property }}{{ "?" if field | optional_field else "" }}: {{ field.type | type }};
+{% endfor %}};
+{% else %}export type {{ declaration.name | schema_name }} = Record<string, never>;
+{% endif %}{% else %}export type {{ declaration.name | schema_name }} = {{ declaration.target | type }};
+{% endif %}{% if not loop.last %}
+{% endif %}{% endfor %}

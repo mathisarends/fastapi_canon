@@ -1,0 +1,29 @@
+{
+  "generator": "fastapi-canon",
+  "generatorVersion": "0.9.0",
+  "layoutVersion": 10,
+  "language": "python",
+  "contractSha256": "37366233e8061d0ddb246fbc75939bf9c611ecf8f52f62dc7ca95e2cba39787f",
+  "files": [
+    ".rpcgen/manifest.json",
+    "__init__.py",
+    "client.py",
+    "endpoints.py",
+    "errors.py",
+    "internal/__init__.py",
+    "internal/connection.py",
+    "internal/core.py",
+    "internal/errors.py",
+    "internal/metadata.py",
+    "internal/transport.py",
+    "internal/unset.py",
+    "models.py",
+    "namespaces/__init__.py",
+    "namespaces/browser.py",
+    "namespaces/tasks.py",
+    "routes.py",
+    "sockets.py",
+    "streams.py",
+    "transport.py"
+  ]
+}

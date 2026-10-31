@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: workspace-lint
+        name: Lint and format workspace members
+        entry: uv run --locked python scripts/check.py lint
+        language: system
+        pass_filenames: false
+        always_run: true

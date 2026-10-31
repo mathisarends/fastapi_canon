@@ -1,0 +1,181 @@
+{
+  "openrpc": "1.4.1",
+  "info": {
+    "title": "Calculator",
+    "version": "1.0.0",
+    "description": "Typed JSON-RPC API."
+  },
+  "servers": [
+    {
+      "name": "rpc",
+      "url": "ws://{host}/calculator/rpc",
+      "x-rpckit-transport": {
+        "type": "websocket",
+        "messageEncoding": "json",
+        "frameType": "text"
+      },
+      "variables": {
+        "host": {
+          "default": "localhost:8000"
+        }
+      }
+    }
+  ],
+  "methods": [
+    {
+      "name": "calculator.operations",
+      "summary": "List the operations the calc protocol supports.",
+      "paramStructure": "by-name",
+      "params": [],
+      "result": {
+        "name": "result",
+        "schema": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "x-rpc-request-schema": {
+        "$ref": "#/components/schemas/OperationsRequest"
+      },
+      "servers": [
+        {
+          "name": "rpc",
+          "url": "ws://{host}/calculator/rpc",
+          "x-rpckit-transport": {
+            "type": "websocket",
+            "messageEncoding": "json",
+            "frameType": "text"
+          },
+          "variables": {
+            "host": {
+              "default": "localhost:8000"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "components": {
+    "schemas": {
+      "OperationsRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "title": "OperationsRequest",
+        "properties": {
+          "jsonrpc": {
+            "const": "2.0",
+            "type": "string"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "method": {
+            "const": "calculator.operations",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": false,
+            "type": "object"
+          },
+          "meta": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "propertyNames": {
+              "enum": [
+                "traceparent",
+                "tracestate",
+                "baggage"
+              ]
+            },
+            "maxProperties": 3,
+            "x-rpc-max-bytes": 4096
+          }
+        },
+        "required": [
+          "jsonrpc",
+          "method"
+        ],
+        "description": "List the operations the calc protocol supports."
+      }
+    }
+  },
+  "x-rpc-protocol-version": 1,
+  "x-rpc-heartbeat": {
+    "method": "$/ping",
+    "params": {},
+    "result": null
+  },
+  "x-rpc-request-metadata": {
+    "version": 1,
+    "location": "envelope",
+    "member": "meta",
+    "maxBytes": 4096,
+    "allowedKeys": [
+      "traceparent",
+      "tracestate",
+      "baggage"
+    ]
+  },
+  "x-rpc-request-cancellation": {
+    "method": "$/cancelRequest",
+    "notification": true,
+    "params": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "error": {
+      "code": -32800,
+      "x-rpckit-code": "request_cancelled"
+    }
+  },
+  "x-rpc-notifications": [],
+  "x-rpc-subscriptions": [],
+  "x-rpc-notification-types": [],
+  "x-rpckit-sockets": [
+    {
+      "name": "calculator.session",
+      "url": "ws://{host}/calculator/session",
+      "messageTypes": [
+        "text"
+      ],
+      "summary": "Evaluate calc commands.",
+      "variables": {
+        "host": {
+          "default": "localhost:8000"
+        }
+      },
+      "x-rpckit-protocol": {
+        "name": "calc",
+        "version": "1",
+        "encoding": "json"
+      }
+    }
+  ]
+}

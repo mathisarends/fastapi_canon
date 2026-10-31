@@ -1,0 +1,18 @@
+version = 1
+
+[contract]
+source = "calculator:contract"
+output = "calculator.openrpc.json"
+
+[[clients]]
+language = "python"
+output = "python/calc_client"
+package = "calc_client"
+with_transport = "websocket"
+bindings = ["calc_binding:BINDING"]
+
+[[clients]]
+language = "typescript"
+output = "typescript"
+with_transport = "websocket"
+bindings = ["calc_binding:BINDING"]

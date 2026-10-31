@@ -1,0 +1,20 @@
+{
+  "allow": [
+    {
+      "id": "unsupported-constraint:7fa96a938b14db4266a4",
+      "reason": "The TypeScript SDK intentionally provides static request shapes; the server enforces prompt maxLength."
+    },
+    {
+      "id": "unsupported-constraint:cb8edb5ee90fd2018aec",
+      "reason": "The TypeScript SDK intentionally provides static request shapes; the server enforces prompt minLength."
+    },
+    {
+      "id": "unsupported-constraint:3b63af523ebbe9e12079",
+      "reason": "The TypeScript SDK intentionally provides static parameter types; the server enforces delay maximum."
+    },
+    {
+      "id": "unsupported-constraint:ae38575a49205085fceb",
+      "reason": "The TypeScript SDK intentionally provides static parameter types; the server enforces delay minimum."
+    }
+  ]
+}

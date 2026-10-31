@@ -1,0 +1,142 @@
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
+from enum import StrEnum
+from types import MappingProxyType
+from typing import Any, Literal
+
+from pydantic import BaseModel, TypeAdapter
+
+from .errors import RpcRemoteError
+from .transport import RpcTransport
+
+type RpcNotificationOverflowHandler = Callable[
+    [str | None, int, Literal["transport", "subscriber"]], None
+]
+
+
+class RpcConnectionState(StrEnum):
+    CONNECTING = "connecting"
+    CONNECTED = "connected"
+    RECONNECTING = "reconnecting"
+    CLOSED = "closed"
+
+
+@dataclass(frozen=True, slots=True)
+class RpcContractInfo:
+    title: str
+    version: str
+    protocol_version: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RpcRouteInfo[ParamsT: BaseModel | None, ResultT]:
+    method: str
+    result_adapter: TypeAdapter[ResultT]
+    server: str | None = None
+    idempotent: bool = False
+    params_adapter: TypeAdapter[Any] | None = None
+
+
+@dataclass(slots=True)
+class RpcClientCallOutcome:
+    result: Any = None
+    error: BaseException | None = None
+    duration: float = 0.0
+
+
+@dataclass(slots=True)
+class RpcClientCall:
+    route: RpcRouteInfo[Any, Any]
+    params: "JsonValue"
+    attempt: int
+    call_id: str
+    server: str | None = None
+    transport: RpcTransport | None = None
+    outcome: RpcClientCallOutcome | None = None
+    metadata: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def duration(self) -> float | None:
+        return None if self.outcome is None else self.outcome.duration
+
+
+@dataclass(frozen=True, slots=True)
+class RpcNotificationInfo[PayloadT]:
+    method: str
+    message_adapter: TypeAdapter[Any]
+    payload_adapter: TypeAdapter[PayloadT]
+    server: str | None = None
+    error_mapper: Callable[[int, str, str, Any], RpcRemoteError] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RpcServerVariable:
+    default: str
+    description: str = ""
+    enum: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.enum and self.default not in self.enum:
+            raise ValueError(
+                "The server variable default must be one of its enum values"
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class RpcTransportDescriptor:
+    type: str
+    message_encoding: str | None = None
+    subprotocols: tuple[str, ...] = ()
+    options: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "options", MappingProxyType(dict(self.options)))
+
+
+@dataclass(frozen=True, slots=True)
+class RpcServerInfo:
+    name: str
+    url: str
+    summary: str = ""
+    description: str = ""
+    variables: Mapping[str, RpcServerVariable] = field(default_factory=dict)
+    transport: RpcTransportDescriptor | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "variables", MappingProxyType(dict(self.variables)))
+
+    def resolve(self, values: Mapping[str, str] | None = None, /, **kwargs: str) -> str:
+        return resolve_url_template(
+            f"server {self.name!r}",
+            self.url,
+            self.variables,
+            {**dict(values or {}), **kwargs},
+        )
+
+
+def resolve_url_template(
+    subject: str,
+    template: str,
+    variables: Mapping[str, RpcServerVariable],
+    values: Mapping[str, str | None],
+) -> str:
+    """Fill one URL template, rejecting unknown values and invalid enums."""
+    supplied = {name: value for name, value in values.items() if value is not None}
+    unknown = sorted(set(supplied) - set(variables))
+    if unknown:
+        raise ValueError(f"Unknown variables for {subject}: {', '.join(unknown)}")
+    resolved = template
+    for name, variable in variables.items():
+        value = supplied.get(name, variable.default)
+        if variable.enum and value not in variable.enum:
+            raise ValueError(
+                f"Invalid value {value!r} for variable {name!r} of {subject}; "
+                f"expected one of {variable.enum!r}"
+            )
+        resolved = resolved.replace(f"{% raw %}{{{name}}}{% endraw %}", value)
+    return resolved
+
+
+type JsonValue = (
+    None | bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"]
+)

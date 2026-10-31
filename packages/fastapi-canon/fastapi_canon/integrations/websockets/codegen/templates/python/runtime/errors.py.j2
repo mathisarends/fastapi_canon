@@ -1,0 +1,172 @@
+from typing import Any, Self
+
+from pydantic import ValidationError
+
+
+class RpcClientError(Exception):
+    """Base error raised by the client."""
+
+
+class RpcRemoteError(RpcClientError):
+    def __init__(
+        self,
+        rpc_code: int,
+        code: str,
+        message: str,
+        details: Any = None,
+    ) -> None:
+        super().__init__(f"RPC error {code or rpc_code}: {message}")
+        self.rpc_code = rpc_code
+        self.code = code
+        self.message = message
+        self.details = details
+
+
+class RpcParseError(RpcRemoteError):
+    code = "parse_error"
+
+
+class RpcInvalidRequestError(RpcRemoteError):
+    code = "invalid_request"
+
+
+class RpcMethodNotFoundError(RpcRemoteError):
+    code = "method_not_found"
+
+
+class RpcInvalidParamsError(RpcRemoteError):
+    code = "invalid_params"
+
+
+class RpcInternalError(RpcRemoteError):
+    code = "internal_error"
+
+
+class RpcTransportError(RpcClientError):
+    """Raised when the connection cannot serve a request."""
+
+
+class RpcRequestTimeoutError(RpcTransportError):
+    def __init__(self, method: str, timeout: float | None) -> None:
+        super().__init__(
+            f"RPC request {method!r} timed out after {timeout}s (request timeout)"
+        )
+        self.method = method
+        self.timeout = timeout
+
+
+class RpcConnectionLostError(RpcTransportError):
+    def __init__(
+        self, *, sent: bool, code: int | None = None, reason: str = ""
+    ) -> None:
+        super().__init__(f"RPC connection lost ({code}): {reason}")
+        self.sent = sent
+        self.code = code
+        self.reason = reason
+
+    @classmethod
+    def from_exception(
+        cls, error: BaseException | None, *, sent: bool, socket: Any = None
+    ) -> Self:
+        code, reason = _close_info(error, socket)
+        failure = cls(sent=sent, code=code, reason=reason)
+        failure.__cause__ = (
+            error.__cause__
+            if isinstance(error, cls) and error.__cause__ is not None
+            else error
+        )
+        return failure
+
+
+class RpcConnectError(RpcTransportError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        permanent: bool = False,
+        status: int | None = None,
+        code: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.permanent = permanent
+        self.status = status
+        self.code = code
+
+    @classmethod
+    def from_exception(cls, error: Exception) -> Self:
+        response = getattr(error, "response", None)
+        status = getattr(response, "status_code", None)
+        if status is None:
+            status = getattr(error, "status_code", None)
+        status = (
+            status if isinstance(status, int) and not isinstance(status, bool) else None
+        )
+        code, _ = _close_info(error)
+        failure = cls(
+            "Could not open the RPC connection",
+            permanent=status in (401, 403, 404) or code == 1008,
+            status=status,
+            code=code,
+        )
+        failure.__cause__ = error
+        return failure
+
+
+def _close_info(
+    error: BaseException | None, socket: Any = None
+) -> tuple[int | None, str]:
+    received = getattr(error, "rcvd", None)
+    code = getattr(received, "code", None)
+    if code is None:
+        code = getattr(error, "raw_close_code", None)
+    if code is None:
+        code = getattr(error, "close_code", getattr(error, "code", None))
+    if not isinstance(code, int) or isinstance(code, bool):
+        code = getattr(socket, "close_code", None)
+    code = code if isinstance(code, int) and not isinstance(code, bool) else None
+    reason = getattr(received, "reason", None)
+    if reason is None:
+        reason = getattr(error, "reason", None)
+    if reason is None:
+        reason = getattr(socket, "close_reason", None)
+    if reason is None:
+        reason = "The WebSocket transport is closed"
+    return code, str(reason)
+
+
+class RpcStreamsUnavailableError(RpcClientError):
+    """No binary stream opener was configured for this client."""
+
+
+class RpcStreamClosed(RpcClientError):
+    """Raised when a binary stream ended because the server closed it."""
+
+
+class RpcStreamFailed(RpcClientError):
+    """Raised when the server closed a binary stream with an error code."""
+
+    def __init__(self, code: int, reason: str = "") -> None:
+        super().__init__(
+            f"The binary stream closed with code {code}"
+            + (f": {reason}" if reason else "")
+        )
+        self.code = code
+        self.reason = reason
+
+
+class RpcStreamRefused(RpcStreamFailed):
+    """Raised when the server refused a binary stream by policy (1008)."""
+
+
+class RpcResponseValidationError(RpcClientError):
+    def __init__(self, method: str, error: ValidationError) -> None:
+        super().__init__(f"Invalid response for RPC method {method!r}: {error}")
+        self.method = method
+        self.validation_error = error
+
+
+class RpcNotificationValidationError(RpcClientError):
+    def __init__(self, method: str, error: ValidationError) -> None:
+        super().__init__(f"Invalid notification for RPC method {method!r}: {error}")
+        self.method = method
+        self.validation_error = error

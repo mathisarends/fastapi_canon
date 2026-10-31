@@ -1,0 +1,16 @@
+version = 1
+
+[contract]
+source = "ping:contract"
+output = "ping.openrpc.json"
+
+[[clients]]
+language = "python"
+output = "python/ping_client"
+package = "ping_client"
+with_transport = "websocket"
+
+[[clients]]
+language = "typescript"
+output = "typescript"
+with_transport = "websocket"

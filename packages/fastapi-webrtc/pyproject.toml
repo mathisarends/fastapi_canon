@@ -1,0 +1,46 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+extend-exclude = ["node_modules"]
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "RUF", "SIM", "TID251", "UP"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# Private framework modules change without notice inside the supported ranges.
+"fastapi._compat".msg = "Use public FastAPI or Pydantic APIs instead."
+"starlette._utils".msg = "Use public Starlette APIs instead."
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = [
+    "../fastapi-canon/fastapi_canon/integrations/webrtc",
+    "tests",
+    "examples",
+]
+exclude = ["node_modules"]
+pretty = true
+show_error_codes = true
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = ["av", "av.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = ["--strict-config", "--strict-markers"]
+markers = ["engine: tests that need a real WebRTC engine (aiortc)"]
+filterwarnings = [
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning:starlette.testclient",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["fastapi_canon.integrations.webrtc"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 85

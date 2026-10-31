@@ -1,0 +1,699 @@
+import { errorFromResponse } from "./errors";
+import {
+  RpcClientError,
+  RpcConnectError,
+  RpcConnectionLostError,
+  RpcRequestTimeoutError,
+  RpcTransportError,
+  type RpcRequestOptions,
+  validateRequestMetadata,
+  type RpcNotificationOverflowHandler,
+} from "./core";
+
+export type RpcTransport = {
+  request(
+    method: string,
+    params?: object,
+    options?: RpcRequestOptions,
+  ): Promise<unknown>;
+  notifications(signal?: AbortSignal): AsyncIterable<unknown>;
+  readonly droppedNotifications?: number;
+  startNotifications?(): void;
+  close(): Promise<void>;
+  readonly closed?: Promise<RpcClientError | undefined>;
+};
+
+export type WebSocketFactory = (
+  url: string | URL,
+  protocols?: readonly string[],
+) => WebSocketSocket;
+
+export type WebSocketCredentials = {
+  readonly url?: string | URL;
+  readonly subprotocols?: readonly string[];
+};
+
+export type WebSocketCredentialsProvider = (
+  endpoint: {
+    readonly url: string | URL;
+    readonly subprotocols?: readonly string[];
+  },
+  signal?: AbortSignal,
+) => WebSocketCredentials | Promise<WebSocketCredentials>;
+
+export async function resolveWebSocketCredentials(
+  url: string | URL,
+  subprotocols?: readonly string[],
+  provider?: WebSocketCredentialsProvider,
+  signal?: AbortSignal,
+): Promise<{ url: string | URL; subprotocols?: readonly string[] }> {
+  if (signal?.aborted) throw signal.reason;
+  const value = await provider?.({ url: new URL(url), subprotocols }, signal);
+  if (signal?.aborted) throw signal.reason;
+  return {
+    url: value?.url ?? url,
+    subprotocols: value?.subprotocols ?? subprotocols,
+  };
+}
+
+export type WebSocketOptions = {
+  readonly subprotocols?: readonly string[];
+  readonly requestTimeoutMs?: number | null;
+  readonly notificationQueueSize?: number;
+  readonly notificationOverflow?: "drop_oldest" | "close";
+  readonly socketFactory?: WebSocketFactory;
+  readonly signal?: AbortSignal;
+  readonly onOverflow?: RpcNotificationOverflowHandler;
+  readonly credentials?: WebSocketCredentialsProvider;
+  readonly heartbeatIntervalMs?: number | null;
+  readonly heartbeatTimeoutMs?: number;
+  readonly consecutiveTimeoutLimit?: number;
+};
+
+type WebSocketSocket = {
+  readonly readyState: number;
+  send(data: string): void;
+  close(): void;
+  removeEventListener?(
+    type: "open" | "close" | "error",
+    listener: (event?: unknown) => void,
+  ): void;
+  addEventListener(
+    type: "open" | "close" | "error",
+    listener: (event?: unknown) => void,
+  ): void;
+  addEventListener(
+    type: "message",
+    listener: (event: { readonly data: unknown }) => void,
+  ): void;
+};
+
+type PendingRequest = {
+  readonly method: string;
+  readonly resolve: (value: unknown) => void;
+  readonly reject: (error: unknown) => void;
+  readonly timeout?: ReturnType<typeof setTimeout>;
+  readonly removeAbortListener: () => void;
+  sent: boolean;
+  sendComplete: boolean;
+  cancelRequested: boolean;
+};
+
+type JsonObject = Record<string, unknown>;
+
+export class WebSocketTransport implements RpcTransport {
+  readonly #socket: WebSocketSocket;
+  readonly #requestTimeoutMs?: number;
+  readonly #notifications: AsyncQueue<JsonObject>;
+  readonly #pending = new Map<number, PendingRequest>();
+  #nextRequestId = 1;
+  #closed = false;
+  #failed = false;
+  readonly closed: Promise<RpcClientError | undefined>;
+  readonly #resolveClosed: (error: RpcClientError | undefined) => void;
+  #failure?: RpcClientError;
+  #heartbeatIntervalMs?: number;
+  readonly #heartbeatTimeoutMs: number;
+  readonly #consecutiveTimeoutLimit: number;
+  #consecutiveTimeouts = 0;
+  #lastInbound = Date.now();
+  #heartbeatId?: number;
+  #heartbeatTimer?: ReturnType<typeof setTimeout>;
+
+  private constructor(socket: WebSocketSocket, options: WebSocketOptions) {
+    this.#socket = socket;
+    let resolveClosed!: (error: RpcClientError | undefined) => void;
+    this.closed = new Promise((resolve) => {
+      resolveClosed = resolve;
+    });
+    this.#resolveClosed = resolveClosed;
+    this.#heartbeatIntervalMs = options.heartbeatIntervalMs ?? undefined;
+    this.#heartbeatTimeoutMs = options.heartbeatTimeoutMs ?? 10_000;
+    this.#consecutiveTimeoutLimit = options.consecutiveTimeoutLimit ?? 0;
+    for (const value of [this.#heartbeatIntervalMs, this.#heartbeatTimeoutMs]) {
+      if (value !== undefined && (!Number.isFinite(value) || value <= 0))
+        throw new RangeError("Heartbeat intervals must be finite and positive");
+    }
+    if (
+      !Number.isInteger(this.#consecutiveTimeoutLimit) ||
+      this.#consecutiveTimeoutLimit < 0
+    )
+      throw new RangeError(
+        "consecutiveTimeoutLimit must be a nonnegative integer",
+      );
+    this.#requestTimeoutMs =
+      options.requestTimeoutMs === null
+        ? undefined
+        : (options.requestTimeoutMs ?? 30_000);
+    this.#notifications = new AsyncQueue(
+      options.notificationQueueSize ?? 100,
+      options.notificationOverflow ?? "drop_oldest",
+      options.onOverflow,
+    );
+    socket.addEventListener("message", (event) => this.#receive(event.data));
+    socket.addEventListener("error", (event) => {
+      if (this.#closed) return;
+      this.#fail(RpcConnectionLostError.fromCause(event, false));
+    });
+    socket.addEventListener("close", (event) => {
+      if (this.#closed) return;
+      this.#fail(RpcConnectionLostError.fromCause(event, false));
+    });
+    this.#scheduleHeartbeat();
+  }
+
+  static async open(
+    url: string | URL,
+    options: WebSocketOptions = {},
+  ): Promise<WebSocketTransport> {
+    if (options.signal?.aborted) throw options.signal.reason;
+    const factory = options.socketFactory ?? defaultWebSocketFactory;
+    let socket: WebSocketSocket | undefined;
+    try {
+      const credentials =
+        options.credentials === undefined
+          ? { url, subprotocols: options.subprotocols }
+          : await resolveWebSocketCredentials(
+              url,
+              options.subprotocols,
+              options.credentials,
+              options.signal,
+            );
+      socket = factory(credentials.url, credentials.subprotocols);
+      await waitForOpen(socket, options.signal);
+      return new WebSocketTransport(socket, options);
+    } catch (error) {
+      try {
+        socket?.close();
+      } catch {
+        /* Opening failure is the cause. */
+      }
+      if (options.signal?.aborted) throw options.signal.reason;
+      throw error instanceof RpcConnectError
+        ? error
+        : RpcConnectError.fromCause(error);
+    }
+  }
+
+  request(
+    method: string,
+    params?: object,
+    options: RpcRequestOptions = {},
+  ): Promise<unknown> {
+    const signal = options.signal;
+    if (signal?.aborted) return Promise.reject(signal.reason);
+    if (this.#closed)
+      return Promise.reject(
+        RpcConnectionLostError.fromCause(this.#failure, false),
+      );
+    const id = this.#nextRequestId++;
+    const message: JsonObject = { jsonrpc: "2.0", id, method };
+    if (params !== undefined) message.params = params;
+    let frame: string;
+    try {
+      if (options.metadata !== undefined)
+        message.meta = validateRequestMetadata(options.metadata);
+      frame = JSON.stringify(message);
+    } catch (error) {
+      return Promise.reject(
+        new RpcTransportError(
+          "RPC request parameters are not JSON serializable",
+          { cause: error },
+        ),
+      );
+    }
+    if (signal?.aborted) return Promise.reject(signal.reason);
+    return new Promise((resolve, reject) => {
+      const abort = () => this.#abandon(id, signal?.reason);
+      const timeout =
+        this.#requestTimeoutMs === undefined
+          ? undefined
+          : setTimeout(() => {
+              this.#abandon(
+                id,
+                new RpcRequestTimeoutError(method, this.#requestTimeoutMs),
+              );
+            }, this.#requestTimeoutMs);
+      const pending: PendingRequest = {
+        method,
+        resolve,
+        reject,
+        timeout,
+        removeAbortListener: () => signal?.removeEventListener("abort", abort),
+        sent: false,
+        sendComplete: false,
+        cancelRequested: false,
+      };
+      this.#pending.set(id, pending);
+      signal?.addEventListener("abort", abort, { once: true });
+      if (signal?.aborted) {
+        abort();
+        return;
+      }
+      try {
+        pending.sent = true;
+        this.#socket.send(frame);
+        pending.sendComplete = true;
+        if (pending.cancelRequested) this.#sendCancellation(id);
+      } catch (error) {
+        this.#fail(RpcConnectionLostError.fromCause(error, pending.sent));
+        try {
+          this.#socket.close();
+        } catch {
+          /* Preserve the send failure. */
+        }
+      }
+    });
+  }
+
+  #abandon(id: number, error: unknown): void {
+    const pending = this.#pending.get(id);
+    if (pending === undefined) return;
+    this.#pending.delete(id);
+    this.#cleanupPending(pending);
+    pending.cancelRequested = true;
+    pending.reject(error);
+    if (pending.sendComplete) this.#sendCancellation(id);
+    if (error instanceof RpcRequestTimeoutError && pending.sendComplete) {
+      this.#consecutiveTimeouts++;
+      if (
+        this.#consecutiveTimeoutLimit > 0 &&
+        this.#consecutiveTimeouts >= this.#consecutiveTimeoutLimit
+      )
+        this.#fail(
+          new RpcConnectionLostError(
+            false,
+            undefined,
+            "No inbound traffic after consecutive request timeouts",
+          ),
+        );
+    }
+  }
+
+  #cleanupPending(pending: PendingRequest): void {
+    if (pending.timeout !== undefined) clearTimeout(pending.timeout);
+    pending.removeAbortListener();
+  }
+
+  #sendCancellation(id: number): void {
+    if (this.#closed || this.#socket.readyState !== 1) return;
+    try {
+      this.#socket.send(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          method: "$/cancelRequest",
+          params: { id },
+        }),
+      );
+    } catch {
+      /* Best effort: preserve the timeout or abort outcome. */
+    }
+  }
+
+  notifications(signal?: AbortSignal): AsyncIterable<JsonObject> {
+    const queue = this.#notifications;
+    if (signal === undefined) return queue;
+    return {
+      [Symbol.asyncIterator]() {
+        return { next: () => queue.next(signal) };
+      },
+    };
+  }
+
+  get droppedNotifications(): number {
+    return this.#notifications.dropped;
+  }
+
+  startNotifications(): void {
+    this.#notifications.listen();
+  }
+
+  async close(): Promise<void> {
+    if (this.#closed) return;
+    this.#closed = true;
+    try {
+      this.#socket.close();
+    } catch (error) {
+      const failure = RpcConnectionLostError.fromCause(error, false);
+      this.#fail(failure);
+      throw failure;
+    } finally {
+      this.#fail(
+        new RpcConnectionLostError(
+          false,
+          undefined,
+          "The WebSocket transport was closed",
+        ),
+        false,
+      );
+    }
+  }
+
+  #receive(raw: unknown): void {
+    if (this.#closed) return;
+    try {
+      const message = decodeMessage(raw);
+      if ("id" in message && typeof message.method === "string") {
+        let validMetadata = true;
+        if ("meta" in message) {
+          try {
+            validateRequestMetadata(message.meta);
+          } catch {
+            validMetadata = false;
+          }
+        }
+        this.#socket.send(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: message.id,
+            error: {
+              code: validMetadata ? -32601 : -32600,
+              message: validMetadata ? "Method not found" : "Invalid request",
+              data: {
+                code: validMetadata ? "method_not_found" : "invalid_request",
+                details: validMetadata ? { method: message.method } : null,
+              },
+            },
+          }),
+        );
+      } else if ("id" in message) this.#resolveResponse(message);
+      else if (typeof message.method === "string")
+        this.#notifications.push(message);
+      else throw new RpcTransportError("Invalid JSON-RPC message");
+      this.#lastInbound = Date.now();
+      this.#consecutiveTimeouts = 0;
+      this.#heartbeatId = undefined;
+      this.#scheduleHeartbeat();
+    } catch (error) {
+      this.#fail(
+        error instanceof RpcClientError
+          ? error
+          : new RpcTransportError("Invalid JSON-RPC message", { cause: error }),
+      );
+      this.#socket.close();
+    }
+  }
+
+  #resolveResponse(message: JsonObject): void {
+    const id = message.id;
+    if (typeof id !== "number" || !Number.isInteger(id)) {
+      throw new RpcTransportError("JSON-RPC response IDs must be integers");
+    }
+    const hasResult = "result" in message;
+    const hasError = "error" in message;
+    if (hasResult === hasError) {
+      throw new RpcTransportError(
+        "JSON-RPC response must have one result or error",
+      );
+    }
+    if (
+      hasError &&
+      (!isObject(message.error) ||
+        typeof message.error.code !== "number" ||
+        !Number.isInteger(message.error.code) ||
+        typeof message.error.message !== "string")
+    ) {
+      throw new RpcTransportError("Invalid JSON-RPC response error");
+    }
+    const pending = this.#pending.get(id);
+    if (id === this.#heartbeatId) {
+      if (hasError) this.#heartbeatIntervalMs = undefined;
+      else if (message.result !== null)
+        throw new RpcTransportError("Invalid heartbeat result");
+      return;
+    }
+    if (pending === undefined) return;
+    this.#pending.delete(id);
+    this.#cleanupPending(pending);
+    if (isObject(message.error)) {
+      pending.reject(
+        errorFromResponse(
+          Number(message.error.code),
+          isObject(message.error.data) &&
+            typeof message.error.data.code === "string"
+            ? message.error.data.code
+            : "",
+          String(message.error.message ?? "Remote RPC error"),
+          isObject(message.error.data) ? message.error.data.details : undefined,
+        ),
+      );
+    } else if ("result" in message) pending.resolve(message.result);
+    else
+      throw new RpcTransportError("JSON-RPC response has no result or error");
+  }
+
+  #fail(error: RpcClientError, unexpected = true): void {
+    if (this.#failed) return;
+    this.#failed = true;
+    if (this.#heartbeatTimer !== undefined) clearTimeout(this.#heartbeatTimer);
+    this.#heartbeatTimer = undefined;
+    this.#heartbeatId = undefined;
+    this.#failure = error;
+    if (!this.#closed) this.#closed = true;
+    for (const pending of this.#pending.values()) {
+      this.#cleanupPending(pending);
+      pending.reject(
+        error instanceof RpcConnectionLostError
+          ? RpcConnectionLostError.fromCause(error, pending.sent)
+          : error,
+      );
+    }
+    this.#pending.clear();
+    this.#notifications.fail(error);
+    this.#resolveClosed(unexpected ? error : undefined);
+    if (unexpected) {
+      try {
+        this.#socket.close();
+      } catch {
+        /* Preserve the original failure. */
+      }
+    }
+  }
+
+  #scheduleHeartbeat(): void {
+    if (this.#heartbeatTimer !== undefined) clearTimeout(this.#heartbeatTimer);
+    this.#heartbeatTimer = undefined;
+    if (this.#closed || this.#heartbeatIntervalMs === undefined) return;
+    this.#heartbeatTimer = setTimeout(
+      () => {
+        this.#heartbeatTimer = undefined;
+        const remaining =
+          this.#heartbeatIntervalMs! - (Date.now() - this.#lastInbound);
+        if (remaining > 0) {
+          this.#scheduleHeartbeat();
+          return;
+        }
+        this.#probe();
+      },
+      Math.max(0, this.#heartbeatIntervalMs - (Date.now() - this.#lastInbound)),
+    );
+  }
+
+  #probe(): void {
+    if (this.#closed || this.#heartbeatIntervalMs === undefined) return;
+    const id = this.#nextRequestId++;
+    this.#heartbeatId = id;
+    const started = Date.now();
+    this.#heartbeatTimer = setTimeout(() => {
+      this.#heartbeatTimer = undefined;
+      if (this.#closed || this.#heartbeatId !== id) return;
+      // A suspended browser gets a fresh probe on wake, with no backlog.
+      if (Date.now() - started > this.#heartbeatTimeoutMs * 2) {
+        this.#heartbeatId = undefined;
+        this.#probe();
+        return;
+      }
+      this.#fail(
+        new RpcConnectionLostError(false, undefined, "RPC heartbeat timed out"),
+      );
+    }, this.#heartbeatTimeoutMs);
+    try {
+      this.#socket.send(
+        JSON.stringify({ jsonrpc: "2.0", id, method: "$/ping", params: {} }),
+      );
+    } catch (error) {
+      this.#fail(RpcConnectionLostError.fromCause(error, false));
+    }
+  }
+}
+
+class AsyncQueue<Value> implements AsyncIterableIterator<Value> {
+  readonly #capacity: number;
+  readonly #values: Value[] = [];
+  readonly #waiters: Array<{
+    readonly resolve: (result: IteratorResult<Value>) => void;
+    readonly reject: (error: unknown) => void;
+    readonly removeAbortListener: () => void;
+  }> = [];
+  #failure?: unknown;
+  #listening = false;
+  #overflowWarned = false;
+  readonly #overflow: "drop_oldest" | "close";
+  readonly #onOverflow?: RpcNotificationOverflowHandler;
+  dropped = 0;
+  #callbackFailed = false;
+
+  constructor(
+    capacity: number,
+    overflow: "drop_oldest" | "close",
+    onOverflow?: RpcNotificationOverflowHandler,
+  ) {
+    if (!Number.isInteger(capacity) || capacity <= 0) {
+      throw new RpcTransportError(
+        "notificationQueueSize must be a positive integer",
+      );
+    }
+    this.#capacity = capacity;
+    this.#overflow = overflow;
+    this.#onOverflow = onOverflow;
+  }
+
+  [Symbol.asyncIterator](): AsyncIterableIterator<Value> {
+    return this;
+  }
+
+  next(signal?: AbortSignal): Promise<IteratorResult<Value>> {
+    if (signal?.aborted)
+      return Promise.resolve({ value: undefined, done: true });
+    this.listen();
+    const value = this.#values.shift();
+    if (value !== undefined) return Promise.resolve({ value, done: false });
+    if (this.#failure !== undefined) return Promise.reject(this.#failure);
+    return new Promise((resolve, reject) => {
+      const abort = () => {
+        const index = this.#waiters.indexOf(waiter);
+        if (index !== -1) this.#waiters.splice(index, 1);
+        waiter.removeAbortListener();
+        resolve({ value: undefined, done: true });
+      };
+      const waiter = {
+        resolve,
+        reject,
+        removeAbortListener: () => signal?.removeEventListener("abort", abort),
+      };
+      this.#waiters.push(waiter);
+      signal?.addEventListener("abort", abort, { once: true });
+      if (signal?.aborted) abort();
+    });
+  }
+
+  listen(): void {
+    this.#listening = true;
+  }
+
+  push(value: Value): void {
+    if (!this.#listening) return;
+    const waiter = this.#waiters.shift();
+    if (waiter !== undefined) {
+      waiter.removeAbortListener();
+      waiter.resolve({ value, done: false });
+      return;
+    }
+    if (this.#values.length === this.#capacity) {
+      if (this.#overflow === "close")
+        throw new RpcTransportError(
+          "The WebSocket notification queue overflowed",
+        );
+      this.#values.shift();
+      this.dropped++;
+      try {
+        const returned: unknown = this.#onOverflow?.(
+          undefined,
+          this.dropped,
+          "transport",
+        );
+        if (returned instanceof Promise)
+          void returned.catch((error) => this.#callbackFailure(error));
+      } catch (error) {
+        this.#callbackFailure(error);
+      }
+      if (!this.#overflowWarned) {
+        console.warn(
+          "The WebSocket notification queue overflowed; dropping oldest notifications",
+        );
+        this.#overflowWarned = true;
+      }
+    }
+    this.#values.push(value);
+  }
+
+  fail(error: unknown): void {
+    if (this.#failure !== undefined) return;
+    this.#failure = error;
+    for (const waiter of this.#waiters.splice(0)) {
+      waiter.removeAbortListener();
+      waiter.reject(error);
+    }
+  }
+
+  #callbackFailure(error: unknown): void {
+    if (!this.#callbackFailed) {
+      this.#callbackFailed = true;
+      console.error("RPC overflow callback failed", error);
+    }
+  }
+}
+
+function defaultWebSocketFactory(
+  url: string | URL,
+  protocols?: readonly string[],
+): WebSocketSocket {
+  const constructor = (
+    globalThis as unknown as {
+      readonly WebSocket?: new (
+        url: string | URL,
+        protocols?: readonly string[],
+      ) => WebSocketSocket;
+    }
+  ).WebSocket;
+  if (constructor === undefined) {
+    throw new RpcConnectError(
+      "No global WebSocket implementation is available; provide socketFactory",
+      true,
+    );
+  }
+  return new constructor(url, protocols);
+}
+
+function waitForOpen(
+  socket: WebSocketSocket,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (signal?.aborted) return Promise.reject(signal.reason);
+  if (socket.readyState === 1) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      socket.removeEventListener?.("open", opened);
+      socket.removeEventListener?.("error", failed);
+      socket.removeEventListener?.("close", failed);
+      signal?.removeEventListener("abort", aborted);
+      callback();
+    };
+    const opened = () => finish(resolve);
+    const failed = (event?: unknown) =>
+      finish(() => reject(RpcConnectError.fromCause(event)));
+    const aborted = () => finish(() => reject(signal?.reason));
+    socket.addEventListener("open", opened);
+    socket.addEventListener("error", failed);
+    socket.addEventListener("close", failed);
+    signal?.addEventListener("abort", aborted, { once: true });
+    if (signal?.aborted) aborted();
+  });
+}
+
+function decodeMessage(raw: unknown): JsonObject {
+  if (typeof raw !== "string")
+    throw new RpcTransportError("WebSocket messages must be text");
+  const message: unknown = JSON.parse(raw);
+  if (!isObject(message) || message.jsonrpc !== "2.0") {
+    throw new RpcTransportError("Invalid JSON-RPC message");
+  }
+  return message;
+}
+
+function isObject(value: unknown): value is JsonObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}

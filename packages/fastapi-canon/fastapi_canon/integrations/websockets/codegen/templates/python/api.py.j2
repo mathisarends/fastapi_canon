@@ -1,0 +1,12 @@
+{% from "python/macros.py.j2" import operation, notification, stream, socket_method with context %}{% for node in nodes %}class {{ node.path | api_class }}:
+    def __init__(self, rpc: RpcClientCore) -> None:
+        self._rpc = rpc
+{% for child in node.children %}        self.{{ child.segment | identifier }} = {{ child.path | api_class }}(rpc)
+{% endfor %}{% for route in node.operations %}
+{{ operation(route) }}{% endfor %}{% for event in node.notifications %}
+{{ notification(event) }}{% endfor %}{% for item in node.streams %}
+{{ stream(item) }}{% endfor %}{% for item in node.sockets %}
+{{ socket_method(item) }}{% endfor %}{% if not loop.last %}
+
+
+{% endif %}{% endfor %}

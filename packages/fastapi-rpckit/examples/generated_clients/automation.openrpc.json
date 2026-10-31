@@ -1,0 +1,827 @@
+{
+  "openrpc": "1.4.1",
+  "info": {
+    "title": "Automation",
+    "version": "1.0.0",
+    "description": "Typed JSON-RPC API."
+  },
+  "servers": [
+    {
+      "name": "production",
+      "url": "wss://{host}/automation/rpc",
+      "x-rpckit-transport": {
+        "type": "websocket",
+        "messageEncoding": "json",
+        "frameType": "text"
+      },
+      "variables": {
+        "host": {
+          "default": "api.example.com"
+        }
+      }
+    },
+    {
+      "name": "browser",
+      "url": "wss://{host}/browser/rpc",
+      "x-rpckit-transport": {
+        "type": "websocket",
+        "messageEncoding": "json",
+        "frameType": "text"
+      },
+      "variables": {
+        "host": {
+          "default": "api.example.com"
+        }
+      }
+    },
+    {
+      "name": "streaming",
+      "url": "wss://{host}/browser/stream",
+      "x-rpckit-transport": {
+        "type": "websocket",
+        "messageEncoding": "json",
+        "frameType": "text",
+        "subprotocols": [
+          "fastapi_canon.integrations.websockets.jsonrpc"
+        ]
+      },
+      "variables": {
+        "host": {
+          "default": "api.example.com"
+        }
+      }
+    }
+  ],
+  "methods": [
+    {
+      "name": "tasks.list",
+      "summary": "List all tasks.",
+      "paramStructure": "by-name",
+      "params": [],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/TaskList"
+        }
+      },
+      "x-rpc-request-schema": {
+        "$ref": "#/components/schemas/ListTasksRequest"
+      },
+      "servers": [
+        {
+          "name": "production",
+          "url": "wss://{host}/automation/rpc",
+          "x-rpckit-transport": {
+            "type": "websocket",
+            "messageEncoding": "json",
+            "frameType": "text"
+          },
+          "variables": {
+            "host": {
+              "default": "api.example.com"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "tasks.create",
+      "summary": "Create a task.",
+      "paramStructure": "by-name",
+      "params": [
+        {
+          "name": "title",
+          "required": true,
+          "schema": {
+            "title": "Title",
+            "type": "string"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/Task"
+        }
+      },
+      "x-rpc-request-schema": {
+        "$ref": "#/components/schemas/CreateRequest"
+      },
+      "x-rpc-params-schema": {
+        "$ref": "#/components/schemas/CreateTaskParams"
+      },
+      "servers": [
+        {
+          "name": "production",
+          "url": "wss://{host}/automation/rpc",
+          "x-rpckit-transport": {
+            "type": "websocket",
+            "messageEncoding": "json",
+            "frameType": "text"
+          },
+          "variables": {
+            "host": {
+              "default": "api.example.com"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "tasks.delete",
+      "summary": "Delete a task.",
+      "paramStructure": "by-name",
+      "params": [
+        {
+          "name": "taskId",
+          "required": true,
+          "schema": {
+            "title": "Taskid",
+            "type": "string"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "type": "boolean"
+        }
+      },
+      "x-rpc-request-schema": {
+        "$ref": "#/components/schemas/DeleteRequest"
+      },
+      "x-rpc-params-schema": {
+        "$ref": "#/components/schemas/DeleteTaskParams"
+      },
+      "servers": [
+        {
+          "name": "production",
+          "url": "wss://{host}/automation/rpc",
+          "x-rpckit-transport": {
+            "type": "websocket",
+            "messageEncoding": "json",
+            "frameType": "text"
+          },
+          "variables": {
+            "host": {
+              "default": "api.example.com"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "browser.tabs.open",
+      "summary": "Open a browser tab.",
+      "paramStructure": "by-name",
+      "params": [
+        {
+          "name": "url",
+          "required": true,
+          "schema": {
+            "title": "Url",
+            "type": "string"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/Tab"
+        }
+      },
+      "x-rpc-request-schema": {
+        "$ref": "#/components/schemas/OpenRequest"
+      },
+      "x-rpc-params-schema": {
+        "$ref": "#/components/schemas/OpenTabParams"
+      },
+      "servers": [
+        {
+          "name": "browser",
+          "url": "wss://{host}/browser/rpc",
+          "x-rpckit-transport": {
+            "type": "websocket",
+            "messageEncoding": "json",
+            "frameType": "text"
+          },
+          "variables": {
+            "host": {
+              "default": "api.example.com"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "browser.screencast.start",
+      "summary": "Start the browser screencast.",
+      "paramStructure": "by-name",
+      "params": [
+        {
+          "name": "quality",
+          "required": false,
+          "schema": {
+            "default": 80,
+            "title": "Quality",
+            "type": "integer"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "type": "null"
+        }
+      },
+      "x-rpc-request-schema": {
+        "$ref": "#/components/schemas/StartRequest"
+      },
+      "x-rpc-params-schema": {
+        "$ref": "#/components/schemas/StartScreencastParams"
+      },
+      "servers": [
+        {
+          "name": "streaming",
+          "url": "wss://{host}/browser/stream",
+          "x-rpckit-transport": {
+            "type": "websocket",
+            "messageEncoding": "json",
+            "frameType": "text",
+            "subprotocols": [
+              "fastapi_canon.integrations.websockets.jsonrpc"
+            ]
+          },
+          "variables": {
+            "host": {
+              "default": "api.example.com"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "components": {
+    "schemas": {
+      "CreateTaskParams": {
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "CreateTaskParams",
+        "type": "object"
+      },
+      "DeleteTaskParams": {
+        "additionalProperties": false,
+        "properties": {
+          "taskId": {
+            "title": "Taskid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "taskId"
+        ],
+        "title": "DeleteTaskParams",
+        "type": "object"
+      },
+      "OpenTabParams": {
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "OpenTabParams",
+        "type": "object"
+      },
+      "StartScreencastParams": {
+        "additionalProperties": false,
+        "properties": {
+          "quality": {
+            "default": 80,
+            "title": "Quality",
+            "type": "integer"
+          }
+        },
+        "title": "StartScreencastParams",
+        "type": "object"
+      },
+      "Tab": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "url"
+        ],
+        "title": "Tab",
+        "type": "object"
+      },
+      "Task": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "done": {
+            "default": false,
+            "title": "Done",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "Task",
+        "type": "object"
+      },
+      "TaskList": {
+        "additionalProperties": false,
+        "properties": {
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/Task"
+            },
+            "title": "Tasks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tasks"
+        ],
+        "title": "TaskList",
+        "type": "object"
+      },
+      "TaskUpdated": {
+        "additionalProperties": false,
+        "properties": {
+          "task": {
+            "$ref": "#/components/schemas/Task"
+          }
+        },
+        "required": [
+          "task"
+        ],
+        "title": "TaskUpdated",
+        "type": "object"
+      },
+      "ListTasksRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ListTasksRequest",
+        "properties": {
+          "jsonrpc": {
+            "const": "2.0",
+            "type": "string"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "method": {
+            "const": "tasks.list",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": false,
+            "type": "object"
+          },
+          "meta": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "propertyNames": {
+              "enum": [
+                "traceparent",
+                "tracestate",
+                "baggage"
+              ]
+            },
+            "maxProperties": 3,
+            "x-rpc-max-bytes": 4096
+          }
+        },
+        "required": [
+          "jsonrpc",
+          "method"
+        ],
+        "description": "List all tasks."
+      },
+      "CreateRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CreateRequest",
+        "properties": {
+          "jsonrpc": {
+            "const": "2.0",
+            "type": "string"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "method": {
+            "const": "tasks.create",
+            "type": "string"
+          },
+          "params": {
+            "$ref": "#/components/schemas/CreateTaskParams"
+          },
+          "meta": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "propertyNames": {
+              "enum": [
+                "traceparent",
+                "tracestate",
+                "baggage"
+              ]
+            },
+            "maxProperties": 3,
+            "x-rpc-max-bytes": 4096
+          }
+        },
+        "required": [
+          "jsonrpc",
+          "method",
+          "params"
+        ],
+        "description": "Create a task."
+      },
+      "DeleteRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "title": "DeleteRequest",
+        "properties": {
+          "jsonrpc": {
+            "const": "2.0",
+            "type": "string"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "method": {
+            "const": "tasks.delete",
+            "type": "string"
+          },
+          "params": {
+            "$ref": "#/components/schemas/DeleteTaskParams"
+          },
+          "meta": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "propertyNames": {
+              "enum": [
+                "traceparent",
+                "tracestate",
+                "baggage"
+              ]
+            },
+            "maxProperties": 3,
+            "x-rpc-max-bytes": 4096
+          }
+        },
+        "required": [
+          "jsonrpc",
+          "method",
+          "params"
+        ],
+        "description": "Delete a task."
+      },
+      "OpenRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "title": "OpenRequest",
+        "properties": {
+          "jsonrpc": {
+            "const": "2.0",
+            "type": "string"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "method": {
+            "const": "browser.tabs.open",
+            "type": "string"
+          },
+          "params": {
+            "$ref": "#/components/schemas/OpenTabParams"
+          },
+          "meta": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "propertyNames": {
+              "enum": [
+                "traceparent",
+                "tracestate",
+                "baggage"
+              ]
+            },
+            "maxProperties": 3,
+            "x-rpc-max-bytes": 4096
+          }
+        },
+        "required": [
+          "jsonrpc",
+          "method",
+          "params"
+        ],
+        "description": "Open a browser tab."
+      },
+      "StartRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "title": "StartRequest",
+        "properties": {
+          "jsonrpc": {
+            "const": "2.0",
+            "type": "string"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "method": {
+            "const": "browser.screencast.start",
+            "type": "string"
+          },
+          "params": {
+            "$ref": "#/components/schemas/StartScreencastParams"
+          },
+          "meta": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "propertyNames": {
+              "enum": [
+                "traceparent",
+                "tracestate",
+                "baggage"
+              ]
+            },
+            "maxProperties": 3,
+            "x-rpc-max-bytes": 4096
+          }
+        },
+        "required": [
+          "jsonrpc",
+          "method"
+        ],
+        "description": "Start the browser screencast."
+      },
+      "TasksUpdatedNotification": {
+        "additionalProperties": false,
+        "type": "object",
+        "title": "TasksUpdatedNotification",
+        "properties": {
+          "jsonrpc": {
+            "const": "2.0",
+            "type": "string"
+          },
+          "method": {
+            "const": "tasks.updated",
+            "type": "string"
+          },
+          "params": {
+            "$ref": "#/components/schemas/TaskUpdated"
+          }
+        },
+        "required": [
+          "jsonrpc",
+          "method",
+          "params"
+        ],
+        "description": "Stream task updates."
+      }
+    }
+  },
+  "x-rpc-protocol-version": 1,
+  "x-rpc-heartbeat": {
+    "method": "$/ping",
+    "params": {},
+    "result": null
+  },
+  "x-rpc-request-metadata": {
+    "version": 1,
+    "location": "envelope",
+    "member": "meta",
+    "maxBytes": 4096,
+    "allowedKeys": [
+      "traceparent",
+      "tracestate",
+      "baggage"
+    ]
+  },
+  "x-rpc-request-cancellation": {
+    "method": "$/cancelRequest",
+    "notification": true,
+    "params": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "error": {
+      "code": -32800,
+      "x-rpckit-code": "request_cancelled"
+    }
+  },
+  "x-rpc-notifications": [
+    {
+      "name": "tasks.updated",
+      "payload": {
+        "$ref": "#/components/schemas/TaskUpdated"
+      },
+      "message": {
+        "$ref": "#/components/schemas/TasksUpdatedNotification"
+      },
+      "servers": [
+        {
+          "name": "production",
+          "url": "wss://{host}/automation/rpc",
+          "x-rpckit-transport": {
+            "type": "websocket",
+            "messageEncoding": "json",
+            "frameType": "text"
+          },
+          "variables": {
+            "host": {
+              "default": "api.example.com"
+            }
+          }
+        }
+      ],
+      "summary": "Stream task updates."
+    }
+  ],
+  "x-rpc-subscriptions": [],
+  "x-rpc-notification-types": [],
+  "x-rpckit-binary-streams": [
+    {
+      "name": "browser.screencast.frames",
+      "url": "wss://{host}/browser/screencast",
+      "direction": "server-to-client",
+      "contentType": "image/jpeg",
+      "frameType": "binary",
+      "summary": "Raw screencast frames as binary WebSocket messages.",
+      "variables": {
+        "host": {
+          "default": "api.example.com"
+        }
+      }
+    },
+    {
+      "name": "browser.screencast.upload",
+      "url": "wss://{host}/browser/screencast/upload",
+      "direction": "client-to-server",
+      "inputContentType": "video/webm",
+      "frameType": "binary",
+      "summary": "Upload a recorded screencast as binary WebSocket messages.",
+      "variables": {
+        "host": {
+          "default": "api.example.com"
+        }
+      }
+    },
+    {
+      "name": "browser.screencast.control",
+      "url": "wss://{host}/browser/screencast/control",
+      "direction": "bidirectional",
+      "contentType": "image/jpeg",
+      "inputContentType": "application/x-input-event",
+      "frameType": "binary",
+      "summary": "Receive frames while sending input events back.",
+      "variables": {
+        "host": {
+          "default": "api.example.com"
+        }
+      }
+    }
+  ],
+  "x-rpckit-sockets": [
+    {
+      "name": "browser.cdp",
+      "url": "wss://{host}/browser/cdp",
+      "messageTypes": [
+        "text"
+      ],
+      "summary": "Proxy the Chrome DevTools Protocol unchanged.",
+      "variables": {
+        "host": {
+          "default": "api.example.com"
+        }
+      },
+      "closes": [
+        {
+          "code": 1008,
+          "x-rpckit-code": "browser_not_found",
+          "reason": "Unknown browser"
+        }
+      ],
+      "x-rpckit-protocol": {
+        "name": "cdp",
+        "version": "1.3",
+        "encoding": "json"
+      }
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+__all__ = [
+{% for name in exports %}    {{ name | literal }},
+{% endfor %}]

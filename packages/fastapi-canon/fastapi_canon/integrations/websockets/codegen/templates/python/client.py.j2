@@ -1,0 +1,203 @@
+{% from "python/macros.py.j2" import operation, notification, stream, socket_method with context %}{% set dedicated = binary_streams or sockets %}class {{ client_name }}:
+    def __init__(
+        self,
+{% if servers %}        transport: (
+            RpcTransport | Mapping[ServerName, RpcTransport] | RpcTransportSource
+        ),
+{% else %}        transport: RpcTransport | RpcTransportSource,
+{% endif %}        *,
+        close_transport: bool = True,
+        middleware: Iterable[RpcClientMiddleware] = (),
+        notification_queue_size: int = 100,
+        on_overflow: RpcNotificationOverflowHandler | None = None,
+        retry_attempts: int = 0,
+        retry_attempt_timeout: float | None = None,
+{% if binary_streams %}        stream_opener: BinaryStreamOpener | None = None,
+{% endif %}{% if sockets %}        socket_opener: SocketOpener | None = None,
+{% endif %}{% if dedicated %}        variables: Mapping[str, str] | None = None,
+{% endif %}    ) -> None:
+        self._rpc = RpcClientCore(
+            transport,
+            close_transport=close_transport,
+            middleware=middleware,
+            supports_metadata={{ "True" if request_metadata else "False" }},
+            notification_queue_size=notification_queue_size,
+            on_overflow=on_overflow,
+            retry_attempts=retry_attempts,
+            retry_attempt_timeout=retry_attempt_timeout,
+{% if binary_streams %}            stream_opener=stream_opener,
+{% endif %}{% if sockets %}            socket_opener=socket_opener,
+{% endif %}{% if dedicated %}            variables=variables,
+{% endif %}        )
+{% for node in nodes %}        self.{{ node.segment | identifier }} = {{ node.path | api_class }}(self._rpc)
+{% endfor %}
+    @property
+    def closed(self) -> asyncio.Future[BaseException | None]:
+        return self._rpc.closed
+
+    @property
+    def state(self) -> RpcConnectionState:
+        return self._rpc.state
+
+    @property
+    def states(self) -> Mapping[str, RpcConnectionState]:
+        return self._rpc.states
+
+    @property
+    def dropped_notifications(self) -> int:
+        return self._rpc.dropped_notifications
+
+    @classmethod
+    def with_transports(
+        cls,
+        transports: {{ "RpcTransport | Mapping[ServerName, RpcTransport]" if servers else "RpcTransport" }},
+        *,
+        close_transport: bool = True,
+        middleware: Iterable[RpcClientMiddleware] = (),
+        notification_queue_size: int = 100,
+        on_overflow: RpcNotificationOverflowHandler | None = None,
+        retry_attempts: int = 0,
+        retry_attempt_timeout: float | None = None,
+{% if binary_streams %}        stream_opener: BinaryStreamOpener | None = None,
+{% endif %}{% if sockets %}        socket_opener: SocketOpener | None = None,
+{% endif %}{% if dedicated %}        variables: Mapping[str, str] | None = None,
+{% endif %}    ) -> Self:
+        """Build a client on transports the caller owns, for tests and adapters."""
+        return cls(
+            transports,
+            close_transport=close_transport,
+            middleware=middleware,
+            notification_queue_size=notification_queue_size,
+            on_overflow=on_overflow,
+            retry_attempts=retry_attempts,
+            retry_attempt_timeout=retry_attempt_timeout,
+{% if binary_streams %}            stream_opener=stream_opener,
+{% endif %}{% if sockets %}            socket_opener=socket_opener,
+{% endif %}{% if dedicated %}            variables=variables,
+{% endif %}        )
+{% if with_websocket %}
+    @classmethod
+    def connect(
+        cls,
+        *,
+{% for variable in variables %}        {{ variable.name | identifier }}: {{ variable | variable_annotation }} | None = None,
+{% endfor %}{% if servers | length == 1 %}        url: str | None = None,
+{% endif %}        servers: Mapping[ServerName, str | Endpoint] | None = None,
+        request_timeout: float | None = 30.0,
+        notification_queue_size: int = 100,
+        notification_overflow: str = "drop_oldest",
+        on_overflow: RpcNotificationOverflowHandler | None = None,
+        retry_attempts: int = 0,
+        retry_attempt_timeout: float | None = None,
+        headers: (
+            Mapping[str, str] | Callable[[], Awaitable[Mapping[str, str]]] | None
+        ) = None,
+        socket_factory: WebSocketFactory | None = None,
+{% if binary_streams %}        stream_socket_factory: BinaryWebSocketFactory | None = None,
+{% endif %}{% if sockets %}        socket_connection_factory: SocketConnectionFactory | None = None,
+{% endif %}        middleware: Iterable[RpcClientMiddleware] = (),
+        lazy: bool = False,
+        reconnect: bool = False,
+        reconnect_initial_delay: float = 0.25,
+        reconnect_max_delay: float = 5.0,
+        reconnect_max_attempts: int | None = None,
+        reconnect_should_retry: Callable[[Exception], bool] | None = None,
+        reconnect_random: Callable[[], float] | None = None,
+        on_state_change: (
+            Callable[[ServerName, RpcConnectionState, BaseException | None], None]
+            | None
+        ) = None,
+    ) -> ClientConnection[Self, ServerName]:
+        """Open every declared server unless ``lazy=True`` is set."""
+
+{% if variables %}        variables: dict[str, str | None] = {
+{% for variable in variables %}            {{ variable.name | literal }}: {{ variable.name | identifier }},
+{% endfor %}        }
+{% else %}        variables: dict[str, str | None] = {}
+{% endif %}{% if servers | length == 1 %}        overrides = dict(servers or {})
+        if url is not None:
+            overrides.setdefault(ServerName.{{ servers[0].name | constant }}, url)
+{% endif %}
+        async def resolve_headers() -> Mapping[str, str] | None:
+            return await headers() if callable(headers) else headers
+
+        async def open_transport(
+            endpoint_url: str,
+            *,
+            subprotocols: tuple[str, ...],
+            request_timeout: float | None,
+            notification_queue_size: int,
+            notification_overflow: str,
+        ) -> RpcTransport:
+            return await WebSocketTransport.open(
+                endpoint_url,
+                subprotocols=subprotocols,
+                request_timeout=request_timeout,
+                notification_queue_size=notification_queue_size,
+                notification_overflow=notification_overflow,
+                headers=await resolve_headers(),
+                socket_factory=socket_factory,
+                on_overflow=on_overflow,
+            )
+{% if binary_streams %}
+        async def open_stream(endpoint: BinaryStreamEndpoint) -> BinaryStreamTransport:
+            return await BinaryWebSocketStream.open(
+                endpoint,
+                headers=await resolve_headers(),
+                socket_factory=stream_socket_factory,
+            )
+{% endif %}{% if sockets %}
+        async def open_socket_transport(endpoint: SocketEndpoint) -> SocketTransport:
+            return await SocketConnectionStream.open(
+                endpoint,
+                headers=await resolve_headers(),
+                socket_factory=socket_connection_factory,
+            )
+{% endif %}
+        pool = RpcTransportPool(
+{% if servers | length == 1 %}            endpoints=resolve_endpoints(variables, overrides),
+{% else %}            endpoints=resolve_endpoints(variables, servers),
+{% endif %}            transport_factory=open_transport,
+            request_timeout=request_timeout,
+            notification_queue_size=notification_queue_size,
+            notification_overflow=notification_overflow,
+            reconnect=reconnect,
+            reconnect_initial_delay=reconnect_initial_delay,
+            reconnect_max_delay=reconnect_max_delay,
+            reconnect_max_attempts=reconnect_max_attempts,
+            reconnect_should_retry=reconnect_should_retry,
+            reconnect_random=reconnect_random,
+            on_state_change=on_state_change,
+        )
+        return ClientConnection(
+            client_factory=lambda transports: cls(
+                transports,
+                middleware=middleware,
+                on_overflow=on_overflow,
+                retry_attempts=retry_attempts,
+                retry_attempt_timeout=retry_attempt_timeout,
+                notification_queue_size=notification_queue_size,
+{% if binary_streams %}                stream_opener=open_stream,
+{% endif %}{% if sockets %}                socket_opener=open_socket_transport,
+{% endif %}{% if dedicated %}                variables={
+                    name: value
+                    for name, value in variables.items()
+                    if value is not None
+                },
+{% endif %}            ),
+            pool=pool,
+            eager=not lazy,
+        )
+{% endif %}{% for route in operations %}
+{{ operation(route) }}{% endfor %}{% for event in notifications %}
+{{ notification(event) }}{% endfor %}{% for item in streams %}
+{{ stream(item) }}{% endfor %}{% for item in root_sockets %}
+{{ socket_method(item) }}{% endfor %}
+    async def close(self) -> None:
+        await self._rpc.close()
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        await self.close()
