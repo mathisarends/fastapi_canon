@@ -1,4 +1,4 @@
-"""``canon webrtc`` command line: export contracts and generate clients."""
+"""``fastapi-canon webrtc`` command line: export contracts and generate clients."""
 
 import argparse
 import hashlib
@@ -20,7 +20,7 @@ from fastapi_canon.integrations.webrtc.codegen.writer import write_files
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="canon webrtc")
+    parser = argparse.ArgumentParser(prog="fastapi-canon webrtc")
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
 
@@ -51,7 +51,7 @@ def main(argv: list[str] | None = None) -> int:
             return _contract(args.app, cast(Path, args.output), check=args.check)
         return _generate(args)
     except (ContractError, OSError, ValueError, ImportError, AttributeError) as exc:
-        print(f"canon webrtc: {exc}", file=sys.stderr)
+        print(f"fastapi-canon webrtc: {exc}", file=sys.stderr)
         return 2
 
 

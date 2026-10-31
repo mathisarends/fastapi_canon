@@ -53,6 +53,7 @@ def test_the_generated_package_has_one_module_per_concern(
         "internal/__init__.py",
         "internal/core.py",
         "internal/errors.py",
+        "internal/problem.py",
         "internal/metadata.py",
         "internal/transport.py",
         "internal/unset.py",
@@ -316,11 +317,10 @@ def test_camel_case_wire_fields_become_snake_case_python_names(
     assert 'project_id: str = Field(alias="projectId")' in files["models.py"]
     assert "model_config = ConfigDict(validate_by_name=True)" in files["models.py"]
     assert "        project_id: str," in files["namespaces/greeting.py"]
+    assert 'values["projectId"] = project_id' in files["namespaces/greeting.py"]
     assert (
-        "        params = SayParams(\n            project_id=project_id,"
-        in files["namespaces/greeting.py"]
+        "params = SayParams.model_validate(values)" in files["namespaces/greeting.py"]
     )
-    assert "values:" not in files["namespaces/greeting.py"]
 
 
 def test_servers_generate_resolvable_endpoint_helpers(
@@ -441,7 +441,7 @@ def test_writing_is_idempotent_and_check_does_not_write(
 ) -> None:
     output = tmp_path / PACKAGE
 
-    assert len(generate_python_client(document, output, options)) == 14
+    assert len(generate_python_client(document, output, options)) == 15
     assert generate_python_client(document, output, options) == ()
     (output / "client.py").write_text("stale\n", encoding="utf-8")
 

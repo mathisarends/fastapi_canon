@@ -1,3 +1,4 @@
+import math
 from collections.abc import Mapping
 from typing import Any, cast
 
@@ -16,6 +17,21 @@ def render_problem(
     error: AnyError, exception: Exception, *, type_uri: str
 ) -> tuple[Problem, dict[str, str]]:
     """Render and validate one registered error occurrence atomically."""
+    problem = render_problem_payload(
+        error, exception, type_uri=type_uri, include_status=True
+    )
+    return problem, _render_headers(error, exception)
+
+
+def render_problem_payload(
+    error: AnyError,
+    exception: Exception,
+    *,
+    type_uri: str,
+    include_status: bool,
+    instance: str | None = None,
+) -> Problem:
+    """Render public problem data independently of HTTP response headers."""
     if not isinstance(exception, error.exception):
         msg = (
             f"cannot render {type(exception).__qualname__} with error for "
@@ -25,6 +41,7 @@ def render_problem(
 
     detail = _render_detail(error, exception)
     extensions = _render_extensions(error, exception)
+    extensions = {key: _json_extension(value) for key, value in extensions.items()}
     overlap = _RESERVED_MEMBERS.intersection(extensions)
     if overlap:
         names = ", ".join(sorted(overlap))
@@ -34,18 +51,20 @@ def render_problem(
     payload: dict[str, object] = {
         "type": type_uri,
         "title": error.title,
-        "status": error.status,
         "code": error.code,
         "detail": detail,
+        "instance": instance,
         **extensions,
     }
+    if include_status:
+        payload["status"] = error.status
     try:
         problem = Problem.model_validate(payload)
     except ValidationError as validation_error:
         msg = f"error {error.code!r} rendered an invalid Problem Details payload"
         raise ErrorConfigurationError(msg) from validation_error
 
-    return problem, _render_headers(error, exception)
+    return problem
 
 
 def _render_detail(error: AnyError, exception: Exception) -> str | None:
@@ -63,7 +82,7 @@ def _render_extensions(error: AnyError, exception: Exception) -> dict[str, JsonV
     if rendered is None:
         return {}
     if isinstance(rendered, BaseModel):
-        rendered = rendered.model_dump(mode="python", by_alias=False)
+        rendered = rendered.model_dump(mode="python", by_alias=True)
     if not isinstance(rendered, Mapping):
         msg = "extensions callback must return a mapping or BaseModel"
         raise ErrorConfigurationError(msg)
@@ -89,3 +108,19 @@ def _render_headers(error: AnyError, exception: Exception) -> dict[str, str]:
         msg = "headers callback must return a mapping"
         raise ErrorConfigurationError(msg)
     return dict(freeze_headers(rendered, path="rendered headers"))
+
+
+def _json_extension(value: Any) -> JsonValue:
+    if isinstance(value, Mapping):
+        if any(not isinstance(key, str) for key in value):
+            raise ErrorConfigurationError("extension object keys must be strings")
+        return {key: _json_extension(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_extension(item) for item in value]
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ErrorConfigurationError("extensions must contain finite JSON numbers")
+        return value
+    if value is None or isinstance(value, (str, bool, int)):
+        return value
+    raise ErrorConfigurationError("extensions must contain JSON-native values")

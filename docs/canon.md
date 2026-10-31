@@ -1,9 +1,15 @@
 # Canon package and public API
 
+The [canonicalization record](../CANONICALIZATION_DECISIONS.md) distinguishes the
+agreed target design from implemented capabilities. The prepared 0.10.0 source
+adds [shared problem contracts](../packages/fastapi-canon/docs/problems.md).
+RPC problem envelopes, terminal SSE control events, and the combined client
+facade are included in this source.
+
 This document records the implemented package boundaries and public entry points
-in the prepared, unpublished Canon 0.9.0 source. The
-[codegen discussion](unified-canon-concept.md) describes possible next steps;
-its configuration and combined SDK examples are design candidates.
+in the prepared, unpublished Canon 0.10.0 source. The
+[codegen guide](unified-canon-concept.md) describes the implemented common
+configuration, domain facade and explicit support limits.
 
 The canonical repository for development and future releases is
 [`mathisarends/fastapi_canon`](https://github.com/mathisarends/fastapi_canon).
@@ -103,19 +109,17 @@ There is one installed command, `canon`, also available as
 
 | Command | Responsibility |
 | --- | --- |
-| `canon sse` | Export OpenAPI/SSE contracts and generate Python/TypeScript clients |
-| `canon websockets` | Export OpenRPC/socket contracts and generate Python/TypeScript clients |
-| `canon webrtc` | Export session contracts and generate TypeScript browser clients |
-| `canon check errors` | Check HTTP error declarations without importing application code |
+| `fastapi-canon generate` | Plan contracts together and generate one domain SDK with shared models/errors |
+| `fastapi-canon sse` | Export OpenAPI/SSE contracts and generate Python/TypeScript clients |
+| `fastapi-canon websockets` | Export OpenRPC/socket contracts and generate Python/TypeScript clients |
+| `fastapi-canon webrtc` | Export session contracts and generate TypeScript browser clients |
+| `fastapi-canon check errors` | Check HTTP error declarations without importing application code |
 
-The existing emitters retain their configuration formats, runtime options and
-ownership manifests. Each generator owns a distinct output directory. Generated
-files are changed through generators/templates, then checked for drift.
-
-A common configuration, orchestration command, shared model registry and combined
-SDK require a separate design decision. They are discussed in the
-[codegen draft](unified-canon-concept.md), and are not implemented by the command
-families above. Ordinary REST generation still uses separate OpenAPI tooling.
+The specialized emitters retain their configuration, runtime options and ownership
+manifests. The preferred `fastapi-canon generate` workflow plans sources together and
+owns one combined SDK output per target. It includes a JSON HTTP binding as well
+as internal SSE, JSON-RPC, socket and TypeScript WebRTC bindings. Generated files
+are changed through generators/templates and checked for drift.
 
 ## Documentation and release ownership
 
@@ -124,7 +128,7 @@ families above. Ordinary REST generation still uses separate OpenAPI tooling.
 | This document | Package boundaries, public namespaces and runtime ownership |
 | Package and feature guides | Implemented signatures, options and runnable examples |
 | [Migration guide](../packages/fastapi-canon/docs/package-migration.md) | Installation and import changes for existing consumers |
-| [Codegen discussion](unified-canon-concept.md) | Candidate future workflow and decisions to discuss before implementation |
+| [Codegen guide](unified-canon-concept.md) | Implemented common generation workflow and support limits |
 | [Contributing](contributing.md) | Development commands and quality gates |
 | [Compatibility](compatibility.md) | Tested dependencies and consumer limits |
 | [Releases](releases.md) | Prepared versions, publication gates and historical evidence |

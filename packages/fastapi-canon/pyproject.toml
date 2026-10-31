@@ -1,6 +1,6 @@
 [project]
 name = "fastapi-canon"
-version = "0.9.0"
+version = "0.10.0"
 description = "Typed FastAPI applications with Dishka, HTTP contracts, SSE, WebSockets, WebRTC and client generation"
 readme = "README.md"
 authors = [{ name = "mathisarends" }]
@@ -37,7 +37,7 @@ codegen = [
 ]
 
 [project.scripts]
-canon = "fastapi_canon.cli:main"
+fastapi-canon = "fastapi_canon.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/mathisarends/fastapi_canon"
@@ -81,8 +81,8 @@ select = ["B", "E4", "E7", "E9", "F", "I", "RUF", "SIM", "UP"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["fastapi_canon", "tests"]
-exclude = ["fastapi_canon/integrations/(sse|websockets|webrtc)/"]
+files = ["fastapi_canon", "tests", "examples/canonical_errors"]
+exclude = ["fastapi_canon/integrations/(sse|websockets|webrtc)/", "examples/canonical_errors/(dist|generated)/"]
 pretty = true
 show_error_codes = true
 warn_unreachable = true

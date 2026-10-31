@@ -1,10 +1,15 @@
 # Canon workspace
 
+Read `CANONICALIZATION_DECISIONS.md` for the agreed target architecture and
+implementation scope. Canonical error registration, SSE/RPC bindings, and generated-client handling
+are documented in `packages/fastapi-canon/docs/problems.md`. The common `fastapi-canon generate` workflow, domain facade and shared model/error
+runtime are implemented; see `docs/unified-canon-concept.md`. Verify implemented behavior against the source.
+
 Use `README.md` for the package inventory, `docs/contributing.md` for development
 commands and `docs/compatibility.md` for the tested dependency scope. Package
 guides document implemented APIs. `docs/canon.md` defines the canonical package
-and public namespace boundaries; `docs/unified-canon-concept.md` is a codegen
-discussion draft, not a description of implemented commands.
+and public namespace boundaries; `docs/unified-canon-concept.md` documents the
+implemented version-1 codegen configuration and its explicit limits.
 Write all repository Markdown documentation in English, including changelogs,
 guides, and agent instructions.
 The canonical development and future release repository is

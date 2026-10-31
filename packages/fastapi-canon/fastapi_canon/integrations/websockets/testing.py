@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import unquote, urlsplit
 
+from fastapi_canon.error import Problem
 from fastapi_canon.integrations.websockets.connection import (
     RpcConnectionClose,
     RpcDisconnect,
@@ -411,6 +412,7 @@ class RpcTestError(Exception):
     code: str
     message: str
     details: Any = None
+    problem: Problem | None = None
 
 
 class RpcTestConnectionClosed(Exception):
@@ -504,11 +506,15 @@ class RpcTestClient:
         if "error" in value:
             item = value["error"]
             data = item.get("data", {})
+            problem = (
+                Problem.model_validate(data["problem"]) if "problem" in data else None
+            )
             raise RpcTestError(
                 item["code"],
-                data.get("code", ""),
+                problem.code if problem is not None else data.get("code", ""),
                 item["message"],
                 data.get("details"),
+                problem,
             )
         return value["result"]
 

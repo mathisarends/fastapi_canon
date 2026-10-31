@@ -1,6 +1,6 @@
 """Check the installed WebRTC CLI and type-check the client it generates.
 
-The wheel is installed in a fresh environment. Its ``canon webrtc`` command
+The wheel is installed in a fresh environment. Its ``fastapi-canon webrtc`` command
 exports the practice example's contract and generates its browser client; both
 must match the committed files, and the generated TypeScript must compile.
 """
@@ -63,7 +63,9 @@ def main() -> None:
         _run("uv", "venv", "--python", sys.executable, str(environment))
         scripts = environment / ("Scripts" if sys.platform == "win32" else "bin")
         python = scripts / ("python.exe" if sys.platform == "win32" else "python")
-        cli = scripts / ("canon.exe" if sys.platform == "win32" else "canon")
+        cli = scripts / (
+            "fastapi-canon.exe" if sys.platform == "win32" else "fastapi-canon"
+        )
         _run("uv", "pip", "install", "--python", str(python), f"{wheel}[webrtc,aiortc]")
         # A copied module keeps the workspace source out of the import path.
         shutil.copyfile(EXAMPLE / "app.py", working / "practice_app.py")

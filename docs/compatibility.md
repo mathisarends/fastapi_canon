@@ -25,6 +25,13 @@ The prepared, unpublished Canon 0.9.0 source combines the transport code in one
 wheel. Feature extras select third-party dependencies; no extra requires an
 earlier distribution. Base composition retains its lower dependency bounds.
 
+Prepared Canon 0.10.0 adds the [canonical error bindings and generated-client
+handling](../packages/fastapi-canon/docs/problems.md). The expanded implementation
+passed the current-dependency wheel matrix on Python 3.14 and the minimum matrix
+on Python 3.12 on 2026-10-31: eleven independent installations per matrix, with
+core Pydantic 2.9 support retained. These are source/artifact checks, not a release
+or a claim to have tested every combination allowed by the dependency ranges.
+
 Canon 0.8.0 adds router policies and optional source-based error-contract checking.
 Its policy contracts and installed checker are exercised by the current/minimum
 installed-wheel smoke matrices and public-index installation checks.
@@ -36,6 +43,13 @@ Canon core, each optional extra and both extras together. A fresh Windows/Python
 HTTP/SSE/RPC/WebRTC routing and generated RPC SDK execution and compilation.
 
 ## Verification scope
+
+The prepared 0.10.0 error foundation passed the separate workspace lint, type,
+test, and generated-client gates on Windows/Python 3.14. Its actual wheel passed
+all eleven feature/tool combinations with current dependencies on Python 3.14
+and minimum direct dependencies on Python 3.12. Dependency inventories remain in
+ignored `dist/compatibility-latest.json` and `dist/compatibility-minimum.json`.
+This is local source/artifact evidence, not publication or remote CI evidence.
 
 The unified 0.9.0 source has been checked locally on Windows with Python 3.14
 and current compatible dependencies, plus the minimum direct dependency matrix
@@ -70,7 +84,7 @@ The installed-wheel matrix covers:
 | `[websockets]` | RPC and typed/raw/binary sockets |
 | `[webrtc]` | Session declarations, signaling, admission and missing-engine diagnostics |
 | `[webrtc,aiortc]` | Optional engine installation |
-| `[codegen]` | Offline tooling without transport or engine extras |
+| `[codegen]` | Offline specialized and unified generation without transport/engine extras; execution of a generated JSON HTTP client |
 | `[sse,codegen]` | SSE contracts and clients |
 | `[websockets,codegen]` | OpenRPC export and client execution/compilation |
 | `[sse,websockets,codegen]` | Shared application state and Dishka cleanup |
@@ -104,3 +118,10 @@ native Linux Chromium/GStreamer integration and browser fallback tests. These
 are consumer-reported results, not independent workspace deployment verification.
 Deployed TURN/NAT, PostgreSQL concurrency and proxies still require
 application-side validation.
+
+The prepared 0.10.0 unified SDK is also exercised across HTTP, SSE and JSON-RPC
+with one problem/error identity and shared model classes. Tests compile and run
+the generated TypeScript facade, compile its socket/WebRTC session signatures,
+and exercise generated Python requests and cleanup. The common HTTP binding is
+a JSON subset; multipart, other parameter styles and unsupported schemas fail
+preflight. See the [codegen guide](unified-canon-concept.md) for the precise scope.

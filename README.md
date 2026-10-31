@@ -1,10 +1,15 @@
 # fastapi-canon
 
+See [canonicalization decisions](CANONICALIZATION_DECISIONS.md) for the agreed
+target design and [shared problem contracts](packages/fastapi-canon/docs/problems.md)
+for the implemented HTTP, SSE, RPC, and generated-client error workflow in the
+prepared 0.10.0 source.
+
 One workspace for the FastAPI application stack: architecture conventions,
 feature composition and HTTP contracts, typed SSE, WebSocket RPC, and WebRTC
 sessions.
 
-The prepared Canon 0.9.0 source consolidates the stack into one `fastapi-canon`
+The prepared Canon 0.10.0 source consolidates the stack into one `fastapi-canon`
 distribution. SSE, WebSockets and WebRTC are bundled integrations in that same
 package. Extras select their third-party dependencies; they do not install the
 earlier Canon distributions:
@@ -12,7 +17,7 @@ earlier Canon distributions:
 ```console
 uv add "fastapi-canon[sse,websockets,webrtc]"
 uv add --dev "fastapi-canon[codegen]"
-uv run canon --help
+uv run fastapi-canon --help
 ```
 
 These changes are not published yet. See the
@@ -20,8 +25,8 @@ These changes are not published yet. See the
 commands and the current codegen scope.
 
 The [Canon architecture and public API](docs/canon.md) defines the shared
-namespaces and ownership rules. The [codegen discussion](docs/unified-canon-concept.md)
-collects candidate next steps for review before implementation.
+namespaces and ownership rules. The [codegen guide](docs/unified-canon-concept.md)
+documents `fastapi-canon generate`, the domain SDK and its shared model/error runtime.
 
 ## Repository
 

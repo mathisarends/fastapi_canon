@@ -6,8 +6,8 @@ from typing import Any, TypeVar
 from fastapi import FastAPI
 from fastapi.params import Depends as DependsParam
 
+from fastapi_canon.error.catalog import problem_schema
 from fastapi_canon.error.contracts import INSTALLED_REGISTRY_STATE_KEY
-from fastapi_canon.error.openapi import compile_error_schema
 from fastapi_canon.error.registry import AnyError, ErrorRegistry
 from fastapi_canon.error.types import ErrorConfigurationError
 from fastapi_canon.integrations.webrtc.declarations import (
@@ -74,11 +74,8 @@ class CanonWebRtcRouter(CanonRouter, WebRtcRouter):
             for error in declared:
                 # Resolve against the composed registry, including its type_base.
                 # Identity checks also catch features that explicitly omit errors.
-                schema = compile_error_schema(registry, error)
+                schema = problem_schema(registry, error, include_status=True)
                 type_uri = registry.type_uri_for(error)
-                prefix = f"#/components/schemas/{error.effective_schema_name}/"
-                schema = _local_schema(schema, prefix)
-                schema["$id"] = type_uri
                 result.append(
                     {
                         "status": error.status,
@@ -103,19 +100,3 @@ class CanonWebRtcRouter(CanonRouter, WebRtcRouter):
             dependencies=dependencies,
             admission_errors=contracts,
         )
-
-
-def _local_schema(value: Any, prefix: str) -> Any:
-    """Make the embedded schema a self-contained JSON Schema resource."""
-    if isinstance(value, dict):
-        return {
-            key: (
-                "#/" + item[len(prefix) :]
-                if key == "$ref" and isinstance(item, str) and item.startswith(prefix)
-                else _local_schema(item, prefix)
-            )
-            for key, item in value.items()
-        }
-    if isinstance(value, list):
-        return [_local_schema(item, prefix) for item in value]
-    return value

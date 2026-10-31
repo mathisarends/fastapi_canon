@@ -1,3 +1,4 @@
+import { ProblemError, TransportError, parseProblem } from "./problem";
 import type { RpcTransport as BaseRpcTransport } from {{ transport_module }};
 {% if binary_streams %}import type {
   BinaryInputTransport,
@@ -51,7 +52,8 @@ export type RpcRouteInfo<
     code: string,
     message: string,
     details?: unknown,
-  ) => RpcRemoteError;
+    problem?: unknown,
+  ) => RpcRemoteError | ProblemError;
   readonly [routeTypes]?: readonly [Params, Result];
 };
 
@@ -575,7 +577,7 @@ class StaticTransports implements RpcTransportSource {
 
 type RpcErrorOptions = { readonly cause?: unknown };
 
-export class RpcClientError extends Error {
+export class RpcClientError extends TransportError {
   declare readonly cause?: unknown;
 
   constructor(message: string, options?: RpcErrorOptions) {
@@ -1270,27 +1272,32 @@ export class RpcStreamRefused extends RpcStreamFailed {}
               !("data" in error) ||
               typeof error.data !== "object" ||
               error.data === null ||
-              !("code" in error.data) ||
-              typeof error.data.code !== "string"
+              ((!("code" in error.data) ||
+                typeof error.data.code !== "string") &&
+                !("problem" in error.data))
             ) {
               throw new RpcTransportError("Invalid subscription error");
             }
+            const problem =
+              "problem" in error.data ? error.data.problem : undefined;
+            const code =
+              "code" in error.data && typeof error.data.code === "string"
+                ? error.data.code
+                : "";
             const details =
               "details" in error.data ? error.data.details : undefined;
             if (route.errorMapper !== undefined) {
               throw route.errorMapper(
                 error.code,
-                error.data.code,
+                code,
                 error.message,
                 details,
+                problem,
               );
             }
-            throw new RpcRemoteError(
-              error.code,
-              error.data.code,
-              error.message,
-              details,
-            );
+            if (problem !== undefined)
+              throw new ProblemError(parseProblem(problem, true));
+            throw new RpcRemoteError(error.code, code, error.message, details);
           }
           if (!("payload" in values)) {
             throw new RpcTransportError(
@@ -1487,7 +1494,7 @@ export class RpcStreamRefused extends RpcStreamFailed {}
         for (const subscriber of hub.subscribers) subscriber.queue.end();
       } else {
         const failure =
-          error instanceof RpcClientError
+          error instanceof RpcClientError || error instanceof TransportError
             ? error
             : RpcConnectionLostError.fromCause(error, false);
         hub.ended = { error: failure };

@@ -58,10 +58,13 @@ def main() -> None:
     app = FastAPI()
     if importlib.util.find_spec("jsonschema") and importlib.util.find_spec("jinja2"):
         _offline_sse_codegen()
+        _unified_codegen()
     routers = []
     if "fastapi-canon" in selected:
         from fastapi_canon import CanonRouter
 
+        _cli("generate")
+        _shared_problem_check()
         http = CanonRouter()
 
         @http.get("/health")
@@ -290,7 +293,7 @@ def _canon_check() -> None:
 
 def _cli(name: str) -> None:
     executable = Path(sys.executable).with_name(
-        "canon.exe" if sys.platform == "win32" else "canon"
+        "fastapi-canon.exe" if sys.platform == "win32" else "fastapi-canon"
     )
     subprocess.run(
         [str(executable), name, "--help"], check=True, capture_output=True, timeout=30
@@ -321,6 +324,84 @@ def _offline_sse_codegen() -> None:
             ]
             subprocess.run(command, cwd=temporary, check=True, timeout=30)
             subprocess.run([*command, "--check"], cwd=temporary, check=True, timeout=30)
+
+
+def _unified_codegen() -> None:
+    import httpx
+
+    document = {
+        "openapi": "3.1.0",
+        "info": {"title": "Health", "version": "1"},
+        "paths": {
+            "/health": {
+                "get": {
+                    "operationId": "health.get",
+                    "responses": {
+                        "200": {
+                            "description": "OK",
+                            "content": {
+                                "application/json": {"schema": {"type": "string"}}
+                            },
+                        }
+                    },
+                }
+            }
+        },
+    }
+    with tempfile.TemporaryDirectory(prefix="canon-unified-") as temporary:
+        root = Path(temporary)
+        (root / "openapi.json").write_text(json.dumps(document), encoding="utf-8")
+        (root / "fastapi-canon.toml").write_text(
+            """[codegen]
+version = 1
+[codegen.sources.api]
+kind = "openapi"
+source = "must_not_import:app"
+output = "openapi.json"
+[codegen.targets.python]
+language = "python"
+sources = ["api"]
+output = "artifact_sdk"
+package = "artifact_sdk"
+[codegen.targets.browser]
+language = "typescript"
+sources = ["api"]
+output = "browser"
+""",
+            encoding="utf-8",
+        )
+        command = [
+            str(
+                Path(sys.executable).with_name(
+                    "fastapi-canon.exe" if sys.platform == "win32" else "fastapi-canon"
+                )
+            ),
+            "generate",
+            "--offline",
+        ]
+        subprocess.run(command, cwd=temporary, check=True, timeout=30)
+        subprocess.run([*command, "--check"], cwd=temporary, check=True, timeout=30)
+        sys.path.insert(0, temporary)
+        try:
+            sdk = importlib.import_module("artifact_sdk")
+
+            async def consume() -> None:
+                transport = httpx.MockTransport(
+                    lambda request: httpx.Response(200, json="ok")
+                )
+                async with httpx.AsyncClient(transport=transport) as http:
+                    async with sdk.ApiClient(
+                        "https://test", http_client=http
+                    ) as client:
+                        assert await client.health.get() == "ok"
+                    assert not http.is_closed
+
+            asyncio.run(consume())
+        finally:
+            sys.path.remove(temporary)
+            for name in tuple(sys.modules):
+                if name == "artifact_sdk" or name.startswith("artifact_sdk."):
+                    del sys.modules[name]
 
 
 class _RecordingEngine:
@@ -575,6 +656,38 @@ def _router_policies() -> None:
         if not direct:
             public = Composition(feature).apply(FastAPI())
             assert TestClient(public).get("/policy").status_code == 200
+
+
+def _shared_problem_check() -> None:
+    from fastapi_canon import CanonRouter, Composition, Error, ErrorRegistry, Feature
+
+    class Missing(Exception):
+        pass
+
+    missing = Error(
+        Missing,
+        status=404,
+        code="item_missing",
+        title="Item missing",
+        extensions={"replacement": None},
+    )
+    registry = ErrorRegistry(errors=[missing], type_base="urn:canon:smoke")
+    router = CanonRouter(error_registry=registry)
+
+    @router.get("/missing", raises=[missing])
+    async def fail() -> None:
+        raise Missing("private")
+
+    app = Composition(Feature(name="missing", routers=[router])).apply(FastAPI())
+    with TestClient(app) as client:
+        response = client.get("/missing")
+    payload = response.json()
+    assert response.status_code == payload["status"] == 404
+    assert response.headers["content-type"] == "application/problem+json"
+    assert payload["replacement"] is None
+    assert "private" not in response.text
+    schema = app.openapi()["components"]["schemas"]["ItemMissingProblem"]
+    assert schema["properties"]["type"]["const"] == payload["type"]
 
 
 if __name__ == "__main__":

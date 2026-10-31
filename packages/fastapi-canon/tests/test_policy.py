@@ -140,7 +140,10 @@ def test_router_policy_combines_contracts_dependencies_and_dishka_injection() ->
         responses["403"]["content"]["application/problem+json"]["schema"][
             "discriminator"
         ]["mapping"]
-    ) == {"forbidden", "missing_item"}
+    ) == {
+        "https://example.test/problems/forbidden",
+        "https://example.test/problems/missing_item",
+    }
     assert router.policy is PROTECTED
     assert router.raises == (AUTHENTICATION_REQUIRED, FORBIDDEN)
     assert feature.errors is not None and feature.errors.contains(MISSING)

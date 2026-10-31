@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from pydantic import TypeAdapter
 
@@ -18,6 +19,9 @@ class {{ class_name }}:
     _{{ operation.operation_id | snake }}_body_adapter = TypeAdapter({{ operation.body.type | py_type }})
 {% endif %}
     _{{ operation.operation_id | snake }}_event_adapter = TypeAdapter({{ operation.event | py_type }})
+    _{{ operation.operation_id | snake }}_problem_adapters: dict[str, TypeAdapter[Any]] = {
+{% for type_uri, payload in operation.problems %}        {{ type_uri | repr }}: TypeAdapter({{ payload | py_type }}),
+{% endfor %}    }
 {% endfor %}
 
     def __init__(self, transport: Transport) -> None:
@@ -66,6 +70,8 @@ class {{ class_name }}:
             {{ operation.method | repr }},
             self._{{ operation.operation_id | snake }}_event_adapter,
             operation_id={{ operation.operation_id | repr }},
+            canon_stream={{ operation.canon_stream }},
+            problem_adapters=self._{{ operation.operation_id | snake }}_problem_adapters,
             query=query,
             headers=headers,
 {% if operation.body %}

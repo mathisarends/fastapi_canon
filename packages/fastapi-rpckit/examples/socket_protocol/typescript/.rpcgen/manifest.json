@@ -1,7 +1,7 @@
 {
   "generator": "fastapi-canon",
-  "generatorVersion": "0.9.0",
-  "layoutVersion": 10,
+  "generatorVersion": "0.10.0",
+  "layoutVersion": 12,
   "language": "typescript",
   "contractSha256": "85a8208dc5aea2134ba3ff9a318efbc1e3d015cfef414619d7bbc00728484505",
   "files": [
@@ -14,6 +14,7 @@
     "index.ts",
     "namespaces/calculator.ts",
     "namespaces/index.ts",
+    "problem.ts",
     "routes.ts",
     "sockets.ts",
     "transport.ts"

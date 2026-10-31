@@ -18,6 +18,8 @@ from fastapi import APIRouter, Depends, Response, WebSocket, WebSocketDisconnect
 from fastapi.websockets import WebSocketState
 from starlette.types import Message
 
+from fastapi_canon.error.catalog import registry_scope
+from fastapi_canon.error.contracts import INSTALLED_REGISTRY_STATE_KEY
 from fastapi_canon.integrations.websockets._activity import notify_activity
 from fastapi_canon.integrations.websockets.connection import (
     REJECTION_CLOSES,
@@ -278,7 +280,9 @@ async def serve_websocket(
                 middleware=middleware,
             )
 
-    serving = asyncio.create_task(serve())
+    state = getattr(websocket.scope.get("app"), "state", None)
+    with registry_scope(getattr(state, INSTALLED_REGISTRY_STATE_KEY, None)):
+        serving = asyncio.create_task(serve())
     task = asyncio.current_task()
     cancelling = task.cancelling() if task is not None else 0
     try:
@@ -420,6 +424,17 @@ class RpcRoutes[ContextT]:
             name=endpoint.name,
             dependencies=dependencies,
         )
+        contributions = list(getattr(self._router, "_canon_error_registries", ()))
+
+        def collect(channel: Any) -> None:
+            if channel.error_registry is not None:
+                contributions.append(channel.error_registry)
+            for child in channel.children:
+                collect(child)
+
+        for channel in endpoint.channels if isinstance(endpoint, RpcEndpoint) else ():
+            collect(channel)
+        self._router._canon_error_registries = tuple(contributions)  # type: ignore[attr-defined]
         self._mounted.add(endpoint)
 
     def _check_context(self, endpoint: RpcAnyEndpoint) -> None:

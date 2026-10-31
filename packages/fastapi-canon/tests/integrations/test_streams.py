@@ -80,8 +80,8 @@ def test_shared_and_local_raises_are_deduplicated_with_shared_status() -> None:
     problem = response["content"]["application/problem+json"]["schema"]
     assert len(problem["oneOf"]) == 2
     assert set(problem["discriminator"]["mapping"]) == {
-        "run_not_found",
-        "other_missing",
+        "https://example.test/problems/run_not_found",
+        "https://example.test/problems/other_missing",
     }
 
 
@@ -168,9 +168,11 @@ def test_successful_typed_streams(method: HTTPMethod, stream_app: FastAPI) -> No
         for line in response.text.splitlines()
         if line.startswith("data: ")
     ]
-    assert events[-1] == {"type": "run.completed", "run_id": 7}
+    assert events[-2] == {"type": "run.completed", "run_id": 7}
+    assert events[-1] == {}
+    assert response.text.endswith("event: canon.complete\ndata: {}\n\n")
     assert events[0] == {"type": "run.progress", "step": 1}
-    assert len(events) == (2 if method == "GET" else 3)
+    assert len(events) == (3 if method == "GET" else 4)
 
 
 @pytest.mark.parametrize("with_errors", [False, True])
@@ -343,9 +345,17 @@ def test_compilation_preserves_entire_native_sse_contract() -> None:
     schema = app.openapi()
     for method in ("get", "post"):
         responses = schema["paths"]["/runs/{run_id}/events"][method]["responses"]
-        assert responses["200"] == expected
+        operation = schema["paths"]["/runs/{run_id}/events"][method]
+        business_response = copy.deepcopy(responses["200"])
+        business_response["content"]["text/event-stream"]["itemSchema"] = operation[
+            "x-canon-stream"
+        ]["businessItemSchema"]
+        assert business_response == expected
         media = responses["200"]["content"]["text/event-stream"]
-        payload = media["itemSchema"]["properties"]["data"]["contentSchema"]
+        payload = operation["x-canon-stream"]["businessItemSchema"]["properties"][
+            "data"
+        ]["contentSchema"]
+        assert len(media["itemSchema"]["oneOf"]) == 3
         if "$ref" in payload:
             payload = schema["components"]["schemas"][payload["$ref"].rsplit("/", 1)[1]]
         assert len(payload["oneOf"]) == 2
@@ -499,16 +509,16 @@ def test_export_and_generate_both_clients(tmp_path: Path, language: str) -> None
                     ]
                     assert len(posted) == 3
                     assert posted[-1].run_id == 7
-                    with pytest.raises(sdk.HttpError) as raised:
+                    with pytest.raises(sdk.ProblemError) as raised:
                         _ = [
                             event
                             async for event in client.runs.run_events(
                                 run_id=0, authorization="Bearer demo"
                             )
                         ]
-                    assert raised.value.status == 404
+                    assert raised.value.problem.status == 404
                     problem = models.RunNotFoundProblem.model_validate(
-                        raised.value.details
+                        raised.value.problem.model_dump(exclude_unset=True)
                     )
                     assert problem.code == "run_not_found"
 

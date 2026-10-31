@@ -2,6 +2,72 @@
 
 All notable changes to `fastapi-canon` are documented in this file.
 
+## 0.10.0 - unreleased
+
+### Breaking changes
+
+- Rename the console command from `canon` to `fastapi-canon`, including all
+  transport and check subcommands. Update scripts and CI invocations; the Python
+  module entry point remains `python -m fastapi_canon`. Common generation uses
+  `fastapi-canon.toml` with `[codegen]`, or `[tool.fastapi-canon.codegen]` in
+  `pyproject.toml`. Move version, sources and targets into that codegen section.
+
+- Use the resolved RFC 9457 `type` URI as the discriminator for Canon's compiled
+  same-status HTTP problem unions. Regenerate clients and update schema consumers
+  that expected `propertyName: code`; `code` remains a stable Canon extension.
+  A union with ambiguous type identities, including a domain `about:blank`
+  variant combined with a generic problem of the same status, now fails schema
+  compilation. Give business-specific problems distinct, stable type URIs.
+- `Problem.status` is optional for embeddings and only accepts an integer when
+  present. Callers reading it directly must handle `None`; do not pass booleans,
+  numeric strings, or floats. HTTP responses still emit their actual status.
+- `Problem.as_dict()` preserves explicitly null extension values while omitting
+  absent `status`, `detail`, and `instance`. HTTP schemas describe optional
+  `detail` and `instance` as strings; omit absent values instead of emitting null.
+- Prepare one Canon 0.10.0 version across the workspace and generated artifact
+  metadata. This source version is not a publication.
+
+- Canon streams now send terminal `canon.problem` or `canon.complete` events.
+  Declare processing errors with `stream_raises=` and update manual consumers to
+  stop on either terminal event. Raw `StreamRouter` behavior is unchanged.
+- Regenerated SSE clients raise `ProblemError` for HTTP problem responses and
+  terminal stream problems. Catch that class instead of `HttpError` for problem
+  bodies. Unexpected EOF without completion is a transport error for Canon
+  streams. Regenerate Python and TypeScript clients after upgrading.
+- `ProtocolDefinitionError` now shares Canon's `ErrorConfigurationError` base.
+
+### Added
+
+- Shared `Error` definitions in RPC channel and operation `raises=`, with
+  `error_registry=` on `RpcChannel`. Canonical domain failures use JSON-RPC
+  `error.data.problem`, retaining the numeric JSON-RPC error code and message.
+- RPC routes contribute channel catalogs to composition. Export RPC contracts
+  with `service.contract(..., app=app)` to use composition's resolved type URIs.
+- SSE profile version 1, declared terminal problem schemas, safe processing
+  failure handling, generator cleanup, and explicit successful completion.
+- Python and TypeScript SDK problem/error runtimes from a common source;
+  `ProblemError.problem`, `TransportError`, and `ProtocolError`, plus known RPC
+  error subclasses selected by type URI. Unknown problems preserve extensions.
+- Generated Python RPC calls/subscriptions validate parameter objects by wire
+  aliases, including all-required parameters, so shared DTOs use one mapping.
+- Typed RPC method decorators and default-context endpoints preserve normal
+  application type inference. The executable API example is checked with mypy.
+- An executable example defining one error and registering it with HTTP, SSE,
+  and RPC, and a root decision record for future implementation work.
+
+- Version-1 `fastapi-canon generate` configuration and a common operations/model
+  plan for OpenAPI, OpenRPC and WebRTC sources, with live export, saved/offline inputs,
+  read-only drift checks, explicit identity/name conflict resolution and one
+  ownership manifest per SDK output.
+- A generated domain facade (`client.projects.get/cancel/events`) with a JSON
+  HTTP binding, internal SSE/JSON-RPC/socket bindings, TypeScript WebRTC sessions,
+  shared canonical model declarations and one common error runtime per output.
+  Connections are lazy; injected clients remain caller-owned.
+
+To adopt the common workflow, configure `codegen.sources`/`codegen.targets` in
+`fastapi-canon.toml` and choose a fresh SDK output. Specialized generator commands and their manifests
+remain available. See `docs/problems.md` and the root codegen guide.
+
 ## 0.9.0 - unreleased
 
 ### Breaking changes

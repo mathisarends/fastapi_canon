@@ -1,7 +1,7 @@
 # Canon WebSockets
 
 This directory retains feature tests, examples and guides. The implementation
-now ships in `fastapi-canon[websockets]` (prepared 0.9.0, not yet published).
+now ships in `fastapi-canon[websockets]` (prepared 0.10.0, not yet published).
 See the [public API](../../docs/canon.md#public-namespaces) and
 [package migration guide](../fastapi-canon/docs/package-migration.md).
 
@@ -53,7 +53,7 @@ async def updated(store: Inject[TaskStore]) -> AsyncIterator[TaskUpdated]:
 One command turns that into an OpenRPC document and clients in both languages:
 
 ```bash
-canon websockets generate --config rpcgen.toml
+fastapi-canon websockets generate --config rpcgen.toml
 ```
 
 And your frontend gets the whole API fully typed — no schema written twice, no

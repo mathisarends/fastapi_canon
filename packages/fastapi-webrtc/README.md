@@ -1,7 +1,7 @@
 # Canon WebRTC
 
 This directory retains feature tests, examples and guides. The implementation
-now ships in `fastapi-canon[webrtc]` (prepared 0.9.0, not yet published).
+now ships in `fastapi-canon[webrtc]` (prepared 0.10.0, not yet published).
 See the [public API](../../docs/canon.md#public-namespaces) and
 [package migration guide](../fastapi-canon/docs/package-migration.md).
 
@@ -120,8 +120,8 @@ when the browser only watches.
 ## Browser client
 
 ```console
-canon webrtc contract --app app:app --output contract.json
-canon webrtc generate --contract contract.json --output src/rtc --client-name PracticeRtcClient
+fastapi-canon webrtc contract --app app:app --output contract.json
+fastapi-canon webrtc generate --contract contract.json --output src/rtc --client-name PracticeRtcClient
 ```
 
 ```ts

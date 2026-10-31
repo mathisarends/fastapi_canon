@@ -34,9 +34,9 @@ class BrowserTabs:
         url: str,
     ) -> Tab:
         """Open a browser tab."""
-        params = OpenTabParams(
-            url=url,
-        )
+        values: dict[str, object] = {}
+        values["url"] = url
+        params = OpenTabParams.model_validate(values)
         return await self._rpc.request(
             BROWSER_TABS_OPEN,
             params=params,

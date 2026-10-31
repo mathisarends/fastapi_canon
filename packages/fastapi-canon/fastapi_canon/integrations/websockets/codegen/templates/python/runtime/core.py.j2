@@ -16,10 +16,10 @@ from .errors import (
     RpcClientError,
     RpcConnectionLostError,
     RpcNotificationValidationError,
-    RpcRemoteError,
     RpcRequestTimeoutError,
     RpcResponseValidationError,
     RpcTransportError,
+    remote_error,
 )
 from .metadata import (
     RpcClientCall,
@@ -557,16 +557,17 @@ class RpcClientCore:
                         ):
                             raise RpcTransportError("Invalid subscription error")
                         data = error.get("data", {})
-                        if not isinstance(data, dict) or not isinstance(
-                            data.get("code"), str
+                        if not isinstance(data, dict) or not (
+                            isinstance(data.get("code"), str) or "problem" in data
                         ):
                             raise RpcTransportError("Invalid subscription error data")
-                        factory = notification.error_mapper or RpcRemoteError
+                        factory = notification.error_mapper or remote_error
                         raise factory(
                             error["code"],
-                            data["code"],
+                            data.get("code", ""),
                             error["message"],
                             data.get("details"),
+                            data.get("problem"),
                         )
                     if "payload" not in values:
                         raise RpcTransportError(

@@ -49,6 +49,7 @@ export function createAgentRunsApi(client: ClientOptions) {
       return stream<Types.RunEvent>(client, {
         path: "/v1/runs/" + encodePath(input.runId) + "/events",
         method: "POST",
+      canonStream: false,
         query,
         headers,
         ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) }),
@@ -82,6 +83,7 @@ export function createAgentRunsApi(client: ClientOptions) {
       return stream<Types.RunEvent>(client, {
         path: "/v1/runs/" + encodePath(input.runId) + "/events",
         method: "GET",
+      canonStream: false,
         query,
         headers,
         events: {"discriminator": "type", "known": ["run.completed", "run.failed", "run.started", "token.delta"]},

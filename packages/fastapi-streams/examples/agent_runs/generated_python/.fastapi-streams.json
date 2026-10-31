@@ -5,12 +5,13 @@
     "agent_runs/api.py",
     "client.py",
     "models.py",
+    "problem.py",
     "py.typed",
     "runtime.py"
   ],
   "generation": {
     "generator": "fastapi-canon",
-    "generator_version": "0.9.0",
+    "generator_version": "0.10.0",
     "python_http_client": "httpx",
     "schema_hash_encoding": "canonical-json-v1",
     "schema_sha256": "f23def53557e9d381bada00de07054f0a105eceaefdf5f47eb3168a0e8a05c7f",

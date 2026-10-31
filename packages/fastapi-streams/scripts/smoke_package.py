@@ -45,7 +45,9 @@ def main() -> None:
     app = FastAPI()
     app.include_router(router)
     assert "/events" in app.openapi()["paths"]
-    cli = Path(sys.executable).with_name("canon.exe" if os.name == "nt" else "canon")
+    cli = Path(sys.executable).with_name(
+        "fastapi-canon.exe" if os.name == "nt" else "fastapi-canon"
+    )
     assert cli.is_file(), f"Missing installed console script: {cli}"
     with tempfile.TemporaryDirectory() as directory:
         working = Path(directory)

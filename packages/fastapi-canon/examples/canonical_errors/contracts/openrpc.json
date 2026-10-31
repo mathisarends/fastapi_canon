@@ -1,0 +1,229 @@
+{
+  "components": {
+    "schemas": {
+      "CancelProject": {
+        "additionalProperties": false,
+        "properties": {
+          "projectId": {
+            "title": "Projectid",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "title": "CancelProject",
+        "type": "object"
+      },
+      "CancelRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "jsonrpc": {
+            "const": "2.0",
+            "type": "string"
+          },
+          "meta": {
+            "additionalProperties": {
+              "maxLength": 4096,
+              "type": "string"
+            },
+            "maxProperties": 3,
+            "propertyNames": {
+              "enum": [
+                "traceparent",
+                "tracestate",
+                "baggage"
+              ]
+            },
+            "type": "object",
+            "x-rpc-max-bytes": 4096
+          },
+          "method": {
+            "const": "projects.cancel",
+            "type": "string"
+          },
+          "params": {
+            "$ref": "#/components/schemas/CancelProject"
+          }
+        },
+        "required": [
+          "jsonrpc",
+          "method",
+          "params"
+        ],
+        "title": "CancelRequest",
+        "type": "object"
+      },
+      "ProjectMissingProblem": {
+        "additionalProperties": true,
+        "description": "RFC 9457 Problem Details with a stable application code.",
+        "properties": {
+          "code": {
+            "const": "project_missing",
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "format": "uri-reference",
+            "type": "string"
+          },
+          "replacement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Replacement"
+          },
+          "title": {
+            "const": "Project not found",
+            "type": "string"
+          },
+          "type": {
+            "const": "https://api.example.com/problems/project_missing",
+            "format": "uri-reference",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "code"
+        ],
+        "title": "ProjectMissingProblem",
+        "type": "object",
+        "x-canon-problem": true
+      }
+    }
+  },
+  "info": {
+    "description": "Typed JSON-RPC API.",
+    "title": "Projects",
+    "version": "1.0.0"
+  },
+  "methods": [
+    {
+      "errors": [
+        {
+          "code": -32000,
+          "message": "Project not found",
+          "x-canon-problem-schema": {
+            "$ref": "#/components/schemas/ProjectMissingProblem"
+          },
+          "x-canon-problem-type": "https://api.example.com/problems/project_missing",
+          "x-rpckit-code": "project_missing"
+        }
+      ],
+      "name": "projects.cancel",
+      "paramStructure": "by-name",
+      "params": [
+        {
+          "name": "projectId",
+          "required": true,
+          "schema": {
+            "title": "Projectid",
+            "type": "integer"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "type": "null"
+        }
+      },
+      "servers": [
+        {
+          "name": "ws",
+          "url": "wss://api.example.com/ws",
+          "x-rpckit-transport": {
+            "frameType": "text",
+            "messageEncoding": "json",
+            "type": "websocket"
+          }
+        }
+      ],
+      "x-rpc-params-schema": {
+        "$ref": "#/components/schemas/CancelProject"
+      },
+      "x-rpc-request-schema": {
+        "$ref": "#/components/schemas/CancelRequest"
+      }
+    }
+  ],
+  "openrpc": "1.4.1",
+  "servers": [
+    {
+      "name": "ws",
+      "url": "wss://api.example.com/ws",
+      "x-rpckit-transport": {
+        "frameType": "text",
+        "messageEncoding": "json",
+        "type": "websocket"
+      }
+    }
+  ],
+  "x-rpc-heartbeat": {
+    "method": "$/ping",
+    "params": {},
+    "result": null
+  },
+  "x-rpc-notification-types": [],
+  "x-rpc-notifications": [],
+  "x-rpc-protocol-version": 1,
+  "x-rpc-request-cancellation": {
+    "error": {
+      "code": -32800,
+      "x-rpckit-code": "request_cancelled"
+    },
+    "method": "$/cancelRequest",
+    "notification": true,
+    "params": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    }
+  },
+  "x-rpc-request-metadata": {
+    "allowedKeys": [
+      "traceparent",
+      "tracestate",
+      "baggage"
+    ],
+    "location": "envelope",
+    "maxBytes": 4096,
+    "member": "meta",
+    "version": 1
+  },
+  "x-rpc-subscriptions": []
+}

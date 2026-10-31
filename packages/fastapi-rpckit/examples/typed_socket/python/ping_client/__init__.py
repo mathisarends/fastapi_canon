@@ -5,6 +5,9 @@ from . import endpoints, models, sockets
 from .client import TypedSocketClient
 from .endpoints import Endpoint, ServerName
 from .internal import (
+    Problem,
+    ProblemError,
+    ProtocolError,
     RpcClientCall,
     RpcClientCallOutcome,
     RpcClientError,
@@ -23,6 +26,7 @@ from .internal import (
     RpcStreamsUnavailableError,
     RpcTransport,
     RpcTransportError,
+    TransportError,
 )
 from .models import Ping, Pong
 from .namespaces import Messages
@@ -44,6 +48,9 @@ __all__ = [
     "Messages",
     "Ping",
     "Pong",
+    "Problem",
+    "ProblemError",
+    "ProtocolError",
     "RpcClientCall",
     "RpcClientCallOutcome",
     "RpcClientError",
@@ -72,6 +79,7 @@ __all__ = [
     "SocketOpener",
     "SocketProtocol",
     "SocketTransport",
+    "TransportError",
     "TypedSocketClient",
     "WebSocketTransport",
     "endpoints",

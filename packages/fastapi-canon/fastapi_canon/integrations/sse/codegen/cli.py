@@ -36,7 +36,7 @@ _CLIENT_KEYS = {
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="canon sse")
+    parser = argparse.ArgumentParser(prog="fastapi-canon sse")
     commands = parser.add_subparsers(dest="command", required=True)
     schema = commands.add_parser("schema", help="Export and validate OpenAPI 3.2")
     schema.add_argument("--app", required=True)
@@ -214,7 +214,7 @@ def main(argv: list[str] | None = None) -> int:
         message = str(exc)
         if isinstance(exc, ImportError) and exc.name in {"jinja2", "jsonschema"}:
             message = "Install fastapi-canon[codegen] to generate clients"
-        print(f"canon sse: {message}", file=sys.stderr)
+        print(f"fastapi-canon sse: {message}", file=sys.stderr)
         return 2
     return 0
 

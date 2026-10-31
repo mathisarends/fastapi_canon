@@ -4,5 +4,7 @@ export { createClient } from "./client.js";
 export type { Client } from "./client.js";
 export * from "./types.js";
 export type { ClientOptions, RequestOptions } from "./transport/sse.js";
+export { ProblemError, ProtocolError } from "./transport/problem.js";
+export type { Problem } from "./transport/problem.js";
 export { HttpError, isHttpError, TransportError, StreamParseError } from "./transport/errors.js";
 export type * from "./fixtures/api.js";

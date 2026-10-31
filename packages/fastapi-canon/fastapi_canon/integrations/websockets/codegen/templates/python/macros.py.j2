@@ -4,15 +4,12 @@
 {% for parameter in route.params %}        {{ parameter.name | identifier }}: {{ parameter | parameter_annotation }},
 {% endfor %}    {% endif %}) -> {{ route.result | annotation }}:
 {% set description = route.summary or route.description %}{% if description %}        """{{ description | docstring }}"""
-{% endif %}{% if route.params_model is not none %}{% if route.params | direct_params %}        params = {{ route.params_model | schema_name }}(
-{% for parameter in route.params %}            {{ parameter.name | identifier }}={{ parameter.name | identifier }},
-{% endfor %}        )
-{% else %}        values: dict[str, object] = {}
+{% endif %}{% if route.params_model is not none %}        values: dict[str, object] = {}
 {% for parameter in route.params %}{% if parameter.required %}        values[{{ parameter.name | literal }}] = {{ parameter.name | identifier }}
 {% else %}        if {{ parameter.name | identifier }} is not UNSET:
             values[{{ parameter.name | literal }}] = {{ parameter.name | identifier }}
 {% endif %}{% endfor %}        params = {{ route.params_model | schema_name }}.model_validate(values)
-{% endif %}{% endif %}        {{ "await" if route.result | null_type else "return await" }} self._rpc.request(
+{% endif %}        {{ "await" if route.result | null_type else "return await" }} self._rpc.request(
             {{ route.method_member }},
 {% if route.params_model is not none %}            params=params,
 {% endif %}        )
@@ -24,15 +21,12 @@
 {% for parameter in event.params %}        {{ parameter.name | identifier }}: {{ parameter | parameter_annotation }},
 {% endfor %}    {% endif %}) -> AsyncIterator[{{ event.payload | annotation }}]:
 {% if event.summary %}        """{{ event.summary | docstring }}"""
-{% endif %}{% if event.params_model is not none %}{% if event.params | direct_params %}        params = {{ event.params_model | schema_name }}(
-{% for parameter in event.params %}            {{ parameter.name | identifier }}={{ parameter.name | identifier }},
-{% endfor %}        )
-{% else %}        values: dict[str, object] = {}
+{% endif %}{% if event.params_model is not none %}        values: dict[str, object] = {}
 {% for parameter in event.params %}{% if parameter.required %}        values[{{ parameter.name | literal }}] = {{ parameter.name | identifier }}
 {% else %}        if {{ parameter.name | identifier }} is not UNSET:
             values[{{ parameter.name | literal }}] = {{ parameter.name | identifier }}
 {% endif %}{% endfor %}        params = {{ event.params_model | schema_name }}.model_validate(values)
-{% endif %}{% endif %}        return self._rpc.subscribe_remote({{ event.rpc_name | constant }}{% if event.params_model is not none %}, params=params{% endif %})
+{% endif %}        return self._rpc.subscribe_remote({{ event.rpc_name | constant }}{% if event.params_model is not none %}, params=params{% endif %})
 {% else %}    def {{ event.operation_name | identifier }}(self) -> AsyncIterator[{{ event.payload | annotation }}]:
 {% if event.summary %}        """{{ event.summary | docstring }}"""
 {% endif %}        return self._rpc.subscribe({{ event.rpc_name | constant }})

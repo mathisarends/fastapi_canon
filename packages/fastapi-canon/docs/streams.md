@@ -12,7 +12,7 @@ Import the router explicitly:
 from fastapi_canon.integrations.sse import CanonStreamRouter
 ```
 
-The prepared Canon 0.9.0 release includes the SSE implementation in the same
+The prepared Canon 0.10.0 release includes the SSE implementation in the same
 wheel. The `sse` extra selects FastAPI >=0.143.3 and Pydantic >=2.11.2;
 base composition keeps its existing lower bounds. No separate Streams package
 is installed. See the [migration guide](package-migration.md).
@@ -221,9 +221,9 @@ also contains the declared `application/problem+json` responses. From this repo:
 
 ```console
 uv sync --locked --all-packages --all-groups
-uv run --locked canon sse schema --app examples.streams.app:app --output openapi.json
-uv run --locked canon sse generate --schema openapi.json --language python --output generated/python
-uv run --locked canon sse generate --schema openapi.json --language typescript --output generated/typescript
+uv run --locked fastapi-canon sse schema --app examples.streams.app:app --output openapi.json
+uv run --locked fastapi-canon sse generate --schema openapi.json --language python --output generated/python
+uv run --locked fastapi-canon sse generate --schema openapi.json --language typescript --output generated/typescript
 ```
 
 Another application can install `fastapi-canon[codegen]` and use its own

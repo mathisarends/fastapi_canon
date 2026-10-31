@@ -363,7 +363,7 @@ def _report_check(changed: Sequence[Path], subject: str = "Client") -> int:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="canon websockets",
+        prog="fastapi-canon websockets",
         description="Render RPC contracts and generate typed clients from them.",
     )
     commands = parser.add_subparsers(dest="command", required=True)

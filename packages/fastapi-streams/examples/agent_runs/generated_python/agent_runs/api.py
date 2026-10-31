@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from pydantic import TypeAdapter
 
@@ -13,9 +14,13 @@ class AgentRunsApi:
     _stream_prompt_run_id_adapter = TypeAdapter(str)
     _stream_prompt_body_adapter = TypeAdapter(Models.RunRequest)
     _stream_prompt_event_adapter = TypeAdapter(Models.RunEvent)
+    _stream_prompt_problem_adapters: dict[str, TypeAdapter[Any]] = {
+    }
     _stream_run_events_run_id_adapter = TypeAdapter(str)
     _stream_run_events_delay_adapter = TypeAdapter(Models.StreamRunEventsDelay)
     _stream_run_events_event_adapter = TypeAdapter(Models.RunEvent)
+    _stream_run_events_problem_adapters: dict[str, TypeAdapter[Any]] = {
+    }
 
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
@@ -60,6 +65,8 @@ class AgentRunsApi:
             'POST',
             self._stream_prompt_event_adapter,
             operation_id='stream_prompt',
+            canon_stream=False,
+            problem_adapters=self._stream_prompt_problem_adapters,
             query=query,
             headers=headers,
             body=content,
@@ -107,6 +114,8 @@ class AgentRunsApi:
             'GET',
             self._stream_run_events_event_adapter,
             operation_id='stream_run_events',
+            canon_stream=False,
+            problem_adapters=self._stream_run_events_problem_adapters,
             query=query,
             headers=headers,
             options=options,

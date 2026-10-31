@@ -4,7 +4,12 @@ from typing import Any
 
 from pydantic import TypeAdapter
 
-from fastapi_canon.integrations.websockets.errors import ProtocolDefinitionError
+from fastapi_canon.error.catalog import problem_schema, resolved_registry
+from fastapi_canon.integrations.websockets.errors import (
+    ProtocolDefinitionError,
+    _CanonBinding,
+    contract_of,
+)
 from fastapi_canon.integrations.websockets.protocol import (
     RpcMethodDefinition,
     RpcProtocol,
@@ -38,7 +43,37 @@ def render_openrpc(
     server_documents = tuple(dict(server) for server in servers)
     server_lookup = _server_lookup(server_documents)
     _validate_server_references(protocol, server_lookup)
-    schemas = _rewrite_refs(components(protocol))
+    raw_schemas = components(protocol)
+    for operation in (
+        *protocol.methods,
+        *protocol.notifications,
+        *protocol.subscriptions,
+    ):
+        for error in operation.raises:
+            binding = contract_of(error)
+            if not isinstance(binding, _CanonBinding):
+                continue
+            name = binding.definition.effective_schema_name
+            schema = problem_schema(
+                resolved_registry(binding.registry), binding.definition
+            )
+            schema.pop("$id", None)
+            schema["x-canon-problem"] = True
+            definitions = schema.pop("$defs", {})
+
+            for key, value in {
+                name: _prefix_problem_refs(schema, name),
+                **{
+                    name + key: _prefix_problem_refs(value, name)
+                    for key, value in definitions.items()
+                },
+            }.items():
+                if key in raw_schemas and raw_schemas[key] != value:
+                    raise ProtocolDefinitionError(
+                        f"Conflicting canonical problem schema {key!r}"
+                    )
+                raw_schemas[key] = value
+    schemas = _rewrite_refs(raw_schemas)
     document = {
         "openrpc": OPENRPC_VERSION,
         "info": {
@@ -166,6 +201,14 @@ def _error(error: type) -> dict[str, Any]:
         "message": error.message,
         "x-rpckit-code": error.code,
     }
+    binding = contract_of(error)
+    if isinstance(binding, _CanonBinding):
+        document["x-canon-problem-schema"] = _ref(
+            binding.definition.effective_schema_name
+        )
+        document["x-canon-problem-type"] = resolved_registry(
+            binding.registry
+        ).type_uri_for(binding.definition)
     if error.details_type is not None:
         document["x-rpckit-details-schema"] = _ref(type_name(error.details_type))
     return document
@@ -264,4 +307,17 @@ def _rewrite_refs(value: Any) -> Any:
         return [_rewrite_refs(item) for item in value]
     if isinstance(value, str) and value.startswith("#/$defs/"):
         return value.replace("#/$defs/", "#/components/schemas/", 1)
+    return value
+
+
+def _prefix_problem_refs(value: Any, prefix: str) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: f"#/$defs/{prefix}{item.removeprefix('#/$defs/')}"
+            if key == "$ref" and isinstance(item, str) and item.startswith("#/$defs/")
+            else _prefix_problem_refs(item, prefix)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_prefix_problem_refs(item, prefix) for item in value]
     return value

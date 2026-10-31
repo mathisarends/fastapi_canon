@@ -425,12 +425,14 @@ def _collect_router_errors(
     registries: list[tuple[str, ErrorRegistry]] = []
     seen: set[int] = set()
     for router in routers:
-        if not isinstance(router, CanonRouter) or router.error_registry is None:
-            continue
-        if id(router.error_registry) in seen:
-            continue
-        seen.add(id(router.error_registry))
-        registries.append((feature_name, router.error_registry))
+        contributions = list(getattr(router, "_canon_error_registries", ()))
+        if isinstance(router, CanonRouter) and router.error_registry is not None:
+            contributions.append(router.error_registry)
+        for registry in contributions:
+            if id(registry) in seen:
+                continue
+            seen.add(id(registry))
+            registries.append((feature_name, registry))
     return _merge_errors(
         tuple(registries),
         name=f"{feature_name}-routers" if len(registries) > 1 else None,

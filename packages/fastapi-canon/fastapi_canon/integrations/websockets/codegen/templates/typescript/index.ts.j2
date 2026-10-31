@@ -1,3 +1,5 @@
+export { ProblemError, ProtocolError, TransportError } from "./problem";
+export type { Problem } from "./problem";
 export { {{ client_name }} } from "./client";
 {% if nodes %}export * from "./namespaces";
 {% endif %}export {

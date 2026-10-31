@@ -3,6 +3,7 @@ import re
 from collections.abc import Iterable, Mapping
 from dataclasses import replace
 
+from fastapi_canon.codegen.problems import problem_runtime
 from fastapi_canon.integrations.websockets.codegen.bindings import (
     SocketBinding,
     bind_sockets,
@@ -67,6 +68,9 @@ def render_files(ir: ClientIr, options: TypeScriptClientOptions) -> dict[str, st
         bound,
     )
     files = {
+        "problem.ts": renderer.module(
+            problem_runtime("typescript").split("\n", 1)[1].strip()
+        ),
         "core.ts": renderer.core(),
         "client.ts": renderer.client(),
         "index.ts": renderer.index(),
@@ -1097,6 +1101,10 @@ _RESERVED_WORDS = frozenset(
 
 _RUNTIME_NAMES = frozenset(
     {
+        "Problem",
+        "ProblemError",
+        "ProtocolError",
+        "TransportError",
         "WebSocketCredentials",
         "WebSocketCredentialsProvider",
         "RpcClientCore",

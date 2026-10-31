@@ -7,7 +7,7 @@ from fastapi_canon._version import __version__
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="canon")
+    parser = argparse.ArgumentParser(prog="fastapi-canon")
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
     for name, description in (
@@ -15,10 +15,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         ("websockets", "Export OpenRPC contracts and generate WebSocket clients"),
         ("webrtc", "Export WebRTC contracts and generate browser clients"),
         ("check", "Check application contracts without importing application code"),
+        ("generate", "Generate one domain SDK from configured application contracts"),
     ):
         commands.add_parser(name, help=description, add_help=False)
     args, remaining = parser.parse_known_args(argv)
-    if args.command == "sse":
+    if args.command == "generate":
+        from fastapi_canon.codegen.cli import main as generate_main
+
+        return generate_main(remaining)
+    elif args.command == "sse":
         from fastapi_canon.integrations.sse.codegen.cli import main as sse_main
 
         return sse_main(remaining)
@@ -33,7 +38,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         return webrtc_main(remaining)
     else:
-        checker = argparse.ArgumentParser(prog="canon check")
+        checker = argparse.ArgumentParser(prog="fastapi-canon check")
         checker.add_argument("kind", choices=("errors",))
         _, remaining = checker.parse_known_args(remaining)
         from fastapi_canon.check_error_contracts import _main as check_main

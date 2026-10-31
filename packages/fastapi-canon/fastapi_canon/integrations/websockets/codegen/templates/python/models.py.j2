@@ -7,7 +7,8 @@
 {% for member in declaration.members %}    {{ member.name }} = {{ member.value | literal }}
 {% else %}    pass
 {% endfor %}{% elif declaration | model_decl %}class {{ declaration.name | schema_name }}({{ base_model_name }}):
-{% if declaration.closed %}    model_config = ConfigDict(extra="forbid")
+{% if declaration.problem %}    model_config = ConfigDict(extra="allow", frozen=True)
+{% elif declaration.closed %}    model_config = ConfigDict(extra="forbid")
 {% endif %}{% for field in declaration.fields %}{{ field | field_line }}
 {% else %}    pass
 {% endfor %}{% else %}{{ declaration | type_alias }}

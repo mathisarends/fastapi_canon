@@ -1,7 +1,7 @@
 # Canon SSE
 
 This directory retains feature tests, examples and guides. The implementation
-now ships in `fastapi-canon[sse]` (prepared 0.9.0, not yet published).
+now ships in `fastapi-canon[sse]` (prepared 0.10.0, not yet published).
 See the [public API](../../docs/canon.md#public-namespaces) and
 [package migration guide](../fastapi-canon/docs/package-migration.md).
 
@@ -32,7 +32,7 @@ A CI check catches drift between the Python app, the contract, and generated cod
 
 ## 1. Decorate your FastAPI endpoint
 
-For the prepared 0.9.0 package, select SSE and the optional codegen extra:
+For the prepared 0.10.0 package, select SSE and the optional codegen extra:
 
 ```sh
 uv add 'fastapi-canon[sse,codegen]'
@@ -83,13 +83,13 @@ Use `methods=["POST"]` for request-body-driven streams.
 ## 2. Export once, generate both clients
 
 ```sh
-uv run canon sse schema \
+uv run fastapi-canon sse schema \
   --app app:app --output openapi.json
 
-uv run canon sse generate \
+uv run fastapi-canon sse generate \
   --schema openapi.json --language typescript --output generated/typescript
 
-uv run canon sse generate \
+uv run fastapi-canon sse generate \
   --schema openapi.json --language python --output generated/python
 ```
 
@@ -163,11 +163,11 @@ explicit async-generator closure. See [client usage](docs/clients.md).
 Commit the exported schema and generated clients. Then check the complete chain:
 
 ```sh
-uv run canon sse check \
+uv run fastapi-canon sse check \
   --app app:app --schema openapi.json \
   --language typescript --output generated/typescript
 
-uv run canon sse check \
+uv run fastapi-canon sse check \
   --app app:app --schema openapi.json \
   --language python --output generated/python
 ```
@@ -179,13 +179,13 @@ event access in consumer code.
 
 To regenerate or check the schema and every client with one command, list them
 under `[tool.fastapi-streams]` in `pyproject.toml` and run
-`uv run canon sse sync` (or `sync --check --diff` in CI); see the
+`uv run fastapi-canon sse sync` (or `sync --check --diff` in CI); see the
 [sync configuration](docs/codegen.md#one-command-for-schema-and-clients).
 
 | Check | What it verifies |
 | --- | --- |
 | Contract validation | OpenAPI structure, JSON Schemas, and local references. |
-| `canon sse check` | App → committed contract → generated client consistency. |
+| `fastapi-canon sse check` | App → committed contract → generated client consistency. |
 | TypeScript / Pyright | Parameter types, event fields, and exhaustive narrowing. |
 
 [Codegen and CI reference →](docs/codegen.md)

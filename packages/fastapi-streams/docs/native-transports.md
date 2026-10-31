@@ -1,7 +1,7 @@
 # Native SSE transports and mixed client generation
 
 An authoritative OpenAPI 3.2 contract can describe an existing SSE endpoint.
-`canon sse generate --schema` does not require `StreamRouter`, a running
+`fastapi-canon sse generate --schema` does not require `StreamRouter`, a running
 server or replacement of the application's stream implementation.
 
 The executable [native proxy example](../examples/native_proxy.py) declares an
@@ -17,9 +17,9 @@ codes are preserved and generated SDKs apply their usual HTTP error handling.
 From this package directory:
 
 ```console
-uv run canon sse schema --app examples.native_proxy:app --output openapi.json
-uv run canon sse generate --schema openapi.json --language python --python-http-client httpx2 --output generated/sse
-uv run canon sse check --schema openapi.json --language python --python-http-client httpx2 --output generated/sse
+uv run fastapi-canon sse schema --app examples.native_proxy:app --output openapi.json
+uv run fastapi-canon sse generate --schema openapi.json --language python --python-http-client httpx2 --output generated/sse
+uv run fastapi-canon sse check --schema openapi.json --language python --python-http-client httpx2 --output generated/sse
 ```
 
 Keep `openapi.json` as the single authoritative artifact for REST and SSE. If an

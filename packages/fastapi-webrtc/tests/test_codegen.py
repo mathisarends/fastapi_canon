@@ -546,7 +546,7 @@ def test_cli_reports_bad_applications(
     argv: list[str], capsys: pytest.CaptureFixture[str]
 ) -> None:
     assert main(argv) == 2
-    assert capsys.readouterr().err.startswith("canon webrtc: ")
+    assert capsys.readouterr().err.startswith("fastapi-canon webrtc: ")
 
 
 def test_cli_reports_bad_contracts(
@@ -563,7 +563,7 @@ def test_cli_reports_bad_contracts(
             str(tmp_path / "o"),
         ]
         assert main(argv) == 2
-    assert "canon webrtc:" in capsys.readouterr().err
+    assert "fastapi-canon webrtc:" in capsys.readouterr().err
 
 
 def test_example_client_is_current() -> None:

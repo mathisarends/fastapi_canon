@@ -148,7 +148,36 @@ def compile_document(
         )
 
     for path, operation in iter_operations(result):
+        stream = operation.get("x-canon-stream")
+        if stream is not None:
+            if stream.get("version") != 1:
+                raise ErrorConfigurationError(
+                    "Canon streams require an installed error registry"
+                )
+            identities = stream.pop("errorIds", [])
+            lookup = (
+                {str(id(error)): error for error in registry.errors}
+                if registry is not None
+                else {}
+            )
+            if any(identity not in lookup for identity in identities):
+                raise ErrorConfigurationError("Canon stream declares an unknown error")
+            stream["problemEvent"] = "canon.problem"
+            stream["completeEvent"] = "canon.complete"
+            stream["problems"] = []
+            for identity in identities:
+                assert registry is not None
+                error = lookup[identity]
+                name = error.effective_schema_name + "Embedded"
+                schema = compile_problem_schema(registry, error, include_status=False)
+                _add_component(
+                    components, name, _rewrite_local_definitions(schema, name)
+                )
+                stream["problems"].append({"$ref": f"#/components/schemas/{name}"})
         responses = operation.setdefault("responses", {})
+        if stream is not None:
+            _compile_stream_contract(stream, responses, components, registry)
+
         _errors, http_statuses, _success = contracts_from_responses(
             path, responses, registry
         )
@@ -172,6 +201,8 @@ def compile_document(
             )
         for response in responses.values():
             if isinstance(response, dict):
+                if ERRORS_EXTENSION in response or HTTP_STATUSES_EXTENSION in response:
+                    _identify_problem_types(path, response, components)
                 response.pop(ERRORS_EXTENSION, None)
                 response.pop(HTTP_STATUSES_EXTENSION, None)
                 success_media_type = response.pop(SUCCESS_EXTENSION, _MISSING)
@@ -285,6 +316,23 @@ def compile_error_schema(
     registry: ErrorRegistry,
     error: AnyError,
 ) -> dict[str, Any]:
+    """Adapt the shared problem schema to OpenAPI component references."""
+    return cast(
+        dict[str, Any],
+        _rewrite_local_definitions(
+            compile_problem_schema(registry, error, include_status=True),
+            error.effective_schema_name,
+        ),
+    )
+
+
+def compile_problem_schema(
+    registry: ErrorRegistry,
+    error: AnyError,
+    *,
+    include_status: bool,
+) -> dict[str, Any]:
+    """Compile one standalone problem schema for any documented binding."""
     type_uri = registry.type_uri_for(error)
     if type_uri is None:
         msg = f"error {error.code!r} has no resolved problem type URI"
@@ -302,18 +350,26 @@ def compile_error_schema(
     )
 
     required = cast(list[str], schema["required"])
+    if not include_status:
+        properties.pop("status")
+        required.remove("status")
     if error.extensions_model is not None:
         extension_schema = error.extensions_model.model_json_schema(
             mode="serialization", by_alias=True
-        )
-        extension_schema = _rewrite_local_definitions(
-            extension_schema, error.effective_schema_name
         )
         extension_properties = extension_schema.get("properties", {})
         properties.update(extension_properties)
         required.extend(extension_schema.get("required", []))
         if "$defs" in extension_schema:
-            schema["$defs"] = extension_schema["$defs"]
+            schema["$defs"] = copy.deepcopy(extension_schema["$defs"])
+            for name, definition in schema["$defs"].items():
+                if isinstance(definition, dict):
+                    definition.setdefault(
+                        "x-canon-model-id", f"{type_uri}#/$defs/{name}"
+                    )
+                    definition.setdefault(
+                        "x-canon-model-name", error.effective_schema_name + name
+                    )
     elif isinstance(error.extensions, Mapping):
         for name, value in error.extensions.items():
             properties[name] = _schema_for_static_value(value)
@@ -322,6 +378,8 @@ def compile_error_schema(
     if error.example is not None:
         example = _thaw(error.example)
         _validate_example(error, type_uri, example)
+        if not include_status:
+            example.pop("status", None)
         schema["examples"] = [example]
     return schema
 
@@ -336,8 +394,8 @@ def _base_problem_schema() -> dict[str, Any]:
             "title": {"type": "string"},
             "status": {"type": "integer", "minimum": 100, "maximum": 599},
             "code": {"type": "string", "pattern": "^[a-z][a-z0-9_]{2,}$"},
-            "detail": {"type": ["string", "null"]},
-            "instance": {"type": ["string", "null"], "format": "uri-reference"},
+            "detail": {"type": "string"},
+            "instance": {"type": "string", "format": "uri-reference"},
         },
         "required": ["type", "title", "status", "code"],
         "additionalProperties": True,
@@ -399,6 +457,27 @@ def _response_for_contracts(
 
 def _http_component_name(status: int) -> str:
     return f"Http{status}Problem"
+
+
+def _identify_problem_types(
+    path: str, response: dict[str, Any], components: dict[str, Any]
+) -> None:
+    """Resolve identities after composition has supplied all problem type URIs."""
+    schema = response["content"][_PROBLEM_MEDIA_TYPE]["schema"]
+    variants = schema.get("oneOf")
+    if not isinstance(variants, list):
+        return
+    mapping: dict[str, str] = {}
+    for variant in variants:
+        reference = variant["$ref"]
+        component = components[reference.removeprefix("#/components/schemas/")]
+        type_uri = component["properties"]["type"]["const"]
+        if type_uri in mapping:
+            raise ErrorConfigurationError(
+                f"route {path!r} has ambiguous problem type {type_uri!r}"
+            )
+        mapping[type_uri] = reference
+    schema["discriminator"] = {"propertyName": "type", "mapping": mapping}
 
 
 def _http_problem_schema(status: int) -> dict[str, Any]:
@@ -603,3 +682,61 @@ def _thaw(value: Any) -> Any:
     if isinstance(value, tuple):
         return [_thaw(item) for item in value]
     return value
+
+
+def _compile_stream_contract(
+    profile: dict[str, Any],
+    responses: dict[str, Any],
+    components: dict[str, Any],
+    registry: ErrorRegistry | None,
+) -> None:
+    base = registry.type_base if registry is not None else None
+    internal_type = (
+        f"{base}/internal_server_error"
+        if base
+        else "urn:fastapi-canon:internal_server_error"
+    )
+    internal = _base_problem_schema()
+    internal["properties"].pop("status")
+    internal["required"].remove("status")
+    internal["properties"]["type"]["const"] = internal_type
+    internal["properties"]["title"]["const"] = "Internal Server Error"
+    internal["properties"]["code"]["const"] = "internal_server_error"
+    name = "CanonInternalServerErrorEmbedded"
+    _add_component(components, name, internal)
+    problems = [*profile["problems"], {"$ref": f"#/components/schemas/{name}"}]
+    for status, response in responses.items():
+        media = response.get("content", {}).get("text/event-stream")
+        if not str(status).startswith("2") or not isinstance(media, dict):
+            continue
+        business = copy.deepcopy(media.get("itemSchema"))
+        if not isinstance(business, dict):
+            raise ErrorConfigurationError(
+                "Canon streams require a typed SSE item schema"
+            )
+        profile["businessItemSchema"] = copy.deepcopy(business)
+        business.setdefault("properties", {}).setdefault("event", {}).update(
+            {"not": {"pattern": "^canon\\."}}
+        )
+
+        def control(event: str, data: dict[str, Any]) -> dict[str, Any]:
+            return {
+                "type": "object",
+                "properties": {
+                    "event": {"type": "string", "const": event},
+                    "data": {
+                        "type": "string",
+                        "contentMediaType": "application/json",
+                        "contentSchema": data,
+                    },
+                },
+                "required": ["event", "data"],
+            }
+
+        media["itemSchema"] = {
+            "oneOf": [
+                business,
+                control("canon.problem", {"anyOf": problems}),
+                control("canon.complete", {"type": "object", "maxProperties": 0}),
+            ]
+        }

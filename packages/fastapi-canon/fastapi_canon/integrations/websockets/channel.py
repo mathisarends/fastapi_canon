@@ -8,6 +8,7 @@ from math import isfinite
 from types import FunctionType
 from typing import Any, overload
 
+from fastapi_canon.error import ErrorRegistry
 from fastapi_canon.integrations.websockets.connection import RpcLimits
 from fastapi_canon.integrations.websockets.dependencies import (
     RpcResolverLike,
@@ -76,6 +77,7 @@ class RpcChannel:
         /,
         *,
         namespace: str | None = None,
+        error_registry: ErrorRegistry | None = None,
         raises: Iterable[RpcErrorDeclaration] = (),
         resolver_scope: RpcResolverScope = call_scope,
     ) -> None:
@@ -92,7 +94,10 @@ class RpcChannel:
         if not self._name:
             raise ProtocolDefinitionError("RPC channel name cannot be empty")
         self._namespace = resolved_namespace
-        self._raises = error_declarations(raises, owner=f"RPC channel {self.name}")
+        self.error_registry = error_registry
+        self._raises = error_declarations(
+            raises, owner=f"RPC channel {self.name}", registry=error_registry
+        )
         if not callable(resolver_scope):
             raise ProtocolDefinitionError("RPC resolver scope must be callable")
         self._resolver_scope = resolver_scope
@@ -150,10 +155,10 @@ class RpcChannel:
         return self.freeze()
 
     @overload
-    def method(self, function: FunctionType, /) -> FunctionType: ...
+    def method[Handler: Callable[..., Any]](self, function: Handler, /) -> Handler: ...
 
     @overload
-    def method(
+    def method[Handler: Callable[..., Any]](
         self,
         name: str | None = None,
         /,
@@ -162,11 +167,11 @@ class RpcChannel:
         raises: Iterable[RpcErrorDeclaration] = (),
         timeout: float | None | _TimeoutDefault = _INHERIT_TIMEOUT,
         idempotent: bool = False,
-    ) -> Callable[[FunctionType], FunctionType]: ...
+    ) -> Callable[[Handler], Handler]: ...
 
     def method(
         self,
-        name: str | FunctionType | None = None,
+        name: str | Callable[..., Any] | None = None,
         /,
         *,
         summary: str | None = None,
@@ -207,7 +212,10 @@ class RpcChannel:
                 channel.namespace, local_name or function.__name__
             )
             merged_raises = merge_error_declarations(
-                channel.raises, raises, owner=f"RPC method {wire_name}"
+                channel.raises,
+                raises,
+                registry=channel.error_registry,
+                owner=f"RPC method {wire_name}",
             )
             channel._reserve(wire_name)
             channel._routes.append(
@@ -271,7 +279,10 @@ class RpcChannel:
                 channel.namespace, _name(name or function.__name__, "event name")
             )
             merged_raises = merge_error_declarations(
-                channel.raises, raises, owner=f"RPC event {wire_name}"
+                channel.raises,
+                raises,
+                registry=channel.error_registry,
+                owner=f"RPC event {wire_name}",
             )
             definition = notification_definition(
                 name=wire_name,
@@ -326,7 +337,10 @@ class RpcChannel:
                 _name(name or function.__name__, "subscription name"),
             )
             merged_raises = merge_error_declarations(
-                channel.raises, raises, owner=f"RPC subscription {wire_name}"
+                channel.raises,
+                raises,
+                registry=channel.error_registry,
+                owner=f"RPC subscription {wire_name}",
             )
             definition = subscription_definition(
                 name=wire_name,
@@ -499,9 +513,11 @@ class RpcChannel:
         child = RpcChannel(
             join_rpc_name(self.name, local),
             namespace=join_rpc_name(self.namespace, local),
+            error_registry=self.error_registry,
             raises=merge_error_declarations(
                 self.raises,
                 raises,
+                registry=self.error_registry,
                 owner=f"RPC channel {join_rpc_name(self.name, local)}",
             ),
             resolver_scope=resolver_scope or self.resolver_scope,

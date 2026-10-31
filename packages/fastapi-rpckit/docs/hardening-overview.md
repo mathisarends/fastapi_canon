@@ -12,8 +12,8 @@ client runtimes. Edit generators/templates, then regenerate instead of editing
 generated files:
 
 ```bash
-uv run canon websockets generate --config rpcgen.toml
-uv run canon websockets generate --config rpcgen.toml --check
+uv run fastapi-canon websockets generate --config rpcgen.toml
+uv run fastapi-canon websockets generate --config rpcgen.toml --check
 ```
 
 Existing ordinary Python method signatures stay unchanged. TypeScript methods

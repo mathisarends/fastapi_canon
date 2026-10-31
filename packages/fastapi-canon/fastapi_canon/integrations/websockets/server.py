@@ -377,7 +377,7 @@ class RpcServer:
                 logger.exception(
                     "RPC error binding %s failed for method %s", contract.code, method
                 )
-                return RpcInternalError()
+                return _internal_error(declared)
         else:
             try:
                 mapped = (
@@ -389,7 +389,7 @@ class RpcServer:
                     raise TypeError("RPC error mapper must return RpcError or None")
             except Exception:
                 logger.exception("RPC error mapper failed for method %s", method)
-                return RpcInternalError()
+                return _internal_error(declared)
         if mapped is not None:
             if (
                 self._strict_errors
@@ -402,10 +402,10 @@ class RpcServer:
                     method,
                     type(mapped).__name__,
                 )
-                return RpcInternalError()
+                return _internal_error(declared)
             return mapped
         logger.error("RPC method %s failed", method, exc_info=error)
-        return RpcInternalError()
+        return _internal_error(declared)
 
 
 def _request_id(raw_request: object) -> RpcRequestId:
@@ -431,3 +431,21 @@ def _looks_like_notification(raw_request: object) -> bool:
         and raw_request.get("jsonrpc") == "2.0"
         and isinstance(raw_request.get("method"), str)
     )
+
+
+def _internal_error(declared: tuple[type[RpcError], ...]) -> RpcError:
+    from fastapi_canon.error.catalog import internal_problem, resolved_registry
+    from fastapi_canon.integrations.websockets.errors import _CanonBinding
+
+    error = RpcInternalError()
+    binding = next(
+        (
+            contract_of(item)
+            for item in declared
+            if isinstance(contract_of(item), _CanonBinding)
+        ),
+        None,
+    )
+    if isinstance(binding, _CanonBinding):
+        error.problem = internal_problem(resolved_registry(binding.registry))
+    return error

@@ -4,6 +4,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import replace
 from typing import Any
 
+from fastapi_canon.codegen.problems import problem_runtime
 from fastapi_canon.integrations.websockets.codegen.bindings import (
     SocketBinding,
     bind_sockets,
@@ -151,6 +152,9 @@ def _render_runtime(ir: ClientIr, options: PythonClientOptions) -> dict[str, str
     files = {
         "internal/__init__.py": _render_runtime_init(ir, options),
         "internal/core.py": _render_runtime_module(options, "core"),
+        "internal/problem.py": _module(
+            options, _Imports(), problem_runtime("python").split("\n", 1)[1]
+        ),
         "internal/errors.py": _render_runtime_module(options, "errors"),
         "internal/metadata.py": _render_runtime_module(options, "metadata"),
         "internal/transport.py": _render_runtime_module(options, "transport"),
@@ -176,6 +180,17 @@ def _render_runtime_init(ir: ClientIr, options: PythonClientOptions) -> str:
     if options.with_transport == "websocket":
         imports.add(".connection", "ClientConnection", "RpcTransportPool")
         exported.extend(["ClientConnection", "RpcTransportPool"])
+    imports.add(
+        ".problem",
+        "Problem",
+        "ProblemError",
+        "ProtocolError",
+        "TransportError",
+        "parse_problem",
+    )
+    exported.extend(
+        ["Problem", "ProblemError", "ProtocolError", "TransportError", "parse_problem"]
+    )
     imports.add(
         ".core",
         "RpcClientCore",
@@ -454,8 +469,14 @@ def _server_subprotocols(server: ServerDecl) -> str:
 def _render_errors(ir: ClientIr, options: PythonClientOptions) -> str:
     imports = _Imports()
     imports.add("typing", "Any")
-    imports.add("pydantic", "ValidationError")
-    imports.add(_runtime_module(options), "RpcRemoteError")
+    imports.add("pydantic", "TypeAdapter", "ValidationError")
+    imports.add(
+        _runtime_module(options),
+        "RpcRemoteError",
+        "ProblemError",
+        "ProtocolError",
+        "parse_problem",
+    )
     errors = []
     seen: set[str] = set()
     for route in (*ir.operations, *ir.notifications):
@@ -699,6 +720,14 @@ def _render_package_init(
         "RpcResponseValidationError",
         "RpcTransportError",
     ]
+    imports.add(
+        _runtime_module(options),
+        "Problem",
+        "ProblemError",
+        "ProtocolError",
+        "TransportError",
+    )
+    exported.extend(["Problem", "ProblemError", "ProtocolError", "TransportError"])
     error_names = [_schema_name(name) + "Error" for name in _named_error_codes(ir)]
     if error_names:
         imports.add(f"{options.package}.errors", *error_names)
@@ -976,9 +1005,6 @@ def _template_filters(
                 + ")"
             )
             <= 88
-        ),
-        "direct_params": lambda parameters: all(
-            parameter.required for parameter in parameters
         ),
         "docstring": _docstring,
         "enum_decl": lambda declaration: isinstance(declaration, EnumDecl),
@@ -1524,6 +1550,10 @@ _SOCKET_EXPORTS = (
 
 _RUNTIME_NAMES = frozenset(
     {
+        "Problem",
+        "ProblemError",
+        "ProtocolError",
+        "TransportError",
         "AsyncIterator",
         "RpcClientCore",
         "RpcConnectionState",
