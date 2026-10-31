@@ -57,8 +57,8 @@ def test_generic_http_responses_match_the_runtime_handler() -> None:
         "title": {"type": "string", "const": "Unauthorized"},
         "status": {"type": "integer", "const": 401},
         "code": {"type": "string", "const": "http_401"},
-        "detail": {"type": ["string", "null"]},
-        "instance": {"type": ["string", "null"], "format": "uri-reference"},
+        "detail": {"type": "string"},
+        "instance": {"type": "string", "format": "uri-reference"},
     }
 
     response = TestClient(app).get("/protected")
@@ -101,8 +101,8 @@ def test_domain_and_generic_http_problem_can_share_a_status() -> None:
         {"$ref": "#/components/schemas/Http404Problem"},
     ]
     assert schema["discriminator"]["mapping"] == {
-        "resource_missing": "#/components/schemas/ResourceMissingProblem",
-        "http_404": "#/components/schemas/Http404Problem",
+        "https://example.test/problems/resource_missing": "#/components/schemas/ResourceMissingProblem",
+        "about:blank": "#/components/schemas/Http404Problem",
     }
 
 

@@ -1,7 +1,7 @@
 # Canon WebSockets
 
 This directory retains feature tests, examples and guides. The implementation
-now ships in `fastapi-canon[websockets]` (prepared 0.9.0, not yet published).
+now ships in `fastapi-canon[websockets]` (prepared 0.10.0, not yet published).
 See the [public API](../../docs/canon.md#public-namespaces) and
 [package migration guide](../fastapi-canon/docs/package-migration.md).
 

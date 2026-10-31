@@ -1,6 +1,6 @@
 # One Canon distribution
 
-The prepared 0.9.0 release includes composition, HTTP contracts, SSE, WebSocket
+The prepared 0.10.0 release includes composition, HTTP contracts, SSE, WebSocket
 RPC/sockets, WebRTC and their client generators in one `fastapi-canon` wheel.
 It is not published yet. Earlier independent distributions remain available at
 their existing published versions.

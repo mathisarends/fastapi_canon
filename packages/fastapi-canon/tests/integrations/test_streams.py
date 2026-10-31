@@ -80,8 +80,8 @@ def test_shared_and_local_raises_are_deduplicated_with_shared_status() -> None:
     problem = response["content"]["application/problem+json"]["schema"]
     assert len(problem["oneOf"]) == 2
     assert set(problem["discriminator"]["mapping"]) == {
-        "run_not_found",
-        "other_missing",
+        "https://example.test/problems/run_not_found",
+        "https://example.test/problems/other_missing",
     }
 
 

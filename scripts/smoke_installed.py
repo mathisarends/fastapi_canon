@@ -62,6 +62,7 @@ def main() -> None:
     if "fastapi-canon" in selected:
         from fastapi_canon import CanonRouter
 
+        _shared_problem_check()
         http = CanonRouter()
 
         @http.get("/health")
@@ -575,6 +576,42 @@ def _router_policies() -> None:
         if not direct:
             public = Composition(feature).apply(FastAPI())
             assert TestClient(public).get("/policy").status_code == 200
+
+
+def _shared_problem_check() -> None:
+    from fastapi_canon import Error, ErrorRegistry
+
+    class Missing(Exception):
+        pass
+
+    missing = Error(
+        Missing,
+        status=404,
+        type="urn:canon:smoke:missing",
+        code="item_missing",
+        title="Item missing",
+        extensions={"replacement": None},
+    )
+    registry = ErrorRegistry(errors=[missing])
+    embedded = registry.problem_for(Missing("private"))
+    assert embedded is not None and embedded.status is None
+    payload = embedded.as_dict()
+    assert "status" not in payload
+    assert payload["replacement"] is None
+    assert "private" not in json.dumps(payload)
+    schema = registry.schema_for(missing)
+    assert schema["$id"] == payload["type"]
+    assert "status" not in schema["required"]
+    http = registry.problem_for(Missing(), include_status=True)
+    assert http is not None and http.status == 404
+    app = FastAPI()
+    registry.install(
+        app,
+        include_validation_error=False,
+        include_http_exceptions=False,
+        include_unhandled_error=False,
+    )
+    assert ErrorRegistry.from_app(app) is registry
 
 
 if __name__ == "__main__":

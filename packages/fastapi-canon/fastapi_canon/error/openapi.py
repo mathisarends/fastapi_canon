@@ -172,6 +172,8 @@ def compile_document(
             )
         for response in responses.values():
             if isinstance(response, dict):
+                if ERRORS_EXTENSION in response or HTTP_STATUSES_EXTENSION in response:
+                    _identify_problem_types(path, response, components)
                 response.pop(ERRORS_EXTENSION, None)
                 response.pop(HTTP_STATUSES_EXTENSION, None)
                 success_media_type = response.pop(SUCCESS_EXTENSION, _MISSING)
@@ -285,6 +287,23 @@ def compile_error_schema(
     registry: ErrorRegistry,
     error: AnyError,
 ) -> dict[str, Any]:
+    """Adapt the shared problem schema to OpenAPI component references."""
+    return cast(
+        dict[str, Any],
+        _rewrite_local_definitions(
+            compile_problem_schema(registry, error, include_status=True),
+            error.effective_schema_name,
+        ),
+    )
+
+
+def compile_problem_schema(
+    registry: ErrorRegistry,
+    error: AnyError,
+    *,
+    include_status: bool,
+) -> dict[str, Any]:
+    """Compile one standalone problem schema for any documented binding."""
     type_uri = registry.type_uri_for(error)
     if type_uri is None:
         msg = f"error {error.code!r} has no resolved problem type URI"
@@ -302,12 +321,12 @@ def compile_error_schema(
     )
 
     required = cast(list[str], schema["required"])
+    if not include_status:
+        properties.pop("status")
+        required.remove("status")
     if error.extensions_model is not None:
         extension_schema = error.extensions_model.model_json_schema(
             mode="serialization", by_alias=True
-        )
-        extension_schema = _rewrite_local_definitions(
-            extension_schema, error.effective_schema_name
         )
         extension_properties = extension_schema.get("properties", {})
         properties.update(extension_properties)
@@ -322,6 +341,8 @@ def compile_error_schema(
     if error.example is not None:
         example = _thaw(error.example)
         _validate_example(error, type_uri, example)
+        if not include_status:
+            example.pop("status", None)
         schema["examples"] = [example]
     return schema
 
@@ -336,8 +357,8 @@ def _base_problem_schema() -> dict[str, Any]:
             "title": {"type": "string"},
             "status": {"type": "integer", "minimum": 100, "maximum": 599},
             "code": {"type": "string", "pattern": "^[a-z][a-z0-9_]{2,}$"},
-            "detail": {"type": ["string", "null"]},
-            "instance": {"type": ["string", "null"], "format": "uri-reference"},
+            "detail": {"type": "string"},
+            "instance": {"type": "string", "format": "uri-reference"},
         },
         "required": ["type", "title", "status", "code"],
         "additionalProperties": True,
@@ -399,6 +420,27 @@ def _response_for_contracts(
 
 def _http_component_name(status: int) -> str:
     return f"Http{status}Problem"
+
+
+def _identify_problem_types(
+    path: str, response: dict[str, Any], components: dict[str, Any]
+) -> None:
+    """Resolve identities after composition has supplied all problem type URIs."""
+    schema = response["content"][_PROBLEM_MEDIA_TYPE]["schema"]
+    variants = schema.get("oneOf")
+    if not isinstance(variants, list):
+        return
+    mapping: dict[str, str] = {}
+    for variant in variants:
+        reference = variant["$ref"]
+        component = components[reference.removeprefix("#/components/schemas/")]
+        type_uri = component["properties"]["type"]["const"]
+        if type_uri in mapping:
+            raise ErrorConfigurationError(
+                f"route {path!r} has ambiguous problem type {type_uri!r}"
+            )
+        mapping[type_uri] = reference
+    schema["discriminator"] = {"propertyName": "type", "mapping": mapping}
 
 
 def _http_problem_schema(status: int) -> dict[str, Any]:

@@ -37,6 +37,13 @@ HTTP/SSE/RPC/WebRTC routing and generated RPC SDK execution and compilation.
 
 ## Verification scope
 
+The prepared 0.10.0 error foundation passed the separate workspace lint, type,
+test, and generated-client gates on Windows/Python 3.14. Its actual wheel passed
+all eleven feature/tool combinations with current dependencies on Python 3.14
+and minimum direct dependencies on Python 3.12. Dependency inventories remain in
+ignored `dist/compatibility-latest.json` and `dist/compatibility-minimum.json`.
+This is local source/artifact evidence, not publication or remote CI evidence.
+
 The unified 0.9.0 source has been checked locally on Windows with Python 3.14
 and current compatible dependencies, plus the minimum direct dependency matrix
 on Python 3.12. Both matrices install one Canon wheel across eleven feature/tool

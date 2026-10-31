@@ -1,6 +1,6 @@
 # uv workspace
 
-The prepared Canon 0.9.0 source has one publishable workspace member,
+The prepared Canon 0.10.0 source has one publishable workspace member,
 `packages/fastapi-canon`, plus the development-only reference service. The former
 transport package directories retain tests/tooling and are not workspace members.
 All transport implementations ship in the Canon wheel.

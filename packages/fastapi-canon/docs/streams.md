@@ -12,7 +12,7 @@ Import the router explicitly:
 from fastapi_canon.integrations.sse import CanonStreamRouter
 ```
 
-The prepared Canon 0.9.0 release includes the SSE implementation in the same
+The prepared Canon 0.10.0 release includes the SSE implementation in the same
 wheel. The `sse` extra selects FastAPI >=0.143.3 and Pydantic >=2.11.2;
 base composition keeps its existing lower bounds. No separate Streams package
 is installed. See the [migration guide](package-migration.md).

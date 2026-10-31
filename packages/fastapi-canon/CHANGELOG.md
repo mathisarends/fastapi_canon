@@ -2,6 +2,43 @@
 
 All notable changes to `fastapi-canon` are documented in this file.
 
+## 0.10.0 - unreleased
+
+### Breaking changes
+
+- Use the resolved RFC 9457 `type` URI as the discriminator for Canon's compiled
+  same-status HTTP problem unions. Regenerate clients and update schema consumers
+  that expected `propertyName: code`; `code` remains a stable Canon extension.
+  A union with ambiguous type identities, including a domain `about:blank`
+  variant combined with a generic problem of the same status, now fails schema
+  compilation. Give business-specific problems distinct, stable type URIs.
+- `Problem.status` is optional for embeddings and only accepts an integer when
+  present. Callers reading it directly must handle `None`; do not pass booleans,
+  numeric strings, or floats. HTTP responses still emit their actual status.
+- `Problem.as_dict()` preserves explicitly null extension values while omitting
+  absent `status`, `detail`, and `instance`. HTTP schemas describe optional
+  `detail` and `instance` as strings; omit absent values instead of emitting null.
+- Prepare one Canon 0.10.0 version across the workspace and generated artifact
+  metadata. This source version is not a publication.
+
+### Added
+
+- `ErrorRegistry.from_app(app)` exposes the installed application catalog after
+  composition resolves feature-local type URIs.
+- `ErrorRegistry.problem_for(exception, include_status=False, instance=None)`
+  renders the shared public problem without evaluating HTTP header callbacks.
+  Unknown exceptions return `None`; unresolved mapped type URIs fail explicitly.
+- `ErrorRegistry.schema_for(error, include_status=False)` exports a detached,
+  self-contained schema whose `$id` is the problem type URI. Nested extension
+  references remain local. HTTP compilation and WebRTC admission reuse this
+  common schema compiler.
+- A root canonicalization decision record, including the agreed RFC 9457 model,
+  planned SSE and SDK conventions, open decisions, and implementation boundaries.
+
+The combined client facade, RPC problem-envelope binding, and terminal SSE
+control-event profile remain subsequent work; this release does not implement
+those APIs or change their existing wire protocols.
+
 ## 0.9.0 - unreleased
 
 ### Breaking changes

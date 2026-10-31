@@ -1,7 +1,13 @@
 # Canon package and public API
 
+The [canonicalization record](../CANONICALIZATION_DECISIONS.md) distinguishes the
+agreed target design from implemented capabilities. The prepared 0.10.0 source
+adds [shared problem contracts](../packages/fastapi-canon/docs/problems.md).
+RPC problem envelopes, terminal SSE control events, and the combined client
+facade remain subsequent work.
+
 This document records the implemented package boundaries and public entry points
-in the prepared, unpublished Canon 0.9.0 source. The
+in the prepared, unpublished Canon 0.10.0 source. The
 [codegen discussion](unified-canon-concept.md) describes possible next steps;
 its configuration and combined SDK examples are design candidates.
 

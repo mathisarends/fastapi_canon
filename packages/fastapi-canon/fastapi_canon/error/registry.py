@@ -8,9 +8,12 @@ from urllib.parse import urlsplit
 
 from fastapi import FastAPI
 
+from fastapi_canon.error.contracts import INSTALLED_REGISTRY_STATE_KEY
 from fastapi_canon.error.error import Error
 from fastapi_canon.error.handlers import install_handlers
-from fastapi_canon.error.openapi import compile_responses
+from fastapi_canon.error.openapi import compile_problem_schema, compile_responses
+from fastapi_canon.error.problem import Problem
+from fastapi_canon.error.rendering import render_problem_payload
 from fastapi_canon.error.types import (
     ErrorConfigurationError,
     OpenAPIResponses,
@@ -121,6 +124,16 @@ class ErrorRegistry:
         """Return definitions in deterministic declaration order."""
         return tuple(entry.error for entry in self._entries)
 
+    @staticmethod
+    def from_app(app: FastAPI) -> ErrorRegistry:
+        """Return the resolved catalog owned by an application's installation."""
+        if not isinstance(app, FastAPI):
+            raise ErrorConfigurationError("app must be a FastAPI instance")
+        registry = getattr(app.state, INSTALLED_REGISTRY_STATE_KEY, None)
+        if not isinstance(registry, ErrorRegistry):
+            raise ErrorConfigurationError("application has no installed ErrorRegistry")
+        return registry
+
     def __iter__(self) -> Iterator[AnyError]:
         return iter(self.errors)
 
@@ -147,6 +160,43 @@ class ErrorRegistry:
         """Check membership by definition identity."""
         entry = self._by_exception.get(error.exception)
         return entry is not None and entry.error is error
+
+    def problem_for(
+        self,
+        exception: Exception,
+        *,
+        include_status: bool = False,
+        instance: str | None = None,
+    ) -> Problem | None:
+        """Render a mapped occurrence, or return None for an unknown exception.
+
+        HTTP status is opt-in for callers producing HTTP responses. Header
+        callbacks are not evaluated when rendering an embedded problem.
+        """
+        _validate_include_status(include_status)
+        error = self.resolve(exception)
+        if error is None:
+            return None
+        type_uri = self.type_uri_for(error)
+        if type_uri is None:
+            msg = f"error {error.code!r} has no resolved problem type URI"
+            raise ErrorConfigurationError(msg)
+        return render_problem_payload(
+            error,
+            exception,
+            type_uri=type_uri,
+            include_status=include_status,
+            instance=instance,
+        )
+
+    def schema_for(
+        self, error: AnyError, *, include_status: bool = False
+    ) -> dict[str, Any]:
+        """Return a detached, self-contained schema identified by its type URI."""
+        _validate_include_status(include_status)
+        schema = compile_problem_schema(self, error, include_status=include_status)
+        schema["$id"] = self.type_uri_for(error)
+        return schema
 
     def require_resolved(self) -> None:
         """Reject registries with unresolved problem type URIs."""
@@ -208,6 +258,11 @@ class ErrorRegistry:
         object.__setattr__(self, "type_base", type_base)
         object.__setattr__(self, "_entries", entries)
         object.__setattr__(self, "_by_exception", MappingProxyType(by_exception))
+
+
+def _validate_include_status(value: object) -> None:
+    if not isinstance(value, bool):
+        raise ErrorConfigurationError("include_status must be a bool")
 
 
 def _validate_name(value: object) -> str | None:

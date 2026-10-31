@@ -106,10 +106,10 @@ def test_same_status_generates_discriminated_one_of() -> None:
         {"$ref": "#/components/schemas/ResourceHiddenProblem"},
     ]
     assert schema["discriminator"] == {
-        "propertyName": "code",
+        "propertyName": "type",
         "mapping": {
-            "resource_missing": "#/components/schemas/ResourceMissingProblem",
-            "resource_hidden": "#/components/schemas/ResourceHiddenProblem",
+            "https://example.test/problems/resource_missing": "#/components/schemas/ResourceMissingProblem",
+            "https://example.test/problems/resource_hidden": "#/components/schemas/ResourceHiddenProblem",
         },
     }
 

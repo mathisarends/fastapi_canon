@@ -16,6 +16,21 @@ def render_problem(
     error: AnyError, exception: Exception, *, type_uri: str
 ) -> tuple[Problem, dict[str, str]]:
     """Render and validate one registered error occurrence atomically."""
+    problem = render_problem_payload(
+        error, exception, type_uri=type_uri, include_status=True
+    )
+    return problem, _render_headers(error, exception)
+
+
+def render_problem_payload(
+    error: AnyError,
+    exception: Exception,
+    *,
+    type_uri: str,
+    include_status: bool,
+    instance: str | None = None,
+) -> Problem:
+    """Render public problem data independently of HTTP response headers."""
     if not isinstance(exception, error.exception):
         msg = (
             f"cannot render {type(exception).__qualname__} with error for "
@@ -34,18 +49,20 @@ def render_problem(
     payload: dict[str, object] = {
         "type": type_uri,
         "title": error.title,
-        "status": error.status,
         "code": error.code,
         "detail": detail,
+        "instance": instance,
         **extensions,
     }
+    if include_status:
+        payload["status"] = error.status
     try:
         problem = Problem.model_validate(payload)
     except ValidationError as validation_error:
         msg = f"error {error.code!r} rendered an invalid Problem Details payload"
         raise ErrorConfigurationError(msg) from validation_error
 
-    return problem, _render_headers(error, exception)
+    return problem
 
 
 def _render_detail(error: AnyError, exception: Exception) -> str | None:

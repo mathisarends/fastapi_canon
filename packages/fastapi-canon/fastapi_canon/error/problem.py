@@ -2,7 +2,14 @@ import math
 from collections.abc import Mapping
 from typing import Any, Self, cast
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictInt,
+    field_validator,
+    model_validator,
+)
 
 from fastapi_canon.error.types import (
     CODE_PATTERN,
@@ -21,7 +28,7 @@ class Problem(BaseModel):
 
     type: str
     title: str
-    status: int
+    status: StrictInt | None = None
     code: str
     detail: str | None = None
     instance: str | None = None
@@ -44,8 +51,8 @@ class Problem(BaseModel):
 
     @field_validator("status")
     @classmethod
-    def _validate_status(cls, value: int) -> int:
-        if isinstance(value, bool) or not 100 <= value <= 599:
+    def _validate_status(cls, value: int | None) -> int | None:
+        if value is not None and not 100 <= value <= 599:
             msg = "status must be an HTTP status code between 100 and 599"
             raise ValueError(msg)
         return value
@@ -75,11 +82,12 @@ class Problem(BaseModel):
         return self
 
     def as_dict(self) -> dict[str, JsonValue]:
-        """Serialize to a JSON-native object, omitting absent optional members."""
-        return cast(
-            dict[str, JsonValue],
-            self.model_dump(mode="json", exclude_none=True),
-        )
+        """Omit absent standard members while preserving JSON-null extensions."""
+        result = cast(dict[str, JsonValue], self.model_dump(mode="json"))
+        for name in ("status", "detail", "instance"):
+            if result.get(name) is None:
+                result.pop(name, None)
+        return result
 
 
 def _is_json_value(value: object) -> bool:

@@ -43,7 +43,7 @@ outside the library's intended architecture.
 
 ## Quick start
 
-The prepared 0.9.0 source includes SSE, WebSockets and WebRTC in the same wheel.
+The prepared 0.10.0 source includes SSE, WebSockets and WebRTC in the same wheel.
 Install feature dependencies with `fastapi-canon[sse,websockets,webrtc]` and
 generation tooling with `fastapi-canon[codegen]`. Use `canon sse`,
 `canon websockets` and `canon webrtc` for contracts and clients.
@@ -295,6 +295,12 @@ low-level compatibility API described below. A domain error and a generic HTTP
 problem may share a status; the generated response then uses the same
 discriminated `oneOf` representation.
 
+`type` is the primary RFC 9457 problem identity. `code` is a stable Canon
+extension for application convenience. Both describe the same registered
+problem; clients should not parse human-readable `title` or `detail` text.
+See [shared problem contracts](docs/problems.md) for rendering occurrences and
+self-contained schemas outside an HTTP response.
+
 FastAPI `responses={...}` entries without canon error declarations require no
 additional metadata. Success contracts and other media types can be declared
 alongside problem responses.
@@ -336,12 +342,12 @@ components:
           type: string
           const: project_not_found
         detail:
-          type: [string, "null"]
+          type: string
 ```
 
 Typed extension fields and documented response headers are added to that same
 schema and response. If multiple errors share one status code, the response
-uses `oneOf` with `code` as its discriminator. When validation normalization is
+uses `oneOf` with the resolved `type` URI as its discriminator. When validation normalization is
 enabled, FastAPI's default `422` response is replaced by
 `RequestValidationProblem` using the same media type.
 
@@ -361,7 +367,8 @@ feature = Feature(
 )
 ```
 
-`Error.code` is the stable client contract. Dynamic `detail`, extensions, and
+`Error.type` (or its registry-resolved URI) is the primary client identity;
+`Error.code` is a stable convenience extension. Dynamic `detail`, extensions, and
 headers are public response data and should contain only information classified
 for API exposure. Exception text can be used as detail when it is itself a
 reviewed public contract. Domain registries should use specific exception types;

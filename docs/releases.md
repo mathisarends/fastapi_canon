@@ -11,6 +11,10 @@ historical runs, tags and assets linked below remain in their original repositor
 
 ## Current versions
 
+The current prepared source is Canon 0.10.0, unreleased. It adds the shared
+problem foundation and migration notes on top of the unpublished 0.9.0 package
+consolidation. No 0.9.0 or 0.10.0 publication is implied by source metadata.
+
 Streams 0.5.0, Canon 0.8.1 and RPCKit 0.4.1 were published on 2026-10-25 from
 [verified source `ebd725b`](https://github.com/mathisarends/canon/commit/ebd725b14610f4017614281d9ad074920cf6f002),
 after [exact-source CI](https://github.com/mathisarends/canon/actions/runs/40237725498). Streams was published
