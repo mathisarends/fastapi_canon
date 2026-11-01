@@ -1,11 +1,13 @@
 import subprocess
 import sys
+import textwrap
 from collections.abc import AsyncIterator, Callable
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 import pytest
+from fastapi_canon import Error, ErrorRegistry
 from fastapi_canon.integrations.websockets import (
     Inject,
     RpcBinaryInput,
@@ -471,6 +473,145 @@ def test_generated_python_is_ruff_formatted(
     assert _assert_ruff_clean(deployed, options, tmp_path)
 
 
+@pytest.mark.parametrize("with_errors", [False, True])
+@pytest.mark.parametrize("transport", [None, "websocket"])
+def test_generated_python_error_boundaries_are_smelt_clean(
+    with_errors: bool, transport: str | None, tmp_path: Path
+) -> None:
+    output = tmp_path / "src" / PACKAGE
+    options = PythonClientOptions(package=PACKAGE, with_transport=transport)
+    document = _error_document(with_errors=with_errors)
+    written = generate_python_client(document, output, options)
+    assert output / "errors.py" in written
+    assert render_python_client(document, options) == render_python_client(
+        document, options
+    )
+    assert generate_python_client(document, output, options, check=True) == ()
+    (tmp_path / "smelt.yml").write_text(
+        textwrap.dedent(f"""\
+            version: 1
+            project:
+              root_packages: [{PACKAGE}]
+              source_roots: [src]
+            architecture:
+              modules:
+                {PACKAGE}: infrastructure
+              layers:
+                infrastructure:
+                  path: infrastructure
+                  may_depend_on: []
+                  third_party: allow
+            rules:
+              prefer-package-import: warning
+              internal-public-module-symbol: warning
+            """),
+        encoding="utf-8",
+    )
+    targets = [str(output / "errors.py")]
+    if transport is not None:
+        targets.append(str(output / "transport.py"))
+
+    checked = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "smelt",
+            "check",
+            "--config",
+            "smelt.yml",
+            "--select",
+            "SMT319,SMT320",
+            "--fail-on",
+            "warning",
+            *targets,
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+    )
+
+    assert checked.returncode == 0, checked.stdout + checked.stderr
+
+
+@pytest.mark.parametrize("first_module", ["errors", "transport"])
+def test_generated_python_imports_preserve_error_dispatch(
+    first_module: str, tmp_path: Path
+) -> None:
+    generate_python_client(
+        _error_document(with_errors=True),
+        tmp_path / PACKAGE,
+        PythonClientOptions(package=PACKAGE, with_transport="websocket"),
+    )
+    imported = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            textwrap.dedent(f"""\
+                import importlib
+
+                importlib.import_module("{PACKAGE}.{first_module}")
+                sdk = importlib.import_module("{PACKAGE}")
+                errors = importlib.import_module("{PACKAGE}.errors")
+                runtime = importlib.import_module("{PACKAGE}.internal")
+                transport = importlib.import_module("{PACKAGE}.transport")
+                assert sdk.ProblemError is runtime.ProblemError
+                assert sdk.ProblemError is transport.ProblemError
+                assert sdk.ProtocolError is runtime.ProtocolError
+                assert sdk.ProtocolError is transport.ProtocolError
+                assert sdk.TransportError is runtime.TransportError
+                assert sdk.TransportError is transport.TransportError
+
+                legacy = errors.error_from_response(
+                    -32000, "unavailable", "Busy", {{"x": 7}}
+                )
+                assert type(legacy) is sdk.UnavailableError
+                assert legacy.rpc_code == -32000
+                assert legacy.details.x == 7
+                assert legacy.message == "Busy"
+
+                fallback = errors.error_from_response(
+                    -32042, "future", "Future", {{"raw": True}}
+                )
+                assert type(fallback) is sdk.RpcRemoteError
+                assert fallback.rpc_code == -32042
+                assert fallback.details == {{"raw": True}}
+
+                payload = {{
+                    "type": "urn:example:problems/project_missing",
+                    "title": "Missing project",
+                    "code": "project_missing",
+                    "replacement": None,
+                    "future": {{"new": True}},
+                }}
+                known = errors.error_from_response(
+                    -32000, "", "Missing", problem=payload
+                )
+                assert type(known) is sdk.ProjectMissingError
+                assert isinstance(known, sdk.ProblemError)
+                assert known.problem.replacement is None
+                assert known.problem.model_dump()["future"] == {{"new": True}}
+
+                payload["type"] = "urn:future:problem"
+                unknown = errors.error_from_response(
+                    -32000, "", "Future", problem=payload
+                )
+                assert type(unknown) is sdk.ProblemError
+                assert unknown.problem.type == "urn:future:problem"
+                assert unknown.problem.model_dump()["future"] == {{"new": True}}
+                """),
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+
+    assert imported.returncode == 0, imported.stdout + imported.stderr
+
+
 def test_long_event_models_and_route_annotations_are_ruff_clean(
     document: dict[str, Any],
     options: PythonClientOptions,
@@ -542,6 +683,31 @@ def _methods_only() -> RpcChannel:
     async def echo(params: _Params) -> _Result: ...
 
     return channel
+
+
+def _error_document(*, with_errors: bool) -> dict[str, Any]:
+    if with_errors:
+
+        class UnavailableError(RpcError):
+            details: _Params
+
+        missing = Error(
+            LookupError, status=404, code="project_missing", title="Missing project"
+        )
+        registry = ErrorRegistry(errors=[missing], type_base="urn:example:problems")
+        channel = RpcChannel(
+            "demo", error_registry=registry, raises=(UnavailableError, missing)
+        )
+
+        @channel.method
+        async def echo(params: _Params) -> _Result:
+            return _Result(x=params.x)
+
+    else:
+        channel = _methods_only()
+    service = RpcService()
+    service.socket("/rpc", channels=[channel])
+    return service.contract(title="Example", base_url="ws://localhost").to_openrpc()
 
 
 def _events_only() -> RpcChannel:

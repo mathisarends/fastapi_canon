@@ -2,6 +2,16 @@
 
 All notable changes to `fastapi-canon` are documented in this file.
 
+## Unreleased
+
+### Fixed
+
+- Generated Python RPC clients keep their undocumented error dispatch tables
+  private and import problem classes through the existing runtime package facade.
+  Regenerate clients to remove Smelt SMT319/SMT320 findings. Declare application
+  errors in the service contract; dispatch tables are not consumer extension
+  points. Error class exports and wire behavior are unchanged.
+
 ## 0.10.0 - 2026-11-01
 
 ### Breaking changes

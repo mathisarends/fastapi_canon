@@ -8,17 +8,19 @@ from contextlib import suppress
 from typing import Any, Protocol, Self
 
 from automation_client.internal import (
+    ProblemError,
+    ProtocolError,
     RpcClientError,
     RpcConnectError,
     RpcConnectionLostError,
     RpcNotificationOverflowHandler,
     RpcRequestTimeoutError,
     RpcTransportError,
+    TransportError,
 )
 from automation_client.internal.transport import validate_request_metadata
 
 from .errors import error_from_response
-from .internal.problem import ProblemError, ProtocolError, TransportError
 
 type JsonObject = dict[str, Any]
 _STREAM_ENDED = object()

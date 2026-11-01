@@ -12,8 +12,8 @@ from calc_client.internal import (
     parse_problem,
 )
 
-ERROR_TYPES: dict[str, type[RpcRemoteError]] = {}
-PROBLEM_TYPES: dict[str, tuple[type[ProblemError[Any]], TypeAdapter[Any]]] = {}
+_ERROR_TYPES: dict[str, type[RpcRemoteError]] = {}
+_PROBLEM_TYPES: dict[str, tuple[type[ProblemError[Any]], TypeAdapter[Any]]] = {}
 
 
 def error_from_response(
@@ -26,14 +26,14 @@ def error_from_response(
     if problem is not None:
         try:
             parsed = parse_problem(problem, embedded=True)
-            binding = PROBLEM_TYPES.get(parsed.type)
+            binding = _PROBLEM_TYPES.get(parsed.type)
             if binding is None:
                 return ProblemError(parsed)
             problem_type, problem_adapter = binding
             return problem_type(problem_adapter.validate_python(problem))
         except ValidationError as exc:
             raise ProtocolError("Invalid RPC problem") from exc
-    error_type = ERROR_TYPES.get(code)
+    error_type = _ERROR_TYPES.get(code)
     if error_type is None:
         return RpcRemoteError(rpc_code, code, message, details)
     adapter = getattr(error_type, "details_adapter", None)
