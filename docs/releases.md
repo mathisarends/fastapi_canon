@@ -11,9 +11,26 @@ historical runs, tags and assets linked below remain in their original repositor
 
 ## Current versions
 
-The current prepared source is Canon 0.10.0, unreleased. It adds the shared
-problem foundation and migration notes on top of the unpublished 0.9.0 package
-consolidation. No 0.9.0 or 0.10.0 publication is implied by source metadata.
+Canon 0.10.0 was published on 2026-11-01 from
+[verified source `4d9ce18`](https://github.com/mathisarends/fastapi_canon/commit/4d9ce1842b350a9bf867d512cc89aafc4b44d53b),
+after [exact-source CI](https://github.com/mathisarends/fastapi_canon/actions/runs/41311732023)
+and the [final dry run](https://github.com/mathisarends/fastapi_canon/actions/runs/41312304534).
+It includes the unpublished 0.9.0 consolidation and its migrations; 0.9.0 was
+never published separately. The
+[publication run](https://github.com/mathisarends/fastapi_canon/actions/runs/41312590718)
+uploaded its original verified wheel and sdist after correcting the Trusted
+Publisher's repository/environment fields. Its public-install check then failed
+because the publish job had not installed the npm compiler dependencies.
+
+Recovery kept the original source, notes, manifest and artifact bytes. The
+documented `verify-pypi` command passed all six public-index installation
+combinations locally on Windows/Python 3.14; the combined extras also passed a
+fresh Windows/Python 3.12 public-index installation. The documented `finish`
+command created the matching
+[tag and GitHub Release](https://github.com/mathisarends/fastapi_canon/releases/tag/fastapi-canon-v0.10.0).
+Downloaded GitHub assets, PyPI file hashes and the original manifest agree, and
+the tag points to the verified source. The publish job now installs Node.js and
+the Streams npm dependencies before public-install verification.
 
 Streams 0.5.0, Canon 0.8.1 and RPCKit 0.4.1 were published on 2026-10-25 from
 [verified source `ebd725b`](https://github.com/mathisarends/canon/commit/ebd725b14610f4017614281d9ad074920cf6f002),
@@ -44,13 +61,13 @@ assets are verified.
 
 | Package | Version | Migration |
 | --- | --- | --- |
-| Canon | 0.8.1 | No Canon API change; the optional Streams extra pins 0.5.0. Follow the Streams notes when regenerating stream SDKs. See the [Canon 0.8.1 notes](../packages/fastapi-canon/CHANGELOG.md#081---2026-10-25). |
+| Canon | 0.10.0 | Replace the separate transport distributions with Canon extras, update imports/CLI paths, and regenerate clients. Follow the [0.10.0 notes](../packages/fastapi-canon/CHANGELOG.md#0100---2026-11-01) and included [0.9.0 migrations](../packages/fastapi-canon/CHANGELOG.md#090---unreleased). |
 | WebRTC | 0.3.0 | Use public enum members, keyword-only engine/channel options and `DescriptionType`; handle lazy type aliases in introspection tools. See the [migration notes](../packages/fastapi-webrtc/CHANGELOG.md#030---2026-10-24). |
 | Streams | 0.5.0 | Regenerate clients. SDK-owned generated Python clients bound the connect time to 10 seconds; pass `RequestOptions(timeout=None)` or inject `httpx.AsyncClient(timeout=None)` to keep it unbounded. See the [Streams 0.5.0 notes](../packages/fastapi-streams/CHANGELOG.md#050---2026-10-25). |
 | RPCKit | 0.4.1 | None; wire output and generated clients are unchanged apart from the manifest generator version. See the [RPCKit 0.4.1 notes](../packages/fastapi-rpckit/CHANGELOG.md#041---2026-10-25). |
 
-Those publications used separate distributions. The prepared 0.9.0 source
-contains all transport modules in Canon and has no internal distribution pins.
+The earlier Canon 0.8.1 and transport publications used separate distributions.
+Their consolidation ships in Canon 0.10.0 without internal distribution pins.
 
 ### Consumer integration upgrade
 
@@ -76,13 +93,14 @@ WebRTC 0.1.0 and RPCKit 0.3.0:
 The signaling protocol stays `fastapi-webrtc.v1`. A maintained CDP binding and
 deployed TURN/NAT, database concurrency and proxy validation remain separate work.
 
-## Prepared source versions
+## Unified release scope
 
 Canon 0.10.0 includes the unpublished 0.9.0 package consolidation and optional
 native OpenTelemetry integration, plus canonical error bindings and common SDK
 generation. See the [migration guide](../packages/fastapi-canon/docs/package-migration.md).
 Only Canon is an active release target; the old feature directories retain
-tests, examples and historical changelogs. No publication is implied by source versions.
+tests, examples and historical changelogs. Source metadata alone does not establish
+a publication; the verified 0.10.0 publication is recorded above.
 
 ## Publisher setup
 

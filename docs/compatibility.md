@@ -4,12 +4,15 @@
 
 | Package | Published |
 | --- | --- |
-| `fastapi-canon` | 0.8.1 |
+| `fastapi-canon` | 0.10.0 |
 | `fastapi-streams` | 0.5.0 |
 | `fastapi-rpckit` | 0.4.1 |
 | `fastapi-webrtc` | 0.3.0 |
 
 Published versions and assets are linked in the [README](../README.md#current-releases).
+Canon 0.10.0 was published on 2026-11-01. It includes the unpublished 0.9.0
+consolidation; follow the [package migration guide](../packages/fastapi-canon/docs/package-migration.md)
+and regenerate clients using the 0.10.0 changelog notes.
 Streams 0.5.0, Canon 0.8.1 and RPCKit 0.4.1 were published on 2026-10-25; Canon
 0.8.0 earlier that day; WebRTC 0.3.0 on 2026-10-24. Follow the
 [Streams 0.5.0 notes](../packages/fastapi-streams/CHANGELOG.md#050---2026-10-25)
@@ -21,22 +24,23 @@ before upgrading custom engines. The [release record](releases.md#current-versio
 links the verified source and publication workflows.
 Package metadata defines dependency ranges; the root `uv.lock` selects development
 versions and does not establish support for every resolvable combination.
-The prepared, unpublished Canon 0.9.0 source combines the transport code in one
-wheel. Feature extras select third-party dependencies; no extra requires an
+Canon 0.10.0 combines the transport code from the unpublished 0.9.0 consolidation
+in one wheel. Feature extras select third-party dependencies; no extra requires an
 earlier distribution. Base composition retains its lower dependency bounds.
 
-Prepared Canon 0.10.0 adds the [canonical error bindings and generated-client
+Canon 0.10.0 adds the [canonical error bindings and generated-client
 handling](../packages/fastapi-canon/docs/problems.md). The expanded implementation
 passed the current-dependency wheel matrix on Python 3.14 and the minimum matrix
 on Python 3.12 on 2026-10-31: eleven independent installations per matrix, with
-core Pydantic 2.9 support retained. These are source/artifact checks, not a release
-or a claim to have tested every combination allowed by the dependency ranges.
+core Pydantic 2.9 support retained. The final release artifacts passed those
+matrices again on 2026-11-01. This does not establish support for every combination
+allowed by the dependency ranges.
 
 Canon 0.8.0 adds router policies and optional source-based error-contract checking.
 Its policy contracts and installed checker are exercised by the current/minimum
 installed-wheel smoke matrices and public-index installation checks.
 
-The current releases passed exact-source CI, current/minimum wheel
+The earlier standalone releases passed exact-source CI, current/minimum wheel
 matrices and installed CLI/client checks before publication. Public installs cover
 Canon core, each optional extra and both extras together. A fresh Windows/Python
 3.14 installation also verified all four published packages together, including
@@ -44,12 +48,18 @@ HTTP/SSE/RPC/WebRTC routing and generated RPC SDK execution and compilation.
 
 ## Verification scope
 
-The prepared 0.10.0 error foundation passed the separate workspace lint, type,
-test, and generated-client gates on Windows/Python 3.14. Its actual wheel passed
-all eleven feature/tool combinations with current dependencies on Python 3.14
-and minimum direct dependencies on Python 3.12. Dependency inventories remain in
-ignored `dist/compatibility-latest.json` and `dist/compatibility-minimum.json`.
-This is local source/artifact evidence, not publication or remote CI evidence.
+The published 0.10.0 source passed exact-commit CI on Linux/Python 3.12–3.14 and
+Windows/Python 3.14, including the workspace lint, type, test and generated-client
+gates. Linux/Python 3.14 also passed Chromium/aiortc browser checks. The release
+wheel passed all eleven feature/tool combinations with current dependencies on
+Python 3.14 and minimum direct dependencies on Python 3.12.
+
+After upload, the publish runner lacked npm compiler dependencies. Recovery
+verified the original PyPI hashes and all six public-index installation
+combinations on Windows/Python 3.14, plus the combined extras on Windows/Python
+3.12, before finalizing the GitHub Release from the original artifacts. See the
+[release record](releases.md#current-versions) for source, CI, workflow and asset
+links. Per-run manifests and artifact hashes remain in Actions and GitHub Releases.
 
 The unified 0.9.0 source has been checked locally on Windows with Python 3.14
 and current compatible dependencies, plus the minimum direct dependency matrix
@@ -59,7 +69,7 @@ HTTP backend, HTTPX and HTTPX2; the installed WebRTC CLI generates a client that
 compiles. Chromium scenarios cover the aiortc signaling and media paths. This
 local validation does not replace exact-source CI or establish a publication.
 
-Prepared Canon 0.9.0 adds an optional `otel` extra requiring FastAPI >=0.143 and
+Canon's optional `otel` extra requires FastAPI >=0.143 and
 OpenTelemetry API >=1.40,<2. Canon core retains FastAPI >=0.115; its declarations
 and disabled Dishka decorators require no OpenTelemetry imports. Recent FastAPI
 versions have their own OpenTelemetry API dependency. The installed-wheel matrix
@@ -119,7 +129,7 @@ are consumer-reported results, not independent workspace deployment verification
 Deployed TURN/NAT, PostgreSQL concurrency and proxies still require
 application-side validation.
 
-The prepared 0.10.0 unified SDK is also exercised across HTTP, SSE and JSON-RPC
+The 0.10.0 unified SDK is also exercised across HTTP, SSE and JSON-RPC
 with one problem/error identity and shared model classes. Tests compile and run
 the generated TypeScript facade, compile its socket/WebRTC session signatures,
 and exercise generated Python requests and cleanup. The common HTTP binding is

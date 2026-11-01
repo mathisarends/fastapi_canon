@@ -44,7 +44,7 @@ uv sync --locked --all-packages --all-groups
 | --- | --- |
 | Original standalone Canon through 0.4.0 | Existing [`fastapi_canon` releases](https://github.com/mathisarends/fastapi_canon/releases), including the original `v0.4.0` tag |
 | Canon 0.5.0 through 0.8.1 and the separately published transports | Original [`canon` releases](https://github.com/mathisarends/canon/releases), tags, workflow runs and attached artifacts |
-| Future unified Canon releases, starting with the prepared 0.9.0 | [`fastapi_canon` releases](https://github.com/mathisarends/fastapi_canon/releases), using `fastapi-canon-v` tags |
+| Unified Canon releases from 0.10.0 onward | [`fastapi_canon` releases](https://github.com/mathisarends/fastapi_canon/releases), using `fastapi-canon-v` tags |
 
 Historical release links, manifests, checksums, assets and PyPI files stay at their
 original locations. The migration does not recreate or move existing tags or
@@ -91,3 +91,9 @@ with the next authorized release.
 
 Repository configuration in this PR does not prove that steps 2–5 have been
 performed in GitHub or PyPI. Record their verification when executing the cutover.
+
+Canon 0.10.0 became the first unified publication from this repository on
+2026-11-01. The `pypi` GitHub environment restricts deployment to `main`, and the
+corrected Trusted Publisher completed the OIDC exchange and PyPI upload. The
+[release record](releases.md#current-versions) documents verification and recovery
+of the original artifacts, including the matching GitHub Release.

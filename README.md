@@ -2,14 +2,14 @@
 
 See [canonicalization decisions](CANONICALIZATION_DECISIONS.md) for the agreed
 target design and [shared problem contracts](packages/fastapi-canon/docs/problems.md)
-for the implemented HTTP, SSE, RPC, and generated-client error workflow in the
-prepared 0.10.0 source.
+for the implemented HTTP, SSE, RPC, and generated-client error workflow in
+Canon 0.10.0.
 
 One workspace for the FastAPI application stack: architecture conventions,
 feature composition and HTTP contracts, typed SSE, WebSocket RPC, and WebRTC
 sessions.
 
-The prepared Canon 0.10.0 source consolidates the stack into one `fastapi-canon`
+Canon 0.10.0 consolidates the stack into one `fastapi-canon`
 distribution. SSE, WebSockets and WebRTC are bundled integrations in that same
 package. Extras select their third-party dependencies; they do not install the
 earlier Canon distributions:
@@ -20,8 +20,7 @@ uv add --dev "fastapi-canon[codegen]"
 uv run fastapi-canon --help
 ```
 
-These changes are not published yet. See the
-[migration guide](packages/fastapi-canon/docs/package-migration.md) for imports,
+See the [migration guide](packages/fastapi-canon/docs/package-migration.md) for imports,
 commands and the current codegen scope.
 
 The [Canon architecture and public API](docs/canon.md) defines the shared
@@ -40,23 +39,22 @@ sequence, publisher setup and historical release locations.
 
 ## Current releases
 
-The verified publications below belong to the earlier four-distribution layout.
-The prepared consolidation publishes only `fastapi-canon`; the other names
-remain historical releases. The unified source is not yet on PyPI.
+Canon 0.10.0 is the current unified distribution. The other names below are
+historical releases from the earlier four-distribution layout; use Canon's
+feature extras for current development.
 
 | Package | Version | GitHub | PyPI |
 | --- | --- | --- | --- |
-| `fastapi-canon` | 0.8.1 | [Release notes and artifacts](https://github.com/mathisarends/canon/releases/tag/fastapi-canon-v0.8.1) | [Install](https://pypi.org/project/fastapi-canon/0.8.1/) |
+| `fastapi-canon` | 0.10.0 | [Release notes and artifacts](https://github.com/mathisarends/fastapi_canon/releases/tag/fastapi-canon-v0.10.0) | [Install](https://pypi.org/project/fastapi-canon/0.10.0/) |
 | `fastapi-streams` | 0.5.0 | [Release notes and artifacts](https://github.com/mathisarends/canon/releases/tag/fastapi-streams-v0.5.0) | [Install](https://pypi.org/project/fastapi-streams/0.5.0/) |
 | `fastapi-rpckit` | 0.4.1 | [Release notes and artifacts](https://github.com/mathisarends/canon/releases/tag/fastapi-rpckit-v0.4.1) | [Install](https://pypi.org/project/fastapi-rpckit/0.4.1/) |
 | `fastapi-webrtc` | 0.3.0 | [Release notes and artifacts](https://github.com/mathisarends/canon/releases/tag/fastapi-webrtc-v0.3.0) | [Install](https://pypi.org/project/fastapi-webrtc/0.3.0/) |
 
-The table records verified publications in the former
-[`canon` release list](https://github.com/mathisarends/canon/releases).
-Future releases use this repository's
+Canon releases use this repository's
 [release list](https://github.com/mathisarends/fastapi_canon/releases), one Canon
 version, tag, changelog and artifact set. Historical release URLs and assets stay
-at their original locations.
+in the former [`canon` release list](https://github.com/mathisarends/canon/releases)
+and their original repositories.
 
 ## Workspace
 
