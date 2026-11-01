@@ -3,6 +3,9 @@ from dataclasses import FrozenInstanceError
 import pytest
 from fastapi import APIRouter, FastAPI
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+from starlette.responses import RedirectResponse
+
 from fastapi_canon import (
     CanonResponse,
     ErrorRegistry,
@@ -10,8 +13,6 @@ from fastapi_canon import (
 )
 from fastapi_canon.error import ErrorConfigurationError
 from fastapi_canon.error.types import JsonValue, OpenAPIHeader
-from pydantic import BaseModel
-from starlette.responses import RedirectResponse
 
 
 def registry() -> ErrorRegistry:

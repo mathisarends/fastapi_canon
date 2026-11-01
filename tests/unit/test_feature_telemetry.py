@@ -1,5 +1,6 @@
 import pytest
 from fastapi import FastAPI
+
 from fastapi_canon import Composition, FeatureConfigurationError
 from fastapi_canon.integrations.opentelemetry import Telemetry
 

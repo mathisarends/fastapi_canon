@@ -1,5 +1,6 @@
 import pytest
 from fastapi import APIRouter, FastAPI
+
 from fastapi_canon import (
     Composition,
     Error,

@@ -40,13 +40,23 @@ def _main() -> None:
             )
         elif gate == "lint":
             _run(_ROOT, "scripts/check_documentation.py")
-            _run(_ROOT, "-m", "ruff", "check", ".")
-            _run(_ROOT, "-m", "ruff", "format", "--check", ".")
+            # Moving configs can leave stale import classifications in Ruff's cache.
+            _run(_ROOT, "-m", "ruff", "check", "--no-cache", ".")
+            _run(_ROOT, "-m", "ruff", "format", "--no-cache", "--check", ".")
             for transport in _TRANSPORTS:
                 source = f"fastapi_canon/integrations/{transport}"
                 config = ("--config", f"tooling/{transport}.ruff.toml")
-                _run(_ROOT, "-m", "ruff", "check", *config, source)
-                _run(_ROOT, "-m", "ruff", "format", "--check", *config, source)
+                _run(_ROOT, "-m", "ruff", "check", "--no-cache", *config, source)
+                _run(
+                    _ROOT,
+                    "-m",
+                    "ruff",
+                    "format",
+                    "--no-cache",
+                    "--check",
+                    *config,
+                    source,
+                )
         elif gate == "types":
             _run(_ROOT, "-m", "mypy")
             _run(

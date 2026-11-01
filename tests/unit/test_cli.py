@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 import pytest
+
 from fastapi_canon import __version__
 from fastapi_canon.cli import main
 

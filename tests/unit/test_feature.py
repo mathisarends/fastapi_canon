@@ -9,6 +9,8 @@ from dishka.integrations.fastapi import inject
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
+from starlette.responses import Response
+
 from fastapi_canon import (
     CanonResponse,
     CanonRouter,
@@ -19,7 +21,6 @@ from fastapi_canon import (
     FeatureConfigurationError,
 )
 from fastapi_canon.error import Error, ErrorRegistry
-from starlette.responses import Response
 
 
 def test_feature_copies_inputs_and_is_frozen() -> None:

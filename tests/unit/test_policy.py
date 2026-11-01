@@ -8,6 +8,7 @@ from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Depends, FastAPI, Header
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
+
 from fastapi_canon import (
     CanonResponse,
     CanonRouter,

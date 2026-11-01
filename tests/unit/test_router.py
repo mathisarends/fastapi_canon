@@ -6,6 +6,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
+
 from fastapi_canon import (
     CanonResponse,
     CanonRouter,
