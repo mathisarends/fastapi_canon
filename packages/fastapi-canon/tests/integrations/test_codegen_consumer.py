@@ -106,7 +106,7 @@ def test_typescript_distinguishes_json_null_empty_and_mixed_responses(
         / "packages/fastapi-streams/node_modules/typescript/bin/tsc"
     )
     if node is None or not compiler.exists():
-        pytest.skip("Run npm ci --ignore-scripts --prefix packages/fastapi-streams")
+        pytest.skip("Run pnpm install --frozen-lockfile --ignore-scripts")
     responses = {
         "empty": {"204": {"description": "Removed"}},
         "jsonNull": {

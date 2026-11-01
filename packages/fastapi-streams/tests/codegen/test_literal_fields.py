@@ -93,7 +93,9 @@ def test_readable_typescript_preserves_union_intersection_precedence(tmp_path):
     )
     compiler = Path(__file__).parents[2] / "node_modules/typescript/bin/tsc"
     node = shutil.which("node")
-    assert node and compiler.is_file(), "Run npm ci before acceptance tests"
+    assert node and compiler.is_file(), (
+        "Run pnpm install --frozen-lockfile --ignore-scripts before acceptance tests"
+    )
     result = subprocess.run(
         [node, str(compiler), "-p", str(tmp_path / "tsconfig.json")],
         capture_output=True,

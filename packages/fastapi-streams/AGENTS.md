@@ -16,14 +16,14 @@ and generated TypeScript/Python clients. Follow the workspace rules in the root
 ## Commands
 
 Run from the workspace root after `uv sync --locked --all-packages --all-groups`
-and `npm ci --ignore-scripts --prefix packages/fastapi-streams`:
+and `pnpm install --frozen-lockfile --ignore-scripts`:
 
 ```console
 uv run --locked python scripts/check.py test
 uv run --locked --project ../.. --directory packages/fastapi-streams python scripts/codegen.py
 uv run --locked python scripts/check.py clients
-npm run --prefix packages/fastapi-streams test
-npm run --prefix packages/fastapi-streams typecheck
+pnpm --dir packages/fastapi-streams run test
+pnpm --dir packages/fastapi-streams run typecheck
 uv run --locked python scripts/check.py lint
 ```
 

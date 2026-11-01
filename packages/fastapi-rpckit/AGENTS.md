@@ -21,6 +21,7 @@ Run from the workspace root, using the root environment and lockfile:
 
 ```console
 uv sync --locked --all-packages --all-groups
+pnpm install --frozen-lockfile --ignore-scripts
 uv run --locked python scripts/check.py lint
 uv run --locked python scripts/check.py types
 uv run --locked python scripts/check.py test

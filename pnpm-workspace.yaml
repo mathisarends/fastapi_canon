@@ -1,0 +1,4 @@
+packages:
+  - packages/fastapi-streams
+  - packages/fastapi-rpckit
+  - packages/fastapi-webrtc

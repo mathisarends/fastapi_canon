@@ -32,7 +32,7 @@ From the workspace root, install the Streams TypeScript tooling first, build
 Canon and replace `VERSION` with the built package version:
 
 ```console
-npm ci --ignore-scripts --prefix packages/fastapi-streams
+pnpm install --frozen-lockfile --ignore-scripts
 uv build --package fastapi-canon --out-dir dist/fastapi-canon
 uv run --isolated --no-project --no-cache --with "dist/fastapi-canon/fastapi_canon-VERSION-py3-none-any.whl[codegen]" --with ruff python -I scripts/check_rpc_consumer.py PATH_TO_CONSUMER_OPENRPC_JSON
 ```

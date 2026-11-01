@@ -29,7 +29,7 @@ preserve historical release evidence in `mathisarends/canon`.
 - `packages/fastapi-webrtc`: retained WebRTC tests, examples and tooling for
   signaling protocol `fastapi-webrtc.v1`. Browser tests
   run with `uv run --locked python scripts/check.py browser` after
-  `npx playwright install chromium` in that package.
+  `pnpm exec playwright install chromium` in that package.
 - Transport modules must not import each other or load optional engines eagerly.
 - Use one Canon version. Add shared abstractions only for concrete reuse.
 - Application code follows `guides/architecture.md`: feature slices, inward
@@ -37,12 +37,12 @@ preserve historical release evidence in `mathisarends/canon`.
 
 ## Workflow
 
-Use the root environment and lockfile:
+Use the root Python environment, `uv.lock`, and the shared `pnpm-lock.yaml`.
+The root `package.json` pins pnpm; see `docs/contributing.md` for setup:
 
 ```console
 uv sync --locked --all-packages --all-groups
-npm ci --ignore-scripts --prefix packages/fastapi-streams
-npm ci --ignore-scripts --prefix packages/fastapi-webrtc
+pnpm install --frozen-lockfile --ignore-scripts
 uv run --locked python scripts/check.py all
 uv run --locked python scripts/check_distributions.py
 ```
@@ -94,7 +94,7 @@ wheel environments and write dependency inventories under `dist/`. Check Streams
 installed CLI/backends with `uv run --locked python scripts/check_streams_artifacts.py`
 and WebRTC's installed CLI and generated TypeScript client with
 `uv run --locked python scripts/check_webrtc_artifacts.py` (after
-`npm ci --ignore-scripts --prefix packages/fastapi-webrtc`).
+`pnpm install --frozen-lockfile --ignore-scripts`).
 For an external RPC contract, follow the installed-wheel command in the parity
 report; SDK compilation alone does not establish a full application migration.
 

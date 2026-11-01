@@ -209,10 +209,10 @@ def test_generated_typescript_input_streams_follow_the_wire_protocol(
     document: dict[str, Any],
     tmp_path: Path,
 ) -> None:
-    npx = shutil.which("npx.cmd") or shutil.which("npx")
+    pnpm = shutil.which("pnpm.cmd") or shutil.which("pnpm")
     node = shutil.which("node.exe") or shutil.which("node")
-    if npx is None or node is None:
-        pytest.skip("Node.js and npx are required")
+    if pnpm is None or node is None:
+        pytest.skip("Node.js and pnpm are required")
 
     deployed = deepcopy(document)
     deployed["servers"] = [
@@ -256,10 +256,8 @@ def test_generated_typescript_input_streams_follow_the_wire_protocol(
     compiled = tmp_path / "compiled"
     type_check = subprocess.run(
         [
-            npx,
-            "--yes",
-            "--package",
-            "typescript",
+            pnpm,
+            "exec",
             "tsc",
             "--strict",
             "--target",

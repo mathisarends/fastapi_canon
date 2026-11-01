@@ -35,25 +35,23 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ matrix.python }}
+      - uses: pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996 # v6
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
-          cache: npm
-          cache-dependency-path: |
-            packages/fastapi-streams/package-lock.json
-            packages/fastapi-webrtc/package-lock.json
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
         with:
           version: '0.9.2'
           enable-cache: true
       - run: uv sync --locked --all-packages --all-groups --python ${{ matrix.python }}
-      - run: npm ci --ignore-scripts --prefix packages/fastapi-streams
-      - run: npm ci --ignore-scripts --prefix packages/fastapi-webrtc
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: uv run --locked python scripts/check.py all
       - if: matrix.os == 'ubuntu-latest' && matrix.python == '3.14'
         name: WebRTC sessions in Chromium
         run: |
-          (cd packages/fastapi-webrtc && npx playwright install --with-deps chromium)
+          pnpm --dir packages/fastapi-webrtc exec playwright install --with-deps chromium
           uv run --locked python scripts/check.py browser
       - if: matrix.os == 'ubuntu-latest' && matrix.python == '3.14'
         run: uv run --locked python scripts/check_distributions.py

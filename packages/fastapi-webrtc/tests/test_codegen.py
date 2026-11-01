@@ -588,7 +588,7 @@ def test_generated_clients_type_check(tmp_path: Path) -> None:
     tsc = PACKAGE / "node_modules/typescript/bin/tsc"
     node = shutil.which("node")
     if node is None or not tsc.is_file():
-        pytest.skip("TypeScript is not installed (npm ci in packages/fastapi-webrtc)")
+        pytest.skip("Run pnpm install --frozen-lockfile --ignore-scripts first")
     value = copy.deepcopy(contract())
     value["definitions"]["Everything"] = {
         "type": "object",

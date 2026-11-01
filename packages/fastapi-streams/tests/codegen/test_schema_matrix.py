@@ -309,7 +309,7 @@ def test_every_generated_package_passes_strict_typechecking(generated_matrix):
     node = shutil.which("node")
     compiler = ROOT / "node_modules/typescript/bin/tsc"
     assert node and compiler.is_file(), (
-        "Run npm ci before the generator acceptance tests"
+        "Run pnpm install --frozen-lockfile --ignore-scripts first"
     )
     config = root / "tsconfig.json"
     config.write_text(

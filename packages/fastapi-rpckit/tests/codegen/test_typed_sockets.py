@@ -164,9 +164,9 @@ def test_union_clients_pass_target_formatting_and_types(
             timeout=120,
         )
         assert result.returncode == 0, result.stdout + result.stderr
-    npx = shutil.which("npx.cmd") or shutil.which("npx")
-    if npx is None:
-        pytest.skip("npx is required")
+    pnpm = shutil.which("pnpm.cmd") or shutil.which("pnpm")
+    if pnpm is None:
+        pytest.skip("pnpm is required")
     target = tmp_path / "typescript"
     document["servers"] = [
         {
@@ -181,7 +181,7 @@ def test_union_clients_pass_target_formatting_and_types(
         TypeScriptClientOptions(api_root=api_root, with_transport="websocket"),
     )
     result = subprocess.run(
-        [npx, "prettier", "--check", str(target)],
+        [pnpm, "exec", "prettier", "--check", str(target)],
         capture_output=True,
         text=True,
         check=False,
@@ -190,10 +190,8 @@ def test_union_clients_pass_target_formatting_and_types(
     assert result.returncode == 0, result.stdout + result.stderr
     result = subprocess.run(
         [
-            npx,
-            "--yes",
-            "--package",
-            "typescript",
+            pnpm,
+            "exec",
             "tsc",
             "--strict",
             "--target",

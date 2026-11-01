@@ -31,10 +31,10 @@ class SessionMissing(Exception):
 
 
 def test_generated_typescript_subscription(tmp_path: Path) -> None:
-    npx = shutil.which("npx.cmd") or shutil.which("npx")
+    pnpm = shutil.which("pnpm.cmd") or shutil.which("pnpm")
     node = shutil.which("node.exe") or shutil.which("node")
-    if npx is None or node is None:
-        pytest.skip("Node.js and npx are required")
+    if pnpm is None or node is None:
+        pytest.skip("Node.js and pnpm are required")
     default = RpcErrorBinding(SessionMissing, code="session_unavailable")
     channel = RpcChannel("session", raises=[default])
 
@@ -55,7 +55,8 @@ def test_generated_typescript_subscription(tmp_path: Path) -> None:
     )
     formatted = subprocess.run(
         [
-            npx,
+            pnpm,
+            "exec",
             "prettier",
             "--check",
             str(tmp_path / "generated"),
@@ -231,10 +232,8 @@ def test_generated_typescript_subscription(tmp_path: Path) -> None:
     compiled = tmp_path / "compiled"
     checked = subprocess.run(
         [
-            npx,
-            "--yes",
-            "--package",
-            "typescript",
+            pnpm,
+            "exec",
             "tsc",
             "--strict",
             "--target",
