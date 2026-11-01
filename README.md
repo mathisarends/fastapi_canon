@@ -379,17 +379,17 @@ sequence, publisher setup and historical release locations.
 
 ## Current releases
 
-Canon 0.10.0 is the current published unified distribution. The source on `main`
-prepares **0.11.0 (unreleased)**. It replaces `observe()` with feature-owned
+Canon **0.11.0** is the current published unified distribution.
+It replaces `observe()` with feature-owned
 `instrument()` declarations and fixes generated Python RPC clients. See the
 [migration notes](packages/fastapi-canon/CHANGELOG.md#0110---2026-11-01)
-and [release preparation](docs/releases.md#current-versions).
+and [publication record](docs/releases.md#current-versions).
 The other names below are historical releases from the earlier four-distribution
 layout; use Canon's feature extras for current development.
 
 | Package | Version | GitHub | PyPI |
 | --- | --- | --- | --- |
-| `fastapi-canon` | 0.10.0 | [Release notes and artifacts](https://github.com/mathisarends/fastapi_canon/releases/tag/fastapi-canon-v0.10.0) | [Install](https://pypi.org/project/fastapi-canon/0.10.0/) |
+| `fastapi-canon` | 0.11.0 | [Release notes and artifacts](https://github.com/mathisarends/fastapi_canon/releases/tag/fastapi-canon-v0.11.0) | [Install](https://pypi.org/project/fastapi-canon/0.11.0/) |
 | `fastapi-streams` | 0.5.0 | [Release notes and artifacts](https://github.com/mathisarends/canon/releases/tag/fastapi-streams-v0.5.0) | [Install](https://pypi.org/project/fastapi-streams/0.5.0/) |
 | `fastapi-rpckit` | 0.4.1 | [Release notes and artifacts](https://github.com/mathisarends/canon/releases/tag/fastapi-rpckit-v0.4.1) | [Install](https://pypi.org/project/fastapi-rpckit/0.4.1/) |
 | `fastapi-webrtc` | 0.3.0 | [Release notes and artifacts](https://github.com/mathisarends/canon/releases/tag/fastapi-webrtc-v0.3.0) | [Install](https://pypi.org/project/fastapi-webrtc/0.3.0/) |
