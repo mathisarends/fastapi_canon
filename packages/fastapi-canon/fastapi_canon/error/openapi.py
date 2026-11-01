@@ -13,6 +13,8 @@ from fastapi_canon.error.contracts import (
     HTTP_STATUSES_EXTENSION,
     INSTALLED_OPENAPI_STATE_KEY,
     SUCCESS_EXTENSION,
+    AnyError,
+    ErrorCatalog,
     contracts_from_responses,
     iter_operations,
 )
@@ -26,7 +28,6 @@ from fastapi_canon.error.types import (
 )
 
 if TYPE_CHECKING:
-    from fastapi_canon.error.registry import AnyError, ErrorRegistry
     from fastapi_canon.response import CanonResponse
 
 _PROBLEM_MEDIA_TYPE = "application/problem+json"
@@ -34,7 +35,7 @@ _MISSING = object()
 
 
 def install_openapi(
-    registry: ErrorRegistry | None,
+    registry: ErrorCatalog | None,
     app: FastAPI,
     *,
     include_validation_error: bool,
@@ -72,7 +73,7 @@ def install_openapi(
         # uncompiled schema if compilation fails.
         app.openapi_schema = None
         current = installation.configuration
-        compiled = compile_document(
+        compiled = _compile_document(
             current.registry,
             document,
             include_validation_error=current.include_validation_error,
@@ -89,7 +90,7 @@ def install_openapi(
 
 @dataclass(frozen=True, slots=True)
 class _OpenAPIConfiguration:
-    registry: ErrorRegistry | None
+    registry: ErrorCatalog | None
     include_validation_error: bool
     include_http_exceptions: bool
 
@@ -116,8 +117,8 @@ def install_policy_contracts(
     installed.policy_operations = operations
 
 
-def compile_document(
-    registry: ErrorRegistry | None,
+def _compile_document(
+    registry: ErrorCatalog | None,
     document: dict[str, Any],
     *,
     include_validation_error: bool,
@@ -134,7 +135,7 @@ def compile_document(
             _add_component(
                 components,
                 error.effective_schema_name,
-                compile_error_schema(registry, error),
+                _compile_error_schema(registry, error),
             )
 
     if include_validation_error:
@@ -214,34 +215,8 @@ def compile_document(
     return result
 
 
-def _compose_policy_responses(
-    path: str,
-    responses: dict[str, Any],
-    registry: ErrorRegistry,
-    shared: tuple[AnyError, ...],
-    local: tuple[AnyError, ...],
-    http_statuses: tuple[int, ...],
-) -> None:
-    declared = tuple({id(error): error for error in (*shared, *local)}.values())
-    generated = compile_responses(registry, declared, http_statuses=http_statuses)
-    for status in dict.fromkeys(error.status for error in shared):
-        key = str(status)
-        existing = responses.get(key)
-        if existing is not None and not (
-            ERRORS_EXTENSION in existing
-            or HTTP_STATUSES_EXTENSION in existing
-            or (status == 422 and _is_default_validation_response(existing))
-        ):
-            msg = (
-                f"route {path!r} router policy response status {status} "
-                "conflicts with a FastAPI responses declaration"
-            )
-            raise ErrorConfigurationError(msg)
-        responses[key] = generated[status]
-
-
 def compile_responses(
-    registry: ErrorRegistry,
+    registry: ErrorCatalog,
     errors: Sequence[AnyError],
     *,
     http_statuses: Sequence[int] = (),
@@ -298,36 +273,8 @@ def compile_responses(
     return result
 
 
-def _retain_success_content(response: dict[str, Any], media_type: object) -> None:
-    if media_type is None or media_type == "":
-        response.pop("content", None)
-        return
-    if not isinstance(media_type, str):
-        msg = "compiled success response contains invalid media type metadata"
-        raise ErrorConfigurationError(msg)
-    content = response.get("content")
-    if not isinstance(content, dict) or media_type not in content:
-        msg = f"compiled success response is missing media type {media_type!r}"
-        raise ErrorConfigurationError(msg)
-    response["content"] = {media_type: content[media_type]}
-
-
-def compile_error_schema(
-    registry: ErrorRegistry,
-    error: AnyError,
-) -> dict[str, Any]:
-    """Adapt the shared problem schema to OpenAPI component references."""
-    return cast(
-        dict[str, Any],
-        _rewrite_local_definitions(
-            compile_problem_schema(registry, error, include_status=True),
-            error.effective_schema_name,
-        ),
-    )
-
-
 def compile_problem_schema(
-    registry: ErrorRegistry,
+    registry: ErrorCatalog,
     error: AnyError,
     *,
     include_status: bool,
@@ -382,6 +329,60 @@ def compile_problem_schema(
             example.pop("status", None)
         schema["examples"] = [example]
     return schema
+
+
+def _compile_error_schema(
+    registry: ErrorCatalog,
+    error: AnyError,
+) -> dict[str, Any]:
+    """Adapt the shared problem schema to OpenAPI component references."""
+    return cast(
+        dict[str, Any],
+        _rewrite_local_definitions(
+            compile_problem_schema(registry, error, include_status=True),
+            error.effective_schema_name,
+        ),
+    )
+
+
+def _compose_policy_responses(
+    path: str,
+    responses: dict[str, Any],
+    registry: ErrorCatalog,
+    shared: tuple[AnyError, ...],
+    local: tuple[AnyError, ...],
+    http_statuses: tuple[int, ...],
+) -> None:
+    declared = tuple({id(error): error for error in (*shared, *local)}.values())
+    generated = compile_responses(registry, declared, http_statuses=http_statuses)
+    for status in dict.fromkeys(error.status for error in shared):
+        key = str(status)
+        existing = responses.get(key)
+        if existing is not None and not (
+            ERRORS_EXTENSION in existing
+            or HTTP_STATUSES_EXTENSION in existing
+            or (status == 422 and _is_default_validation_response(existing))
+        ):
+            msg = (
+                f"route {path!r} router policy response status {status} "
+                "conflicts with a FastAPI responses declaration"
+            )
+            raise ErrorConfigurationError(msg)
+        responses[key] = generated[status]
+
+
+def _retain_success_content(response: dict[str, Any], media_type: object) -> None:
+    if media_type is None or media_type == "":
+        response.pop("content", None)
+        return
+    if not isinstance(media_type, str):
+        msg = "compiled success response contains invalid media type metadata"
+        raise ErrorConfigurationError(msg)
+    content = response.get("content")
+    if not isinstance(content, dict) or media_type not in content:
+        msg = f"compiled success response is missing media type {media_type!r}"
+        raise ErrorConfigurationError(msg)
+    response["content"] = {media_type: content[media_type]}
 
 
 def _base_problem_schema() -> dict[str, Any]:
@@ -556,7 +557,7 @@ def _is_default_validation_response(response: Any) -> bool:
     return schema == {"$ref": "#/components/schemas/HTTPValidationError"}
 
 
-def _request_validation_schema(registry: ErrorRegistry) -> dict[str, Any]:
+def _request_validation_schema(registry: ErrorCatalog) -> dict[str, Any]:
     if registry.type_base is None:
         msg = "type_base is required for the request validation schema"
         raise ErrorConfigurationError(msg)
@@ -688,7 +689,7 @@ def _compile_stream_contract(
     profile: dict[str, Any],
     responses: dict[str, Any],
     components: dict[str, Any],
-    registry: ErrorRegistry | None,
+    registry: ErrorCatalog | None,
 ) -> None:
     base = registry.type_base if registry is not None else None
     internal_type = (

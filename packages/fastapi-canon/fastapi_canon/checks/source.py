@@ -101,100 +101,98 @@ class _Source:
         self, module: str, body: list[ast.stmt], *, package: bool, names: set[str]
     ) -> None:
         for node in body:
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    local = alias.asname or alias.name.split(".")[0]
-                    self.bindings[f"{module}.{local}"] = (
-                        alias.name if alias.asname else local
-                    )
-            elif isinstance(node, ast.ImportFrom):
-                prefix = module.split(".") if package else module.split(".")[:-1]
-                if node.level:
-                    prefix = prefix[: len(prefix) - node.level + 1]
-                    target = ".".join(
-                        [*prefix, *([node.module] if node.module else [])]
-                    )
-                else:
-                    target = node.module or ""
-                for alias in node.names:
-                    self.bindings[f"{module}.{alias.asname or alias.name}"] = (
-                        f"{target}.{alias.name}"
-                    )
-            elif isinstance(node, ast.Assign):
-                for target_node in node.targets:
-                    if isinstance(target_node, ast.Name):
-                        if f"{module}.{target_node.id}" in self.bindings:
-                            self.uncertain.setdefault(module, []).append(
-                                f"reassigned module binding: {target_node.id}"
-                            )
-                        self.bindings[f"{module}.{target_node.id}"] = module, node.value
+            match node:
+                case ast.Import():
+                    for alias in node.names:
+                        local = alias.asname or alias.name.split(".")[0]
+                        self.bindings[f"{module}.{local}"] = (
+                            alias.name if alias.asname else local
+                        )
+                case ast.ImportFrom():
+                    prefix = module.split(".") if package else module.split(".")[:-1]
+                    if node.level:
+                        prefix = prefix[: len(prefix) - node.level + 1]
+                        target = ".".join(
+                            [*prefix, *([node.module] if node.module else [])]
+                        )
                     else:
-                        self.uncertain.setdefault(module, []).append(
-                            "unsupported module assignment"
+                        target = node.module or ""
+                    for alias in node.names:
+                        self.bindings[f"{module}.{alias.asname or alias.name}"] = (
+                            f"{target}.{alias.name}"
                         )
-            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-                if node.value is not None:
-                    if f"{module}.{node.target.id}" in self.bindings:
-                        self.uncertain.setdefault(module, []).append(
-                            f"reassigned module binding: {node.target.id}"
-                        )
-                    self.bindings[f"{module}.{node.target.id}"] = module, node.value
-            elif isinstance(node, ast.TypeAlias) and isinstance(node.name, ast.Name):
-                self.bindings[f"{module}.{node.name.id}"] = module, node.value
-            elif isinstance(
-                node,
-                ast.AugAssign
-                | ast.Delete
-                | ast.For
-                | ast.While
-                | ast.Try
-                | ast.With
-                | ast.Match,
-            ):
-                self.uncertain.setdefault(module, []).append(
-                    "dynamic module declarations"
-                )
-            elif isinstance(
-                node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef
-            ):
-                name = f"{module}.{node.name}"
-                self.definitions[name] = _Definition(name, module, node)
-                names.add(name)
-                if isinstance(node, ast.ClassDef):
-                    for member in node.body:
-                        if isinstance(member, ast.FunctionDef | ast.AsyncFunctionDef):
-                            key = f"{name}.{member.name}"
-                            self.definitions[key] = _Definition(
-                                key, module, member, name
+                case ast.Assign():
+                    for target_node in node.targets:
+                        if isinstance(target_node, ast.Name):
+                            if f"{module}.{target_node.id}" in self.bindings:
+                                self.uncertain.setdefault(module, []).append(
+                                    f"reassigned module binding: {target_node.id}"
+                                )
+                            self.bindings[f"{module}.{target_node.id}"] = (
+                                module,
+                                node.value,
                             )
-                            names.add(key)
-            elif isinstance(node, ast.If):
-                # In particular, imports guarded by TYPE_CHECKING remain available.
-                self._index(module, node.body, package=package, names=names)
-                self._index(module, node.orelse, package=package, names=names)
-                if ast.unparse(node.test) not in {
-                    "TYPE_CHECKING",
-                    "typing.TYPE_CHECKING",
-                }:
+                        else:
+                            self.uncertain.setdefault(module, []).append(
+                                "unsupported module assignment"
+                            )
+                case ast.AnnAssign() if isinstance(node.target, ast.Name):
+                    if node.value is not None:
+                        if f"{module}.{node.target.id}" in self.bindings:
+                            self.uncertain.setdefault(module, []).append(
+                                f"reassigned module binding: {node.target.id}"
+                            )
+                        self.bindings[f"{module}.{node.target.id}"] = module, node.value
+                case ast.TypeAlias() if isinstance(node.name, ast.Name):
+                    self.bindings[f"{module}.{node.name.id}"] = module, node.value
+                case (
+                    ast.AugAssign()
+                    | ast.Delete()
+                    | ast.For()
+                    | ast.While()
+                    | ast.Try()
+                    | ast.With()
+                    | ast.Match()
+                ):
                     self.uncertain.setdefault(module, []).append(
-                        "conditional module declarations"
+                        "dynamic module declarations"
                     )
-            elif (
-                isinstance(node, ast.Expr)
-                and isinstance(node.value, ast.Call)
-                and isinstance(node.value.func, ast.Attribute)
-                and node.value.func.attr
-                in {
-                    "append",
-                    "extend",
-                    "insert",
-                    "update",
-                    "add_api_route",
-                }
-            ):
-                self.uncertain.setdefault(module, []).append(
-                    "dynamic module declarations or contract mutation"
-                )
+                case ast.FunctionDef() | ast.AsyncFunctionDef() | ast.ClassDef():
+                    name = f"{module}.{node.name}"
+                    self.definitions[name] = _Definition(name, module, node)
+                    names.add(name)
+                    if isinstance(node, ast.ClassDef):
+                        for member in node.body:
+                            if isinstance(
+                                member, ast.FunctionDef | ast.AsyncFunctionDef
+                            ):
+                                key = f"{name}.{member.name}"
+                                self.definitions[key] = _Definition(
+                                    key, module, member, name
+                                )
+                                names.add(key)
+                case ast.If():
+                    # In particular, imports guarded by TYPE_CHECKING remain available.
+                    self._index(module, node.body, package=package, names=names)
+                    self._index(module, node.orelse, package=package, names=names)
+                    if ast.unparse(node.test) not in {
+                        "TYPE_CHECKING",
+                        "typing.TYPE_CHECKING",
+                    }:
+                        self.uncertain.setdefault(module, []).append(
+                            "conditional module declarations"
+                        )
+                case ast.Expr() if (
+                    isinstance(node.value, ast.Call)
+                    and isinstance(node.value.func, ast.Attribute)
+                    and (
+                        node.value.func.attr
+                        in {"append", "extend", "insert", "update", "add_api_route"}
+                    )
+                ):
+                    self.uncertain.setdefault(module, []).append(
+                        "dynamic module declarations or contract mutation"
+                    )
 
     def canonical(self, name: str, seen: frozenset[str] = frozenset()) -> str:
         module = name.rpartition(".")[0]

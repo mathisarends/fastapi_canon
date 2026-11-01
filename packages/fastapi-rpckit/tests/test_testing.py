@@ -131,39 +131,41 @@ async def test_half_open_discards_only_one_direction(side):
 
 @pytest.mark.parametrize("side", ["client", "server"])
 async def test_blocked_send_can_be_cancelled_or_released(side):
-    baseline = asyncio.all_tasks()
-    socket = InMemorySocket("/rpc")
-    faults, send, receive = direction(socket, side)
-    faults.block()
-    sending = asyncio.create_task(send("cancelled"))
-    await faults.blocked.wait()
-    sending.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await sending
-    faults.unblock()
-    await send("sent")
-    assert await receive() == "sent"
-    assert asyncio.all_tasks() == baseline
+    async with asyncio.timeout(10):
+        baseline = asyncio.all_tasks()
+        socket = InMemorySocket("/rpc")
+        faults, send, receive = direction(socket, side)
+        faults.block()
+        sending = asyncio.create_task(send("cancelled"))
+        await faults.blocked.wait()
+        sending.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await sending
+        faults.unblock()
+        await send("sent")
+        assert await receive() == "sent"
+        assert asyncio.all_tasks() == baseline
 
 
 @pytest.mark.parametrize("side", ["client", "server"])
 async def test_disconnect_cleans_held_frames_and_wakes_blocked_sends(side):
-    baseline = asyncio.all_tasks()
-    socket = InMemorySocket("/rpc")
-    faults, send, receive = direction(socket, side)
-    faults.hold()
-    await send("held")
-    faults.block()
-    sending = asyncio.create_task(send("blocked"))
-    await faults.blocked.wait()
-    await socket.client_disconnect(1006, "abrupt")
-    with pytest.raises(RpcDisconnect):
-        await sending
-    faults.release()
-    assert faults.held_count == 0
-    with pytest.raises(RpcDisconnect):
-        await receive()
-    assert asyncio.all_tasks() == baseline
+    async with asyncio.timeout(10):
+        baseline = asyncio.all_tasks()
+        socket = InMemorySocket("/rpc")
+        faults, send, receive = direction(socket, side)
+        faults.hold()
+        await send("held")
+        faults.block()
+        sending = asyncio.create_task(send("blocked"))
+        await faults.blocked.wait()
+        await socket.client_disconnect(1006, "abrupt")
+        with pytest.raises(RpcDisconnect):
+            await sending
+        faults.release()
+        assert faults.held_count == 0
+        with pytest.raises(RpcDisconnect):
+            await receive()
+        assert asyncio.all_tasks() == baseline
 
 
 class ControlledClock:
@@ -178,26 +180,27 @@ class ControlledClock:
 
 @pytest.mark.parametrize("side", ["client", "server"])
 async def test_fixed_and_per_frame_delay_use_the_injected_clock_and_cleanup(side):
-    baseline = asyncio.all_tasks()
-    clock = ControlledClock()
-    socket = InMemorySocket("/rpc")
-    faults, send, receive = direction(socket, side)
-    faults.sleep = clock.sleep
-    for delay in (2.0, lambda frame: len(frame) / 2):
-        faults.delay = delay
-        sending = asyncio.create_task(send("test"))
-        duration, ready = await clock.waiting.get()
-        assert duration == 2.0
-        ready.set_result(None)
-        await sending
-        assert await receive() == "test"
-    sending = asyncio.create_task(send("discard"))
-    _, ready = await clock.waiting.get()
-    await socket.client_disconnect()
-    with pytest.raises(RpcDisconnect):
-        await sending
-    assert ready.cancelled()
-    assert asyncio.all_tasks() == baseline
+    async with asyncio.timeout(10):
+        baseline = asyncio.all_tasks()
+        clock = ControlledClock()
+        socket = InMemorySocket("/rpc")
+        faults, send, receive = direction(socket, side)
+        faults.sleep = clock.sleep
+        for delay in (2.0, lambda frame: len(frame) / 2):
+            faults.delay = delay
+            sending = asyncio.create_task(send("test"))
+            duration, ready = await clock.waiting.get()
+            assert duration == 2.0
+            ready.set_result(None)
+            await sending
+            assert await receive() == "test"
+        sending = asyncio.create_task(send("discard"))
+        _, ready = await clock.waiting.get()
+        await socket.client_disconnect()
+        with pytest.raises(RpcDisconnect):
+            await sending
+        assert ready.cancelled()
+        assert asyncio.all_tasks() == baseline
 
 
 async def test_server_close_code_and_reason_reach_the_client_adapter():
@@ -234,27 +237,32 @@ async def test_factory_scripts_handshake_rejection_and_repeated_connections():
             await client.close()
         assert configured == [3, 4]
         assert factory.attempts == 4
-    assert all(task.done() for task in factory._tasks)
+    # Verify the in-memory test transport releases its background tasks.
+    assert all(
+        task.done()
+        for task in factory._tasks  # smelt: ignore[SMT420] -- unit seam
+    )
     assert asyncio.all_tasks() == baseline
 
 
 async def test_factory_cancellation_during_handshake_leaves_no_tasks():
-    baseline = asyncio.all_tasks()
-    entered = asyncio.Event()
+    async with asyncio.timeout(10):
+        baseline = asyncio.all_tasks()
+        entered = asyncio.Event()
 
-    async def before_accept(handshake):
-        entered.set()
-        await asyncio.Event().wait()
+        async def before_accept(handshake):
+            entered.set()
+            await asyncio.Event().wait()
 
-    app = RpcService()
-    app.socket("/rpc", channels=[control_channel], before_accept=before_accept)
-    async with InMemorySocketFactory(app) as factory:
-        connecting = asyncio.create_task(factory("ws://test/rpc"))
-        await entered.wait()
-        connecting.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await connecting
-    assert asyncio.all_tasks() == baseline
+        app = RpcService()
+        app.socket("/rpc", channels=[control_channel], before_accept=before_accept)
+        async with InMemorySocketFactory(app) as factory:
+            connecting = asyncio.create_task(factory("ws://test/rpc"))
+            await entered.wait()
+            connecting.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await connecting
+        assert asyncio.all_tasks() == baseline
 
 
 async def test_factory_preserves_actual_server_handshake_rejections():

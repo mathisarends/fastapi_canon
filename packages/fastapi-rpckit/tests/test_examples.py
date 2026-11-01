@@ -9,17 +9,19 @@ EXAMPLES = tuple(sorted((Path(__file__).parents[1] / "examples").glob("*.py")))
 
 @pytest.mark.parametrize("example", EXAMPLES, ids=lambda path: path.name)
 def test_example_runs(example: Path) -> None:
-    subprocess.run(
+    result = subprocess.run(
         [sys.executable, str(example)],
         check=True,
         capture_output=True,
         text=True,
+        timeout=120,
     )
+    assert result.returncode == 0
 
 
 def test_generated_client_examples_match_their_source() -> None:
     config = Path(__file__).parents[1] / "examples/generated_clients/rpcgen.toml"
-    subprocess.run(
+    result = subprocess.run(
         [
             sys.executable,
             "-m",
@@ -32,4 +34,6 @@ def test_generated_client_examples_match_their_source() -> None:
         check=True,
         capture_output=True,
         text=True,
+        timeout=120,
     )
+    assert result.returncode == 0

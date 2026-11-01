@@ -64,7 +64,8 @@ def test_installed_domain_handler_returns_problem_details() -> None:
         raise SessionNotFound
 
     registry.install(app)
-    response = TestClient(app).get("/session")
+    with TestClient(app) as client:
+        response = client.get("/session")
 
     assert response.status_code == 404
     assert response.headers["content-type"] == "application/problem+json"
@@ -90,7 +91,8 @@ def test_domain_callback_failure_returns_safe_internal_problem() -> None:
         raise SessionNotFound
 
     registry.install(app)
-    response = TestClient(app).get("/session")
+    with TestClient(app) as client:
+        response = client.get("/session")
 
     assert response.status_code == 500
     assert response.json() == {
@@ -124,7 +126,8 @@ def test_http_exceptions_are_normalized_without_structured_detail(
         )
 
     make_registry().install(app)
-    response = TestClient(app).get("/failure")
+    with TestClient(app) as client:
+        response = client.get("/failure")
 
     assert response.status_code == status
     assert response.json()["type"] == "about:blank"
@@ -145,7 +148,8 @@ def test_request_validation_uses_json_pointer_without_rejected_input() -> None:
         del payload
 
     make_registry().install(app)
-    response = TestClient(app).post("/body", json={"a/b~c": "secret"})
+    with TestClient(app) as client:
+        response = client.post("/body", json={"a/b~c": "secret"})
 
     assert response.status_code == 422
     error = response.json()["errors"][0]
@@ -163,7 +167,8 @@ def test_request_validation_identifies_query_parameter() -> None:
         del limit
 
     make_registry().install(app)
-    response = TestClient(app).get("/query")
+    with TestClient(app) as client:
+        response = client.get("/query")
 
     assert response.status_code == 422
     assert response.json()["errors"][0] == {
@@ -182,7 +187,8 @@ def test_response_validation_is_a_safe_internal_problem() -> None:
         return object()
 
     make_registry().install(app)
-    response = TestClient(app, raise_server_exceptions=False).get("/invalid")
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.get("/invalid")
 
     assert response.status_code == 500
     assert response.json()["code"] == "internal_server_error"
@@ -197,7 +203,8 @@ def test_unhandled_exception_is_a_safe_internal_problem() -> None:
         raise RuntimeError("database password")
 
     make_registry().install(app)
-    response = TestClient(app, raise_server_exceptions=False).get("/failure")
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.get("/failure")
 
     assert response.status_code == 500
     assert response.json()["code"] == "internal_server_error"
@@ -298,7 +305,7 @@ def test_install_accepts_route_from_merged_feature_registry() -> None:
 
     @router.get("/sessions", responses=feature_registry.responses(missing))
     async def endpoint() -> None:
-        return None
+        raise SessionNotFound
 
     app = FastAPI()
     app.include_router(router)
@@ -309,4 +316,15 @@ def test_install_accepts_route_from_merged_feature_registry() -> None:
 
     application_registry.install(app)
 
-    assert app.state._fastapi_canon_error_registry is application_registry
+    with TestClient(app) as client:
+        response = client.get("/sessions")
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "type": "https://example.test/problems/session_not_found",
+        "title": "Session not found",
+        "status": 404,
+        "code": "session_not_found",
+    }
+    schema = app.openapi()["components"]["schemas"]["SessionNotFoundProblem"]
+    assert schema["properties"]["type"]["const"] == response.json()["type"]

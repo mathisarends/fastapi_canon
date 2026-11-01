@@ -145,6 +145,7 @@ async def consume(client: TypedSocketClient) -> None:
         capture_output=True,
         text=True,
         check=False,
+        timeout=120,
     )
     diagnostics = json.loads(result.stdout)["generalDiagnostics"]
     errors = [item for item in diagnostics if item["severity"] == "error"]
@@ -186,6 +187,7 @@ async def test_typescript_typed_socket_round_trip(host: str, tmp_path: Path) -> 
         capture_output=True,
         text=True,
         check=False,
+        timeout=120,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     behavior = await asyncio.create_subprocess_exec(

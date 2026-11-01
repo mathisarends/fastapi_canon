@@ -12,7 +12,7 @@ from pydantic import (
 )
 
 from fastapi_canon.error import Problem
-from fastapi_canon.integrations.websockets._adapter import adapter
+from fastapi_canon.integrations.websockets.adapter import adapter
 from fastapi_canon.integrations.websockets.errors import RpcError
 from fastapi_canon.integrations.websockets.request_metadata import (
     validate_request_metadata,

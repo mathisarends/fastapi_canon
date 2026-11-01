@@ -20,7 +20,7 @@ from starlette.types import Message
 
 from fastapi_canon.error.catalog import registry_scope
 from fastapi_canon.error.contracts import INSTALLED_REGISTRY_STATE_KEY
-from fastapi_canon.integrations.websockets._activity import notify_activity
+from fastapi_canon.integrations.websockets.activity import notify_activity
 from fastapi_canon.integrations.websockets.connection import (
     REJECTION_CLOSES,
     RpcBeforeAccept,

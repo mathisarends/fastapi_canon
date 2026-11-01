@@ -376,6 +376,7 @@ async def handler(message: Ping) -> Pong:
         capture_output=True,
         text=True,
         check=False,
+        timeout=120,
     )
     diagnostics = json.loads(result.stdout)["generalDiagnostics"]
     errors = [item for item in diagnostics if item["severity"] == "error"]

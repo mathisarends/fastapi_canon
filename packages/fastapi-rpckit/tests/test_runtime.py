@@ -240,61 +240,63 @@ async def test_same_batch_cancel_before_task_start_keeps_one_batch_response():
     ],
 )
 async def test_malformed_cancel_notifications_do_not_cancel_work(invalid):
-    entered, release = asyncio.Event(), asyncio.Event()
-    channel = RpcChannel("deadlines")
+    async with asyncio.timeout(10):
+        entered, release = asyncio.Event(), asyncio.Event()
+        channel = RpcChannel("deadlines")
 
-    @channel.method()
-    async def work() -> str:
-        entered.set()
-        await release.wait()
-        return "completed"
+        @channel.method()
+        async def work() -> str:
+            entered.set()
+            await release.wait()
+            return "completed"
 
-    app = RpcService(limits=RpcLimits(max_pending_requests=1))
-    app.socket("/rpc", channels=[channel])
-    async with deadline_socket(app) as (socket, _):
-        await socket.client_send(json.dumps(deadline_request(1)))
-        await entered.wait()
-        await socket.client_send(json.dumps({**cancel_notification(1), **invalid}))
-        await socket.client_send(json.dumps(deadline_request(2)))
-        assert (
-            json.loads(await socket.client_receive())["error"]["data"]["code"]
-            == "pending_limit"
-        )
-        release.set()
-        assert json.loads(await socket.client_receive())["result"] == "completed"
+        app = RpcService(limits=RpcLimits(max_pending_requests=1))
+        app.socket("/rpc", channels=[channel])
+        async with deadline_socket(app) as (socket, _):
+            await socket.client_send(json.dumps(deadline_request(1)))
+            await entered.wait()
+            await socket.client_send(json.dumps({**cancel_notification(1), **invalid}))
+            await socket.client_send(json.dumps(deadline_request(2)))
+            assert (
+                json.loads(await socket.client_receive())["error"]["data"]["code"]
+                == "pending_limit"
+            )
+            release.set()
+            assert json.loads(await socket.client_receive())["result"] == "completed"
 
 
 @pytest.mark.parametrize("batch", [False, True])
 async def test_duplicate_in_flight_ids_close_without_overwriting_original(batch):
-    entered, stopped = asyncio.Event(), asyncio.Event()
-    channel = RpcChannel("deadlines")
+    async with asyncio.timeout(10):
+        entered, stopped = asyncio.Event(), asyncio.Event()
+        channel = RpcChannel("deadlines")
 
-    @channel.method()
-    async def work() -> None:
-        entered.set()
-        try:
-            await asyncio.Future()
-        finally:
-            stopped.set()
+        @channel.method()
+        async def work() -> None:
+            entered.set()
+            try:
+                await asyncio.Future()
+            finally:
+                stopped.set()
 
-    app = RpcService()
-    app.socket("/rpc", channels=[channel])
-    async with deadline_socket(app) as (socket, serving):
-        if batch:
-            await socket.client_send(
-                json.dumps([deadline_request(1), deadline_request(1)])
+        app = RpcService()
+        app.socket("/rpc", channels=[channel])
+        async with deadline_socket(app) as (socket, serving):
+            if batch:
+                await socket.client_send(
+                    json.dumps([deadline_request(1), deadline_request(1)])
+                )
+            else:
+                await socket.client_send(json.dumps(deadline_request(1)))
+                await entered.wait()
+                await socket.client_send(json.dumps(deadline_request(1)))
+            await serving
+            assert socket.closed == (
+                RpcConnectionClose.PROTOCOL_ERROR,
+                "Duplicate in-flight request id",
             )
-        else:
-            await socket.client_send(json.dumps(deadline_request(1)))
-            await entered.wait()
-            await socket.client_send(json.dumps(deadline_request(1)))
-        await serving
-        assert socket.closed == (
-            RpcConnectionClose.PROTOCOL_ERROR,
-            "Duplicate in-flight request id",
-        )
-        if not batch:
-            assert stopped.is_set()
+            if not batch:
+                assert stopped.is_set()
 
 
 @pytest.mark.parametrize(
@@ -302,48 +304,49 @@ async def test_duplicate_in_flight_ids_close_without_overwriting_original(batch)
     ["42", "{", "[]", '{"jsonrpc":"2.0","id":42,"method":"$/ping"}'],
 )
 async def test_cancel_is_processed_while_writer_and_outgoing_queue_are_full(invalid):
-    from fastapi_canon.integrations.websockets.testing import SocketFaults
+    async with asyncio.timeout(10):
+        from fastapi_canon.integrations.websockets.testing import SocketFaults
 
-    entered, stopped = asyncio.Event(), asyncio.Event()
-    recorder = DeadlineRecorder()
-    channel = RpcChannel("deadlines")
+        entered, stopped = asyncio.Event(), asyncio.Event()
+        recorder = DeadlineRecorder()
+        channel = RpcChannel("deadlines")
 
-    @channel.method()
-    async def work() -> None:
-        entered.set()
+        @channel.method()
+        async def work() -> None:
+            entered.set()
+            try:
+                await asyncio.Future()
+            finally:
+                stopped.set()
+
+        faults = SocketFaults()
+        faults.block()
+        socket = InMemorySocket("/rpc", server_to_client=faults)
+        app = RpcService(
+            limits=RpcLimits(max_pending_requests=2, max_queue_size=1),
+            middleware=[recorder],
+        )
+        app.socket("/rpc", channels=[channel])
         try:
-            await asyncio.Future()
-        finally:
-            stopped.set()
-
-    faults = SocketFaults()
-    faults.block()
-    socket = InMemorySocket("/rpc", server_to_client=faults)
-    app = RpcService(
-        limits=RpcLimits(max_pending_requests=2, max_queue_size=1),
-        middleware=[recorder],
-    )
-    app.socket("/rpc", channels=[channel])
-    try:
-        async with deadline_socket(app, socket) as (socket, _):
-            await socket.client_send(json.dumps(deadline_request(1)))
-            await entered.wait()
-            await socket.client_send(invalid)
-            await faults.blocked.wait()
-            if "$/ping" not in invalid:
-                await recorder.finished.get()
-            await socket.client_send(invalid)
-            if "$/ping" not in invalid:
-                await recorder.finished.get()
-            # The second invalid response fills the queue behind the blocked writer.
-            await asyncio.sleep(0)
-            if "$/ping" in invalid:
+            async with deadline_socket(app, socket) as (socket, _):
+                await socket.client_send(json.dumps(deadline_request(1)))
+                await entered.wait()
                 await socket.client_send(invalid)
-            await socket.client_send(json.dumps(cancel_notification(1)))
-            await stopped.wait()
+                await faults.blocked.wait()
+                if "$/ping" not in invalid:
+                    await recorder.finished.get()
+                await socket.client_send(invalid)
+                if "$/ping" not in invalid:
+                    await recorder.finished.get()
+                # The second invalid response fills the queue behind the blocked writer.
+                await asyncio.sleep(0)
+                if "$/ping" in invalid:
+                    await socket.client_send(invalid)
+                await socket.client_send(json.dumps(cancel_notification(1)))
+                await stopped.wait()
+                faults.unblock()
+        finally:
             faults.unblock()
-    finally:
-        faults.unblock()
 
 
 @pytest.mark.parametrize("phase", ["enter", "exit"])
@@ -351,48 +354,51 @@ async def test_cancel_is_processed_while_writer_and_outgoing_queue_are_full(inva
 async def test_middleware_interruption_returns_and_observes_failure(
     monkeypatch, phase, ending
 ):
-    clock = ControlledDeadlines(monkeypatch)
-    entered = asyncio.Event()
-    recorder = DeadlineRecorder()
+    async with asyncio.timeout(10):
+        clock = ControlledDeadlines(monkeypatch)
+        entered = asyncio.Event()
+        recorder = DeadlineRecorder()
 
-    class Blocking(RpcMiddleware):
-        @asynccontextmanager
-        async def request(self, scope):
-            if phase == "enter":
-                entered.set()
-                await asyncio.Future()
-            yield
-            if phase == "exit":
-                entered.set()
-                await asyncio.Future()
+        class Blocking(RpcMiddleware):
+            @asynccontextmanager
+            async def request(self, scope):
+                if phase == "enter":
+                    entered.set()
+                    await asyncio.Future()
+                yield
+                if phase == "exit":
+                    entered.set()
+                    await asyncio.Future()
 
-    channel = RpcChannel("deadlines")
+        channel = RpcChannel("deadlines")
 
-    @channel.method()
-    async def work() -> int:
-        assert phase != "enter"
-        return 42
+        @channel.method()
+        async def work() -> int:
+            assert phase != "enter"
+            return 42
 
-    app = RpcService(
-        middleware=[recorder, Blocking()], limits=RpcLimits(request_timeout=5)
-    )
-    app.socket("/rpc", channels=[channel])
-    async with deadline_socket(app) as (socket, _):
-        await socket.client_send(json.dumps(deadline_request(1)))
-        await entered.wait()
-        _, waiting = await clock.next()
-        if ending == "deadline":
-            clock.expire(waiting)
-        else:
-            await socket.client_send(json.dumps(cancel_notification(1)))
-        response = json.loads(await socket.client_receive())
-        scope = await recorder.finished.get()
-        expected = "request_timeout" if ending == "deadline" else "request_cancelled"
-        assert response["error"]["data"]["code"] == expected
-        assert scope.outcome.response.model_dump() == response
-        assert scope.outcome.error.code == expected
-        assert scope.outcome.cancelled is (ending == "cancel")
-        assert scope.outcome.duration > 0
+        app = RpcService(
+            middleware=[recorder, Blocking()], limits=RpcLimits(request_timeout=5)
+        )
+        app.socket("/rpc", channels=[channel])
+        async with deadline_socket(app) as (socket, _):
+            await socket.client_send(json.dumps(deadline_request(1)))
+            await entered.wait()
+            _, waiting = await clock.next()
+            if ending == "deadline":
+                clock.expire(waiting)
+            else:
+                await socket.client_send(json.dumps(cancel_notification(1)))
+            response = json.loads(await socket.client_receive())
+            scope = await recorder.finished.get()
+            expected = (
+                "request_timeout" if ending == "deadline" else "request_cancelled"
+            )
+            assert response["error"]["data"]["code"] == expected
+            assert scope.outcome.response.model_dump() == response
+            assert scope.outcome.error.code == expected
+            assert scope.outcome.cancelled is (ending == "cancel")
+            assert scope.outcome.duration > 0
 
 
 async def test_boolean_batch_id_cannot_alias_a_valid_request_id():
@@ -440,50 +446,52 @@ async def test_response_frames_from_the_client_are_invalid_requests():
 async def test_shutdown_cancellation_releases_admission_without_cancelled_responses(
     monkeypatch, ending
 ):
-    import fastapi_canon.integrations.websockets.runtime as runtime_module
+    async with asyncio.timeout(10):
+        import fastapi_canon.integrations.websockets.runtime as runtime_module
 
-    capacities = []
-    original = runtime_module._PendingRequests
+        capacities = []
+        # Unit-test admission accounting independently of network scheduling.
+        original = runtime_module._PendingRequests  # smelt: ignore[SMT420] -- unit seam
 
-    def capture(limit):
-        result = original(limit)
-        capacities.append(result)
-        return result
+        def capture(limit):
+            result = original(limit)
+            capacities.append(result)
+            return result
 
-    monkeypatch.setattr(runtime_module, "_PendingRequests", capture)
-    before = asyncio.all_tasks()
-    entered, stopped = asyncio.Event(), asyncio.Event()
-    recorder = DeadlineRecorder()
-    channel = RpcChannel("deadlines")
+        monkeypatch.setattr(runtime_module, "_PendingRequests", capture)
+        before = asyncio.all_tasks()
+        entered, stopped = asyncio.Event(), asyncio.Event()
+        recorder = DeadlineRecorder()
+        channel = RpcChannel("deadlines")
 
-    @channel.method()
-    async def work() -> None:
-        entered.set()
-        try:
-            await asyncio.Future()
-        finally:
-            stopped.set()
+        @channel.method()
+        async def work() -> None:
+            entered.set()
+            try:
+                await asyncio.Future()
+            finally:
+                stopped.set()
 
-    app = RpcService(middleware=[recorder])
-    app.socket("/rpc", channels=[channel])
-    socket = InMemorySocket("/rpc")
-    serving = asyncio.create_task(app.serve(socket))
-    await socket.client_send(json.dumps(deadline_request(1)))
-    await asyncio.wait_for(entered.wait(), 1)
-    if ending == "shutdown":
-        serving.cancel()
-        with pytest.raises(asyncio.CancelledError):
+        app = RpcService(middleware=[recorder])
+        app.socket("/rpc", channels=[channel])
+        socket = InMemorySocket("/rpc")
+        serving = asyncio.create_task(app.serve(socket))
+        await socket.client_send(json.dumps(deadline_request(1)))
+        await asyncio.wait_for(entered.wait(), 1)
+        if ending == "shutdown":
+            serving.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await serving
+        else:
+            await socket.client_disconnect()
             await serving
-    else:
-        await socket.client_disconnect()
-        await serving
-    assert stopped.is_set()
-    scope = await recorder.finished.get()
-    assert scope.outcome.cancelled
-    assert isinstance(scope.outcome.error, asyncio.CancelledError)
-    assert scope.outcome.response is None
-    assert capacities[0].count == 0
-    assert not asyncio.all_tasks() - before
+        assert stopped.is_set()
+        scope = await recorder.finished.get()
+        assert scope.outcome.cancelled
+        assert isinstance(scope.outcome.error, asyncio.CancelledError)
+        assert scope.outcome.response is None
+        assert capacities[0].count == 0
+        assert not asyncio.all_tasks() - before
 
 
 class Params(RpcModel):
@@ -646,35 +654,38 @@ def test_unknown_peer_close_code_is_preserved_separately() -> None:
 
 @pytest.mark.parametrize("frame", ["{", "[" * 100_000], ids=["syntax", "deep"])
 async def test_parse_error_is_answered_and_connection_remains_usable(frame, caplog):
-    caplog.set_level(logging.DEBUG, logger="fastapi_canon.integrations.websockets")
-    socket = InMemorySocket("/rpc")
-    task = asyncio.create_task(service.serve(socket))
-    await asyncio.sleep(0)
+    async with asyncio.timeout(10):
+        caplog.set_level(logging.DEBUG, logger="fastapi_canon.integrations.websockets")
+        socket = InMemorySocket("/rpc")
+        task = asyncio.create_task(service.serve(socket))
+        await asyncio.sleep(0)
 
-    await socket.client_send(frame)
-    failure = json.loads(await socket.client_receive())
-    await socket.client_send(
-        json.dumps(
-            {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "demo.echo",
-                "params": {"value": "still open"},
-            }
+        await socket.client_send(frame)
+        failure = json.loads(await socket.client_receive())
+        await socket.client_send(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "demo.echo",
+                    "params": {"value": "still open"},
+                }
+            )
         )
-    )
-    success = json.loads(await socket.client_receive())
-    await socket.client_disconnect()
-    await task
+        success = json.loads(await socket.client_receive())
+        await socket.client_disconnect()
+        await task
 
-    assert failure["id"] is None
-    assert failure["error"]["code"] == RpcErrorCode.PARSE_ERROR
-    assert success == {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "result": {"value": "still open"},
-    }
-    assert not [record for record in caplog.records if record.levelno >= logging.ERROR]
+        assert failure["id"] is None
+        assert failure["error"]["code"] == RpcErrorCode.PARSE_ERROR
+        assert success == {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {"value": "still open"},
+        }
+        assert not [
+            record for record in caplog.records if record.levelno >= logging.ERROR
+        ]
 
 
 @pytest.mark.parametrize("timeout", [0, -1, True, float("nan"), float("inf"), "5"])
@@ -684,270 +695,291 @@ def test_request_timeout_limit_requires_positive_finite_seconds(timeout):
 
 
 async def test_pending_rejection_logs_are_bounded_even_at_debug(caplog) -> None:
-    caplog.set_level(logging.DEBUG, logger="fastapi_canon.integrations.websockets")
-    entered, release = asyncio.Event(), asyncio.Event()
-    channel = RpcChannel("flood")
-    finished = []
+    async with asyncio.timeout(10):
+        caplog.set_level(logging.DEBUG, logger="fastapi_canon.integrations.websockets")
+        entered, release = asyncio.Event(), asyncio.Event()
+        channel = RpcChannel("flood")
+        finished = []
 
-    class Instrumentation(RpcMiddleware):
-        @asynccontextmanager
-        async def request(self, scope):
-            try:
-                yield
-            finally:
-                finished.append(scope.outcome)
+        class Instrumentation(RpcMiddleware):
+            @asynccontextmanager
+            async def request(self, scope):
+                try:
+                    yield
+                finally:
+                    finished.append(scope.outcome)
 
-    @channel.method
-    async def wait() -> None:
-        entered.set()
-        await release.wait()
+        @channel.method
+        async def wait() -> None:
+            entered.set()
+            await release.wait()
 
-    app = RpcService(
-        middleware=[Instrumentation()], limits=RpcLimits(max_pending_requests=1)
-    )
-    app.socket("/rpc", channels=[channel])
-    socket = InMemorySocket("/rpc")
-    serving = asyncio.create_task(app.serve(socket))
-    try:
-        await socket.client_send(
-            json.dumps({"jsonrpc": "2.0", "id": 1, "method": "flood.wait"})
+        app = RpcService(
+            middleware=[Instrumentation()], limits=RpcLimits(max_pending_requests=1)
         )
-        await entered.wait()
-        for request_id in range(2, 62):
+        app.socket("/rpc", channels=[channel])
+        socket = InMemorySocket("/rpc")
+        serving = asyncio.create_task(app.serve(socket))
+        try:
             await socket.client_send(
-                json.dumps({"jsonrpc": "2.0", "id": request_id, "method": "flood.wait"})
+                json.dumps({"jsonrpc": "2.0", "id": 1, "method": "flood.wait"})
             )
-        for _ in range(60):
-            response = json.loads(await socket.client_receive())
-            assert response["error"]["data"]["code"] == "pending_limit"
-        release.set()
-        assert json.loads(await socket.client_receive())["id"] == 1
-    finally:
-        release.set()
-        await socket.client_disconnect()
-        await serving
-    records = [r for r in caplog.records if "max_pending_requests" in r.message]
-    assert len(records) == 2
-    assert [r.levelno for r in records] == [logging.WARNING, logging.DEBUG]
-    assert "60" in records[-1].message
-    assert (
-        len([c for c in finished if c.response and hasattr(c.response, "error")]) == 60
-    )
+            await entered.wait()
+            for request_id in range(2, 62):
+                await socket.client_send(
+                    json.dumps(
+                        {"jsonrpc": "2.0", "id": request_id, "method": "flood.wait"}
+                    )
+                )
+            for _ in range(60):
+                response = json.loads(await socket.client_receive())
+                assert response["error"]["data"]["code"] == "pending_limit"
+            release.set()
+            assert json.loads(await socket.client_receive())["id"] == 1
+        finally:
+            release.set()
+            await socket.client_disconnect()
+            await serving
+        records = [r for r in caplog.records if "max_pending_requests" in r.message]
+        assert len(records) == 2
+        assert [r.levelno for r in records] == [logging.WARNING, logging.DEBUG]
+        assert "60" in records[-1].message
+        assert (
+            len([c for c in finished if c.response and hasattr(c.response, "error")])
+            == 60
+        )
 
 
 async def test_requests_beyond_the_pending_limit_are_rejected() -> None:
-    pending = RpcChannel("pending")
-    release = asyncio.Event()
+    async with asyncio.timeout(10):
+        pending = RpcChannel("pending")
+        release = asyncio.Event()
 
-    @pending.method()
-    async def wait(params: Params) -> Params:
-        await release.wait()
-        return params
-
-    pending_service = RpcService()
-    pending_service.socket("/rpc", channels=(pending,))
-    socket = InMemorySocket("/rpc")
-    task = asyncio.create_task(
-        pending_service.serve(
-            socket, limits=RpcLimits(max_concurrency=1, max_pending_requests=2)
-        )
-    )
-    await asyncio.sleep(0)
-
-    for request_id in (1, 2, 3):
-        await socket.client_send(
-            json.dumps(
-                {
-                    "jsonrpc": "2.0",
-                    "id": request_id,
-                    "method": "pending.wait",
-                    "params": {"value": str(request_id)},
-                }
-            )
-        )
-    rejected = json.loads(await asyncio.wait_for(socket.client_receive(), 1))
-    release.set()
-    answered = [
-        json.loads(await asyncio.wait_for(socket.client_receive(), 1)) for _ in range(2)
-    ]
-    await socket.client_disconnect()
-    await task
-
-    assert rejected["id"] == 3
-    assert rejected["error"]["message"] == "Too many pending requests"
-    assert sorted(item["id"] for item in answered) == [1, 2]
-
-
-async def test_batches_reserve_capacity_per_item_and_preserve_response_shape():
-    release = asyncio.Event()
-    started = asyncio.Queue()
-    channel = RpcChannel("capacity")
-
-    @channel.method
-    async def wait(params: Params) -> Params:
-        started.put_nowait(params.value)
-        await release.wait()
-        return params
-
-    app = RpcService(limits=RpcLimits(max_concurrency=2, max_pending_requests=2))
-    app.socket("/rpc", channels=[channel])
-    socket = InMemorySocket("/rpc")
-    serving = asyncio.create_task(app.serve(socket))
-
-    def request(value, request_id=None):
-        message = {
-            "jsonrpc": "2.0",
-            "method": "capacity.wait",
-            "params": {"value": value},
-        }
-        if request_id is not None:
-            message["id"] = request_id
-        return message
-
-    try:
-        await socket.client_send(
-            json.dumps(
-                [request("first", 1), request("notification"), request("excess", 2)]
-            )
-        )
-        async with asyncio.timeout(1):
-            assert {await started.get(), await started.get()} == {
-                "first",
-                "notification",
-            }
-            await socket.client_send(json.dumps(request("single", 3)))
-            rejected = json.loads(await socket.client_receive())
-            assert rejected["id"] == 3
-            assert rejected["error"]["data"]["code"] == "pending_limit"
-            await socket.client_send(
-                json.dumps([request("batch", 4), request("dropped"), 42])
-            )
-            batch = json.loads(await socket.client_receive())
-            assert isinstance(batch, list)
-            assert [r["id"] for r in batch] == [4, None]
-            assert batch[0]["error"]["data"]["code"] == "pending_limit"
-            assert batch[1]["error"]["data"]["code"] == "invalid_request"
-        release.set()
-        batch = json.loads(await socket.client_receive())
-        assert [r["id"] for r in batch] == [1, 2]
-        assert batch[0]["result"] == {"value": "first"}
-        assert batch[1]["error"]["data"]["code"] == "pending_limit"
-        await socket.client_send(json.dumps(request("after", 5)))
-        assert json.loads(await socket.client_receive())["result"] == {"value": "after"}
-        assert started.qsize() == 1  # Only the new call ran; rejected work never ran.
-    finally:
-        release.set()
-        await socket.client_disconnect()
-        await serving
-
-
-@pytest.mark.parametrize("frame", [[], [42], [[{"id": 1}]], [None] * 33])
-async def test_invalid_batches_do_not_consume_admission_or_create_nested_batches(frame):
-    socket = InMemorySocket("/rpc")
-    serving = asyncio.create_task(service.serve(socket))
-    try:
-        await socket.client_send(json.dumps(frame))
-        response = json.loads(await socket.client_receive())
-        failures = response if isinstance(response, list) else [response]
-        assert all(f["error"]["data"]["code"] == "invalid_request" for f in failures)
-        await socket.client_send(
-            json.dumps(
-                {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "demo.echo",
-                    "params": {"value": "ok"},
-                }
-            )
-        )
-        assert json.loads(await socket.client_receive())["result"] == {"value": "ok"}
-    finally:
-        await socket.client_disconnect()
-        await serving
-
-
-@pytest.mark.parametrize("ending", ["success", "failure", "cancel", "disconnect"])
-async def test_item_capacity_is_released_after_every_outcome(ending, monkeypatch):
-    import fastapi_canon.integrations.websockets.runtime as runtime_module
-    from fastapi_canon.integrations.websockets import RpcInvalidParamsError
-
-    capacities = []
-    original = runtime_module._PendingRequests
-
-    def capacity(limit):
-        result = original(limit)
-        capacities.append(result)
-        return result
-
-    monkeypatch.setattr(runtime_module, "_PendingRequests", capacity)
-    entered, release, finished = asyncio.Event(), asyncio.Event(), asyncio.Event()
-    channel = RpcChannel("release")
-
-    @channel.method
-    async def work() -> None:
-        entered.set()
-        try:
+        @pending.method()
+        async def wait(params: Params) -> Params:
             await release.wait()
-            if ending == "failure":
-                raise RpcInvalidParamsError(message="controlled failure")
-            if ending == "cancel":
-                raise asyncio.CancelledError
-        finally:
-            finished.set()
+            return params
 
-    @channel.method
-    async def ready() -> str:
-        return "ok"
-
-    app = RpcService(limits=RpcLimits(max_pending_requests=1))
-    app.socket("/rpc", channels=[channel])
-    socket = InMemorySocket("/rpc")
-    serving = asyncio.create_task(app.serve(socket))
-    try:
-        await socket.client_send(
-            json.dumps(
-                [
-                    {
-                        "jsonrpc": "2.0",
-                        "id": 1,
-                        "method": "release.work",
-                    }
-                ]
+        pending_service = RpcService()
+        pending_service.socket("/rpc", channels=(pending,))
+        socket = InMemorySocket("/rpc")
+        task = asyncio.create_task(
+            pending_service.serve(
+                socket, limits=RpcLimits(max_concurrency=1, max_pending_requests=2)
             )
         )
-        await entered.wait()
-        assert capacities[0].count == 1
-        if ending == "disconnect":
-            await socket.client_disconnect()
-            await serving
-        else:
-            release.set()
-            await finished.wait()
-            if ending != "cancel":
-                await socket.client_receive()
-            async with asyncio.timeout(1):
-                while capacities[0].count:
-                    await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        for request_id in (1, 2, 3):
             await socket.client_send(
                 json.dumps(
                     {
                         "jsonrpc": "2.0",
-                        "id": 2,
-                        "method": "release.ready",
+                        "id": request_id,
+                        "method": "pending.wait",
+                        "params": {"value": str(request_id)},
                     }
                 )
             )
-            assert json.loads(await socket.client_receive())["result"] == "ok"
-    finally:
+        rejected = json.loads(await asyncio.wait_for(socket.client_receive(), 1))
         release.set()
+        answered = [
+            json.loads(await asyncio.wait_for(socket.client_receive(), 1))
+            for _ in range(2)
+        ]
         await socket.client_disconnect()
-        await serving
-    assert finished.is_set()
-    assert capacities[0].count == 0
+        await task
+
+        assert rejected["id"] == 3
+        assert rejected["error"]["message"] == "Too many pending requests"
+        assert sorted(item["id"] for item in answered) == [1, 2]
+
+
+async def test_batches_reserve_capacity_per_item_and_preserve_response_shape():
+    async with asyncio.timeout(10):
+        release = asyncio.Event()
+        started = asyncio.Queue()
+        channel = RpcChannel("capacity")
+
+        @channel.method
+        async def wait(params: Params) -> Params:
+            started.put_nowait(params.value)
+            await release.wait()
+            return params
+
+        app = RpcService(limits=RpcLimits(max_concurrency=2, max_pending_requests=2))
+        app.socket("/rpc", channels=[channel])
+        socket = InMemorySocket("/rpc")
+        serving = asyncio.create_task(app.serve(socket))
+
+        def request(value, request_id=None):
+            message = {
+                "jsonrpc": "2.0",
+                "method": "capacity.wait",
+                "params": {"value": value},
+            }
+            if request_id is not None:
+                message["id"] = request_id
+            return message
+
+        try:
+            await socket.client_send(
+                json.dumps(
+                    [request("first", 1), request("notification"), request("excess", 2)]
+                )
+            )
+            async with asyncio.timeout(1):
+                assert {await started.get(), await started.get()} == {
+                    "first",
+                    "notification",
+                }
+                await socket.client_send(json.dumps(request("single", 3)))
+                rejected = json.loads(await socket.client_receive())
+                assert rejected["id"] == 3
+                assert rejected["error"]["data"]["code"] == "pending_limit"
+                await socket.client_send(
+                    json.dumps([request("batch", 4), request("dropped"), 42])
+                )
+                batch = json.loads(await socket.client_receive())
+                assert isinstance(batch, list)
+                assert [r["id"] for r in batch] == [4, None]
+                assert batch[0]["error"]["data"]["code"] == "pending_limit"
+                assert batch[1]["error"]["data"]["code"] == "invalid_request"
+            release.set()
+            batch = json.loads(await socket.client_receive())
+            assert [r["id"] for r in batch] == [1, 2]
+            assert batch[0]["result"] == {"value": "first"}
+            assert batch[1]["error"]["data"]["code"] == "pending_limit"
+            await socket.client_send(json.dumps(request("after", 5)))
+            assert json.loads(await socket.client_receive())["result"] == {
+                "value": "after"
+            }
+            assert (
+                started.qsize() == 1
+            )  # Only the new call ran; rejected work never ran.
+        finally:
+            release.set()
+            await socket.client_disconnect()
+            await serving
+
+
+@pytest.mark.parametrize("frame", [[], [42], [[{"id": 1}]], [None] * 33])
+async def test_invalid_batches_do_not_consume_admission_or_create_nested_batches(frame):
+    async with asyncio.timeout(10):
+        socket = InMemorySocket("/rpc")
+        serving = asyncio.create_task(service.serve(socket))
+        try:
+            await socket.client_send(json.dumps(frame))
+            response = json.loads(await socket.client_receive())
+            failures = response if isinstance(response, list) else [response]
+            assert all(
+                f["error"]["data"]["code"] == "invalid_request" for f in failures
+            )
+            await socket.client_send(
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "demo.echo",
+                        "params": {"value": "ok"},
+                    }
+                )
+            )
+            assert json.loads(await socket.client_receive())["result"] == {
+                "value": "ok"
+            }
+        finally:
+            await socket.client_disconnect()
+            await serving
+
+
+@pytest.mark.parametrize("ending", ["success", "failure", "cancel", "disconnect"])
+async def test_item_capacity_is_released_after_every_outcome(ending, monkeypatch):
+    async with asyncio.timeout(10):
+        import fastapi_canon.integrations.websockets.runtime as runtime_module
+        from fastapi_canon.integrations.websockets import RpcInvalidParamsError
+
+        capacities = []
+        # Unit-test admission accounting independently of network scheduling.
+        original = runtime_module._PendingRequests  # smelt: ignore[SMT420] -- unit seam
+
+        def capacity(limit):
+            result = original(limit)
+            capacities.append(result)
+            return result
+
+        monkeypatch.setattr(runtime_module, "_PendingRequests", capacity)
+        entered, release, finished = asyncio.Event(), asyncio.Event(), asyncio.Event()
+        channel = RpcChannel("release")
+
+        @channel.method
+        async def work() -> None:
+            entered.set()
+            try:
+                await release.wait()
+                if ending == "failure":
+                    raise RpcInvalidParamsError(message="controlled failure")
+                if ending == "cancel":
+                    raise asyncio.CancelledError
+            finally:
+                finished.set()
+
+        @channel.method
+        async def ready() -> str:
+            return "ok"
+
+        app = RpcService(limits=RpcLimits(max_pending_requests=1))
+        app.socket("/rpc", channels=[channel])
+        socket = InMemorySocket("/rpc")
+        serving = asyncio.create_task(app.serve(socket))
+        try:
+            await socket.client_send(
+                json.dumps(
+                    [
+                        {
+                            "jsonrpc": "2.0",
+                            "id": 1,
+                            "method": "release.work",
+                        }
+                    ]
+                )
+            )
+            await entered.wait()
+            assert capacities[0].count == 1
+            if ending == "disconnect":
+                await socket.client_disconnect()
+                await serving
+            else:
+                release.set()
+                await finished.wait()
+                if ending != "cancel":
+                    await socket.client_receive()
+                async with asyncio.timeout(1):
+                    while capacities[0].count:
+                        await asyncio.sleep(0)
+                await socket.client_send(
+                    json.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": 2,
+                            "method": "release.ready",
+                        }
+                    )
+                )
+                assert json.loads(await socket.client_receive())["result"] == "ok"
+        finally:
+            release.set()
+            await socket.client_disconnect()
+            await serving
+        assert finished.is_set()
+        assert capacities[0].count == 0
 
 
 def test_reservation_release_is_idempotent_and_never_negative():
-    from fastapi_canon.integrations.websockets.runtime import _PendingRequests
+    from fastapi_canon.integrations.websockets.runtime import (
+        # Unit-test admission accounting independently of network scheduling.
+        _PendingRequests,  # smelt: ignore[SMT420] -- unit seam
+    )
 
     capacity = _PendingRequests(1)
     reservation = capacity.reserve()
@@ -961,80 +993,83 @@ def test_reservation_release_is_idempotent_and_never_negative():
 
 @pytest.mark.parametrize("ending", ["failure", "disconnect", "shutdown"])
 async def test_documented_shared_capacity_releases_worker_permits(ending):
-    from fastapi_canon.integrations.websockets import RpcInvalidParamsError
+    async with asyncio.timeout(10):
+        from fastapi_canon.integrations.websockets import RpcInvalidParamsError
 
-    guide = (Path(__file__).parents[1] / "docs/services.md").read_text(encoding="utf-8")
-    snippet = guide.split("## Capacity across connections", 1)[1].split("```python", 1)[
-        1
-    ]
-    namespace = {}
-    exec(snippet.split("```", 1)[0], namespace)
-    queued = asyncio.Event()
+        guide = (Path(__file__).parents[1] / "docs/services.md").read_text(
+            encoding="utf-8"
+        )
+        snippet = guide.split("## Capacity across connections", 1)[1].split(
+            "```python", 1
+        )[1]
+        namespace = {}
+        exec(snippet.split("```", 1)[0], namespace)
+        queued = asyncio.Event()
 
-    class Capacity(namespace["SharedCapacity"]):
-        @asynccontextmanager
-        async def request(self, scope):
-            if scope.request.request_id == 2:
-                queued.set()
-            async with super().request(scope):
-                yield
+        class Capacity(namespace["SharedCapacity"]):
+            @asynccontextmanager
+            async def request(self, scope):
+                if scope.request.request_id == 2:
+                    queued.set()
+                async with super().request(scope):
+                    yield
 
-    capacity = Capacity(connections=2, requests=1)
-    started = asyncio.Queue()
-    release = asyncio.Event()
-    channel = RpcChannel("shared")
+        capacity = Capacity(connections=2, requests=1)
+        started = asyncio.Queue()
+        release = asyncio.Event()
+        channel = RpcChannel("shared")
 
-    @channel.method
-    async def wait(params: Params) -> None:
-        started.put_nowait(params.value)
-        await release.wait()
-        raise RpcInvalidParamsError(message="controlled failure")
+        @channel.method
+        async def wait(params: Params) -> None:
+            started.put_nowait(params.value)
+            await release.wait()
+            raise RpcInvalidParamsError(message="controlled failure")
 
-    app = RpcService(middleware=[capacity])
-    app.socket("/rpc", channels=[channel], before_accept=capacity.before_accept)
-    sockets = [InMemorySocket("/rpc") for _ in range(3)]
-    serving = []
-    try:
-        for i, socket in enumerate(sockets[:2], 1):
-            serving.append(asyncio.create_task(app.serve(socket)))
-            await socket.client_send(
-                json.dumps(
-                    {
-                        "jsonrpc": "2.0",
-                        "id": i,
-                        "method": "shared.wait",
-                        "params": {"value": str(i)},
-                    }
+        app = RpcService(middleware=[capacity])
+        app.socket("/rpc", channels=[channel], before_accept=capacity.before_accept)
+        sockets = [InMemorySocket("/rpc") for _ in range(3)]
+        serving = []
+        try:
+            for i, socket in enumerate(sockets[:2], 1):
+                serving.append(asyncio.create_task(app.serve(socket)))
+                await socket.client_send(
+                    json.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": i,
+                            "method": "shared.wait",
+                            "params": {"value": str(i)},
+                        }
+                    )
                 )
-            )
-            if i == 1:
-                assert await started.get() == "1"
-            else:
-                await queued.wait()
-        assert capacity.active_connections == 2
-        assert capacity.active_requests == 1
-        assert started.empty()
-        await app.serve(sockets[2])
-        assert sockets[2].rejection[0] == RpcRejection.UNAVAILABLE
-        assert capacity.active_connections == 2
-        if ending == "failure":
-            release.set()
-            await sockets[0].client_receive()
-        elif ending == "disconnect":
-            await sockets[0].client_disconnect()
-            await serving[0]
-        else:
-            serving[0].cancel()
-            with pytest.raises(asyncio.CancelledError):
+                if i == 1:
+                    assert await started.get() == "1"
+                else:
+                    await queued.wait()
+            assert capacity.active_connections == 2
+            assert capacity.active_requests == 1
+            assert started.empty()
+            await app.serve(sockets[2])
+            assert sockets[2].rejection[0] == RpcRejection.UNAVAILABLE
+            assert capacity.active_connections == 2
+            if ending == "failure":
+                release.set()
+                await sockets[0].client_receive()
+            elif ending == "disconnect":
+                await sockets[0].client_disconnect()
                 await serving[0]
-        assert await started.get() == "2"
-    finally:
-        release.set()
-        for socket in sockets:
-            await socket.client_disconnect()
-        await asyncio.gather(*serving, return_exceptions=True)
-    assert capacity.active_connections == 0
-    assert capacity.active_requests == 0
+            else:
+                serving[0].cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await serving[0]
+            assert await started.get() == "2"
+        finally:
+            release.set()
+            for socket in sockets:
+                await socket.client_disconnect()
+            await asyncio.gather(*serving, return_exceptions=True)
+        assert capacity.active_connections == 0
+        assert capacity.active_requests == 0
 
 
 async def test_writer_failure_closes_connection_and_finishes_middleware() -> None:
@@ -1226,16 +1261,17 @@ async def test_before_accept_failures_are_rejected_with_mapped_rejections() -> N
 
 
 async def test_cancelling_a_connection_closes_it_as_shutdown() -> None:
-    socket = InMemorySocket("/rpc")
-    task = asyncio.create_task(service.serve(socket))
-    await asyncio.sleep(0)
-    assert socket.accepted
+    async with asyncio.timeout(10):
+        socket = InMemorySocket("/rpc")
+        task = asyncio.create_task(service.serve(socket))
+        await asyncio.sleep(0)
+        assert socket.accepted
 
-    task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await task
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
 
-    assert socket.closed == (RpcConnectionClose.SHUTDOWN, "")
+        assert socket.closed == (RpcConnectionClose.SHUTDOWN, "")
 
 
 class DelayedSocket(InMemorySocket):

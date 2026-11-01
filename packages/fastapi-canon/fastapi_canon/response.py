@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Self, cast
 
+from fastapi_canon.error.contracts import SUCCESS_EXTENSION
 from fastapi_canon.error.error import _freeze_json_mapping, _validate_header_name
 from fastapi_canon.error.types import (
     ErrorConfigurationError,
@@ -165,8 +166,6 @@ class CanonResponse:
 
     def responses(self) -> OpenAPIResponses:
         """Compile this contract for a FastAPI route's ``responses`` argument."""
-        from fastapi_canon.error.contracts import SUCCESS_EXTENSION
-
         response = self.as_openapi()
         # FastAPI omits null extension values when serializing OpenAPI.
         response[SUCCESS_EXTENSION] = self.media_type or ""

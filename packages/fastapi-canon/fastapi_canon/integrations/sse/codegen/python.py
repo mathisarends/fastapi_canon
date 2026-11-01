@@ -304,14 +304,14 @@ class _Models:
                 reference = self.add(hint, type_)
                 return prefix + reference.name
 
-    def nullable(self, type_: Type, seen: frozenset[str] = frozenset()) -> bool:
+    def _nullable(self, type_: Type, seen: frozenset[str] = frozenset()) -> bool:
         match type_:
             case Scalar(name="null" | "JsonValue") | LiteralType(value=None):
                 return True
             case Union(members=members):
-                return any(self.nullable(member, seen) for member in members)
+                return any(self._nullable(member, seen) for member in members)
             case Reference(name=name) if name not in seen:
-                return self.nullable(self.declarations[name], seen | {name})
+                return self._nullable(self.declarations[name], seen | {name})
             case _:
                 return False
 
@@ -382,135 +382,144 @@ class _Models:
         while pending := sorted(set(self.declarations) - set(blocks)):
             for name in pending:
                 type_ = self.declarations[name]
-                if isinstance(type_, StringEnum):
-                    members = "\n".join(
-                        f"    {member.name} = {member.value!r}"
-                        for member in type_.members
-                    )
-                    blocks[name] = f"class {name}(StrEnum):\n{members}"
-                elif isinstance(type_, EnumAlias):
-                    blocks[name] = f"{name} = {type_.target}"
-                elif isinstance(type_, Object | Intersection):
-                    obj = self._object(type_)
-                    if obj.additional is not None and not obj.fields:
-                        value = self.render_type(obj.additional, hint=name + "Value")
-                        blocks[name] = f"type {name} = dict[str, {value}]"
-                        continue
-                    lines = [f"class {name}(BaseModel):"]
-                    if obj.additional_forbidden:
-                        lines.append(
-                            "    model_config = ConfigDict("
-                            'populate_by_name=True, extra="forbid")'
+                match type_:
+                    case StringEnum():
+                        members = "\n".join(
+                            f"    {member.name} = {member.value!r}"
+                            for member in type_.members
                         )
-                    elif obj.additional is not None:
-                        lines.append(
-                            "    model_config = ConfigDict("
-                            'populate_by_name=True, extra="allow")'
-                        )
-                    else:
-                        lines.append(
-                            "    model_config = ConfigDict(populate_by_name=True)"
-                        )
-                    if self.custom_fields:
-                        lines[-1] = (
-                            lines[-1].removesuffix(")") + ", protected_namespaces=())"
-                        )
-                    field_names: set[str] = set()
-                    nonnullable_optional: list[str] = []
-                    for field in obj.fields:
-                        field_name = self.field_name(field.name)
-                        if field_name in field_names:
-                            raise ContractError(
-                                f"Python field name collision in {name}: {field_name}"
+                        blocks[name] = f"class {name}(StrEnum):\n{members}"
+                    case EnumAlias():
+                        blocks[name] = f"{name} = {type_.target}"
+                    case Object() | Intersection():
+                        obj = self._object(type_)
+                        if obj.additional is not None and not obj.fields:
+                            value = self.render_type(
+                                obj.additional, hint=name + "Value"
                             )
-                        field_names.add(field_name)
-                        annotation = self.render_type(
-                            field.type, hint=name + identifier(field.name, upper=True)
-                        )
-                        literals = (
-                            field.type.members
-                            if isinstance(field.type, Union)
-                            else (field.type,)
-                        )
-                        enum_values = [
-                            part for part in literals if isinstance(part, EnumValue)
-                        ]
-                        literal_values = [
-                            part
-                            for part in literals
-                            if isinstance(part, LiteralType)
-                            and isinstance(part.value, str)
-                        ]
-                        constant_default = not field.required and (
-                            len(enum_values) == len(literals)
-                            or len(literal_values) == len(literals) == 1
-                        )
-                        if (
-                            not field.required
-                            and not self.nullable(field.type)
-                            and not constant_default
-                        ):
-                            annotation = f"{annotation} | None"
-                            nonnullable_optional.append(field_name)
-                        default = "None" if not field.required else "..."
-                        if constant_default and enum_values:
-                            selected = enum_values[0]
-                            for value in enum_values:
-                                enum = self.declarations[value.enum]
-                                assert isinstance(enum, StringEnum)
-                                if field.default and any(
-                                    member.name == value.member
-                                    and member.value == field.default.value
-                                    for member in enum.members
-                                ):
-                                    selected = value
-                                    break
-                            default = f"{selected.enum}.{selected.member}"
-                        elif constant_default:
-                            selected_literal = next(
-                                (
-                                    part
-                                    for part in literal_values
-                                    if part == field.default
-                                ),
-                                literal_values[0],
+                            blocks[name] = f"type {name} = dict[str, {value}]"
+                            continue
+                        lines = [f"class {name}(BaseModel):"]
+                        if obj.additional_forbidden:
+                            lines.append(
+                                "    model_config = ConfigDict("
+                                'populate_by_name=True, extra="forbid")'
                             )
-                            default = repr(selected_literal.value)
-                        assignment = (
-                            f" = Field(default={default}, alias={field.name!r})"
-                            if field_name != field.name
-                            else (f" = {default}" if not field.required else "")
-                        )
-                        lines.append(f"    {field_name}: {annotation}{assignment}")
-                    if obj.additional is not None:
-                        annotation = self.render_type(
-                            obj.additional, hint=name + "Extra"
-                        )
-                        lines.append(
-                            f"    __pydantic_extra__: dict[str, {annotation}]"
-                            " = Field(init=False)"
-                            "  # pyright: ignore[reportIncompatibleVariableOverride]"
-                        )
-                    if nonnullable_optional:
-                        args = ", ".join(repr(name) for name in nonnullable_optional)
-                        lines.extend(
-                            [
-                                "",
-                                f"    @field_validator({args}, mode='before')",
-                                "    @classmethod",
-                                "    def _reject_explicit_null("
-                                "cls, value: object) -> object:",
-                                "        if value is None:",
-                                "            raise ValueError("
-                                "'Field may be omitted but cannot be null')",
-                                "        return value",
+                        elif obj.additional is not None:
+                            lines.append(
+                                "    model_config = ConfigDict("
+                                'populate_by_name=True, extra="allow")'
+                            )
+                        else:
+                            lines.append(
+                                "    model_config = ConfigDict(populate_by_name=True)"
+                            )
+                        if self.custom_fields:
+                            lines[-1] = (
+                                lines[-1].removesuffix(")")
+                                + ", protected_namespaces=())"
+                            )
+                        field_names: set[str] = set()
+                        nonnullable_optional: list[str] = []
+                        for field in obj.fields:
+                            field_name = self.field_name(field.name)
+                            if field_name in field_names:
+                                raise ContractError(
+                                    f"Python field name collision in {name}: "
+                                    f"{field_name}"
+                                )
+                            field_names.add(field_name)
+                            annotation = self.render_type(
+                                field.type,
+                                hint=name + identifier(field.name, upper=True),
+                            )
+                            literals = (
+                                field.type.members
+                                if isinstance(field.type, Union)
+                                else (field.type,)
+                            )
+                            enum_values = [
+                                part for part in literals if isinstance(part, EnumValue)
                             ]
-                        )
-                    blocks[name] = "\n".join(lines)
-                    classes.append(name)
-                else:
-                    annotation = self.render_type(type_, hint=name)
-                    blocks[name] = f"type {name} = {annotation}"
+                            literal_values = [
+                                part
+                                for part in literals
+                                if isinstance(part, LiteralType)
+                                and isinstance(part.value, str)
+                            ]
+                            constant_default = not field.required and (
+                                len(enum_values) == len(literals)
+                                or len(literal_values) == len(literals) == 1
+                            )
+                            if (
+                                not field.required
+                                and not self._nullable(field.type)
+                                and not constant_default
+                            ):
+                                annotation = f"{annotation} | None"
+                                nonnullable_optional.append(field_name)
+                            default = "None" if not field.required else "..."
+                            if constant_default and enum_values:
+                                selected = enum_values[0]
+                                for value in enum_values:
+                                    enum = self.declarations[value.enum]
+                                    assert isinstance(enum, StringEnum)
+                                    if field.default and any(
+                                        member.name == value.member
+                                        and member.value == field.default.value
+                                        for member in enum.members
+                                    ):
+                                        selected = value
+                                        break
+                                default = f"{selected.enum}.{selected.member}"
+                            elif constant_default:
+                                selected_literal = next(
+                                    (
+                                        part
+                                        for part in literal_values
+                                        if part == field.default
+                                    ),
+                                    literal_values[0],
+                                )
+                                default = repr(selected_literal.value)
+                            assignment = (
+                                f" = Field(default={default}, alias={field.name!r})"
+                                if field_name != field.name
+                                else (f" = {default}" if not field.required else "")
+                            )
+                            lines.append(f"    {field_name}: {annotation}{assignment}")
+                        if obj.additional is not None:
+                            annotation = self.render_type(
+                                obj.additional, hint=name + "Extra"
+                            )
+                            lines.append(
+                                f"    __pydantic_extra__: dict[str, {annotation}]"
+                                " = Field(init=False)"
+                                "  # pyright: ignore["
+                                "reportIncompatibleVariableOverride]"
+                            )
+                        if nonnullable_optional:
+                            args = ", ".join(
+                                repr(name) for name in nonnullable_optional
+                            )
+                            lines.extend(
+                                [
+                                    "",
+                                    f"    @field_validator({args}, mode='before')",
+                                    "    @classmethod",
+                                    "    def _reject_explicit_null("
+                                    "cls, value: object) -> object:",
+                                    "        if value is None:",
+                                    "            raise ValueError("
+                                    "'Field may be omitted but cannot be null')",
+                                    "        return value",
+                                ]
+                            )
+                        blocks[name] = "\n".join(lines)
+                        classes.append(name)
+                    case _:
+                        annotation = self.render_type(type_, hint=name)
+                        blocks[name] = f"type {name} = {annotation}"
         text = "\n".join(blocks.values())
         typing_names = [name for name in ("Annotated", "Literal") if name + "[" in text]
         pydantic_names = [

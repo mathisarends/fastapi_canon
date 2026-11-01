@@ -20,7 +20,6 @@ from pydantic import (
     create_model,
 )
 
-from fastapi_canon.integrations.websockets._socket_messages import SocketMessages
 from fastapi_canon.integrations.websockets.dependencies import (
     RpcInjectedParameter,
     RpcResolverScope,
@@ -34,6 +33,7 @@ from fastapi_canon.integrations.websockets.errors import (
     bind_contracts,
     contract_of,
 )
+from fastapi_canon.integrations.websockets.socket_messages import SocketMessages
 from fastapi_canon.integrations.websockets.sockets import (
     RpcMessageType,
     RpcSocket,

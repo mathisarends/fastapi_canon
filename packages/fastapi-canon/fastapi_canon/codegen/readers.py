@@ -240,7 +240,7 @@ def _openapi(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
 
 
 def _openrpc(config: SourceConfig, document: dict[str, Any]) -> list[Operation]:
-    from fastapi_canon.integrations.websockets.codegen.ir import build_ir
+    from fastapi_canon.integrations.websockets.codegen import build_ir
     from fastapi_canon.integrations.websockets.codegen.names import camel_case
     from fastapi_canon.integrations.websockets.codegen.python import (
         _identifier as python_identifier,

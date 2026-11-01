@@ -375,173 +375,182 @@ def test_abort_timeout_response_and_disconnect_races(cancellation_sdk):
 
 
 async def test_typescript_abort_and_timeout_cancel_a_real_server(cancellation_sdk):
-    root, node = cancellation_sdk
-    runner = root / "roundtrip.js"
-    runner.write_text(
-        dedent("""
-        const assert = require("node:assert/strict");
-        const readline = require("node:readline");
-        const {
-          WebSocketTransport,
-          RpcRequestTimeoutError,
-        } = require("./compiled/generated");
-        const input = readline.createInterface({ input: process.stdin });
-        let socket, entered, stopped;
-        input.on("line", (line) => {
-          const message = JSON.parse(line);
-          if (message.kind === "entered") entered();
-          if (message.kind === "stopped") stopped();
-          if (message.kind === "frame") socket.receive(message.frame);
-        });
-        function output(message) {
-          process.stdout.write(JSON.stringify(message) + "\\n");
-        }
-        class Socket {
-          readyState = 1;
-          listeners = new Map();
-          constructor() {
-            output({ kind: "open" });
-          }
-          addEventListener(type, fn) {
-            const listeners = this.listeners.get(type) ?? [];
-            listeners.push(fn);
-            this.listeners.set(type, listeners);
-          }
-          send(frame) {
-            output({ kind: "frame", frame });
-          }
-          close() {
-            this.readyState = 3;
-            output({ kind: "close" });
-          }
-          receive(frame) {
-            for (const fn of this.listeners.get("message") ?? []) fn({ data: frame });
-          }
-        }
-        async function main() {
-          const timers = new Map();
-          let timerId = 0;
-          globalThis.setTimeout = (fn) => {
-            timers.set(++timerId, fn);
-            return timerId;
-          };
-          globalThis.clearTimeout = (id) => timers.delete(id);
-          for (const ending of ["abort", "timeout"]) {
-            socket = new Socket();
-            const started = new Promise((resolve) => {
-              entered = resolve;
+    async with asyncio.timeout(10):
+        root, node = cancellation_sdk
+        runner = root / "roundtrip.js"
+        runner.write_text(
+            dedent("""
+            const assert = require("node:assert/strict");
+            const readline = require("node:readline");
+            const {
+              WebSocketTransport,
+              RpcRequestTimeoutError,
+            } = require("./compiled/generated");
+            const input = readline.createInterface({ input: process.stdin });
+            let socket, entered, stopped;
+            input.on("line", (line) => {
+              const message = JSON.parse(line);
+              if (message.kind === "entered") entered();
+              if (message.kind === "stopped") stopped();
+              if (message.kind === "frame") socket.receive(message.frame);
             });
-            const cancelled = new Promise((resolve) => {
-              stopped = resolve;
+            function output(message) {
+              process.stdout.write(JSON.stringify(message) + "\\n");
+            }
+            class Socket {
+              readyState = 1;
+              listeners = new Map();
+              constructor() {
+                output({ kind: "open" });
+              }
+              addEventListener(type, fn) {
+                const listeners = this.listeners.get(type) ?? [];
+                listeners.push(fn);
+                this.listeners.set(type, listeners);
+              }
+              send(frame) {
+                output({ kind: "frame", frame });
+              }
+              close() {
+                this.readyState = 3;
+                output({ kind: "close" });
+              }
+              receive(frame) {
+                for (const fn of this.listeners.get("message") ?? []) {
+                  fn({ data: frame });
+                }
+              }
+            }
+            async function main() {
+              const timers = new Map();
+              let timerId = 0;
+              globalThis.setTimeout = (fn) => {
+                timers.set(++timerId, fn);
+                return timerId;
+              };
+              globalThis.clearTimeout = (id) => timers.delete(id);
+              for (const ending of ["abort", "timeout"]) {
+                socket = new Socket();
+                const started = new Promise((resolve) => {
+                  entered = resolve;
+                });
+                const cancelled = new Promise((resolve) => {
+                  stopped = resolve;
+                });
+                const transport = await WebSocketTransport.open("ws://test/rpc", {
+                  socketFactory: () => socket,
+                });
+                const controller = new AbortController();
+                const pending = transport
+                  .request("cancellation.work", undefined, {
+                    signal: controller.signal,
+                  })
+                  .catch((e) => e);
+                await started;
+                if (ending === "abort") controller.abort("user cancelled");
+                else [...timers.values()][0]();
+                const failure = await pending;
+                if (ending === "abort") assert.equal(failure, "user cancelled");
+                else assert.ok(failure instanceof RpcRequestTimeoutError);
+                await cancelled;
+                assert.equal(await transport.request("cancellation.ping"), "pong");
+                assert.equal(timers.size, 0);
+                await transport.close();
+              }
+              input.close();
+              process.stdin.pause();
+            }
+            main().catch((error) => {
+              console.error(error);
+              process.exitCode = 1;
+              input.close();
+              process.stdin.pause();
             });
-            const transport = await WebSocketTransport.open("ws://test/rpc", {
-              socketFactory: () => socket,
-            });
-            const controller = new AbortController();
-            const pending = transport
-              .request("cancellation.work", undefined, { signal: controller.signal })
-              .catch((e) => e);
-            await started;
-            if (ending === "abort") controller.abort("user cancelled");
-            else [...timers.values()][0]();
-            const failure = await pending;
-            if (ending === "abort") assert.equal(failure, "user cancelled");
-            else assert.ok(failure instanceof RpcRequestTimeoutError);
-            await cancelled;
-            assert.equal(await transport.request("cancellation.ping"), "pong");
-            assert.equal(timers.size, 0);
-            await transport.close();
-          }
-          input.close();
-          process.stdin.pause();
-        }
-        main().catch((error) => {
-          console.error(error);
-          process.exitCode = 1;
-          input.close();
-          process.stdin.pause();
-        });
-    """),
-        encoding="utf-8",
-    )
-    entered, stopped = asyncio.Event(), asyncio.Event()
-    cancellations = []
-    channel = RpcChannel("cancellation")
+        """),
+            encoding="utf-8",
+        )
+        entered, stopped = asyncio.Event(), asyncio.Event()
+        cancellations = []
+        channel = RpcChannel("cancellation")
 
-    @channel.method()
-    async def work() -> None:
-        entered.set()
+        @channel.method()
+        async def work() -> None:
+            entered.set()
+            try:
+                await asyncio.Future()
+            except asyncio.CancelledError:
+                stopped.set()
+                raise
+
+        @channel.method()
+        async def ping() -> str:
+            return "pong"
+
+        service = RpcService()
+        service.socket("/rpc", channels=[channel])
+        before = asyncio.all_tasks()
+        process = await asyncio.create_subprocess_exec(
+            node,
+            "--unhandled-rejections=strict",
+            str(runner),
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        relays = []
+
+        async def send(message):
+            process.stdin.write((json.dumps(message) + "\n").encode())
+            await process.stdin.drain()
+
+        async def relay(socket):
+            try:
+                while True:
+                    await send({"kind": "frame", "frame": await socket.recv()})
+            except RpcDisconnect:
+                return
+
         try:
-            await asyncio.Future()
-        except asyncio.CancelledError:
-            stopped.set()
-            raise
-
-    @channel.method()
-    async def ping() -> str:
-        return "pong"
-
-    service = RpcService()
-    service.socket("/rpc", channels=[channel])
-    before = asyncio.all_tasks()
-    process = await asyncio.create_subprocess_exec(
-        node,
-        "--unhandled-rejections=strict",
-        str(runner),
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    relays = []
-
-    async def send(message):
-        process.stdin.write((json.dumps(message) + "\n").encode())
-        await process.stdin.drain()
-
-    async def relay(socket):
-        try:
-            while True:
-                await send({"kind": "frame", "frame": await socket.recv()})
-        except RpcDisconnect:
-            return
-
-    try:
-        async with InMemorySocketFactory(service) as factory, asyncio.timeout(10):
-            socket = None
-            while line := await process.stdout.readline():
-                message = json.loads(line)
-                if message["kind"] == "open":
-                    entered.clear()
-                    stopped.clear()
-                    socket = await factory("ws://test/rpc")
-                    relays.append(asyncio.create_task(relay(socket)))
-                elif message["kind"] == "close":
-                    await socket.close()
-                else:
-                    frame = json.loads(message["frame"])
-                    await socket.send(message["frame"])
-                    if frame["method"] == "cancellation.work":
-                        await entered.wait()
-                        await send({"kind": "entered"})
-                    elif frame["method"] == "$/cancelRequest":
-                        cancellations.append(frame)
-                        await stopped.wait()
-                        await send({"kind": "stopped"})
-            await process.wait()
-            error = (await process.stderr.read()).decode()
-            assert process.returncode == 0, error
-            assert (
-                cancellations
-                == [
-                    {"jsonrpc": "2.0", "method": "$/cancelRequest", "params": {"id": 1}}
-                ]
-                * 2
-            )
-    finally:
-        if process.returncode is None:
-            process.kill()
-            await process.wait()
-        for task in relays:
-            task.cancel()
-        await asyncio.gather(*relays, return_exceptions=True)
-    assert not asyncio.all_tasks() - before
+            async with InMemorySocketFactory(service) as factory, asyncio.timeout(10):
+                socket = None
+                while line := await process.stdout.readline():
+                    message = json.loads(line)
+                    if message["kind"] == "open":
+                        entered.clear()
+                        stopped.clear()
+                        socket = await factory("ws://test/rpc")
+                        relays.append(asyncio.create_task(relay(socket)))
+                    elif message["kind"] == "close":
+                        await socket.close()
+                    else:
+                        frame = json.loads(message["frame"])
+                        await socket.send(message["frame"])
+                        if frame["method"] == "cancellation.work":
+                            await entered.wait()
+                            await send({"kind": "entered"})
+                        elif frame["method"] == "$/cancelRequest":
+                            cancellations.append(frame)
+                            await stopped.wait()
+                            await send({"kind": "stopped"})
+                await process.wait()
+                error = (await process.stderr.read()).decode()
+                assert process.returncode == 0, error
+                assert (
+                    cancellations
+                    == [
+                        {
+                            "jsonrpc": "2.0",
+                            "method": "$/cancelRequest",
+                            "params": {"id": 1},
+                        }
+                    ]
+                    * 2
+                )
+        finally:
+            if process.returncode is None:
+                process.kill()
+                await process.wait()
+            for task in relays:
+                task.cancel()
+            await asyncio.gather(*relays, return_exceptions=True)
+        assert not asyncio.all_tasks() - before

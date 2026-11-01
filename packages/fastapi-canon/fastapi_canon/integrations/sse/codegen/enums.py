@@ -170,22 +170,25 @@ def _discriminator_models(
         if not isinstance(member, Reference) or member.name in seen:
             return None
         model = declarations.get(member.name)
-        if isinstance(model, Object):
-            result.append(member)
-        elif isinstance(model, Union):
-            nested = _discriminator_models(
-                model.members, declarations, seen | {member.name}
-            )
-            if nested is None:
+        match model:
+            case Object():
+                result.append(member)
+            case Union():
+                nested = _discriminator_models(
+                    model.members, declarations, seen | {member.name}
+                )
+                if nested is None:
+                    return None
+                result.extend(nested)
+            case Reference():
+                nested = _discriminator_models(
+                    (model,), declarations, seen | {member.name}
+                )
+                if nested is None:
+                    return None
+                result.extend(nested)
+            case _:
                 return None
-            result.extend(nested)
-        elif isinstance(model, Reference):
-            nested = _discriminator_models((model,), declarations, seen | {member.name})
-            if nested is None:
-                return None
-            result.extend(nested)
-        else:
-            return None
     return tuple(result)
 
 

@@ -221,8 +221,8 @@ def test_optional_literal_defaults_produce_valid_discriminator_models(tmp_path):
 
 async def test_python_parser_all_boundaries_and_multiline_eof():
     raw = (
-        '\ufeff: ping\r\n\r\ndata: {\r\ndata: "text":"世界 👋"}\r\n\r\ndata: 2'.encode()
-    )
+        '\ufeff: ping\r\n\r\ndata: {\r\ndata: "text":"世界 👋"}\r\n\r\ndata: 2'
+    ).encode()
     for cut in range(len(raw) + 1):
         response = httpx.Response(200, stream=Chunks([raw[:cut], raw[cut:]]))
         assert [data async for data in iter_sse(response)] == [
@@ -322,52 +322,59 @@ async def test_request_timeouts_inherit_override_or_disable(options, expected):
 
 
 async def test_python_stream_close_cancellation_and_validation():
-    for payload in (
-        b"broken",
-        b'{"type":"unknown"}',
-        b'{"type":"token.delta","text":1}',
-    ):
-        source = Chunks([b"data: " + payload + b"\n\n"])
-        async with httpx.AsyncClient(
-            transport=httpx.MockTransport(
-                lambda _, source=source: httpx.Response(
-                    200, headers={"Content-Type": "text/event-stream"}, stream=source
+    async with asyncio.timeout(10):
+        for payload in (
+            b"broken",
+            b'{"type":"unknown"}',
+            b'{"type":"token.delta","text":1}',
+        ):
+            source = Chunks([b"data: " + payload + b"\n\n"])
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(
+                    lambda _, source=source: httpx.Response(
+                        200,
+                        headers={"Content-Type": "text/event-stream"},
+                        stream=source,
+                    )
                 )
-            )
-        ) as http:
-            async with Client("http://example.test", http_client=http) as client:
-                with pytest.raises(StreamParseError):
-                    _ = [
-                        event
-                        async for event in client.agent_runs.stream_run_events(
-                            run_id="x"
-                        )
-                    ]
+            ) as http:
+                async with Client("http://example.test", http_client=http) as client:
+                    with pytest.raises(StreamParseError):
+                        _ = [
+                            event
+                            async for event in client.agent_runs.stream_run_events(
+                                run_id="x"
+                            )
+                        ]
+                assert source.closed
+        source = Chunks(
+            [b'data: {"type":"token.delta","text":"hello"}\n\n'], stall=True
+        )
+        async with (
+            httpx.AsyncClient(
+                transport=httpx.MockTransport(
+                    lambda _: httpx.Response(
+                        200,
+                        headers={"Content-Type": "text/event-stream"},
+                        stream=source,
+                    )
+                )
+            ) as http,
+            Client("http://example.test", http_client=http) as client,
+        ):
+            events = client.agent_runs.stream_run_events(run_id="x")
+            assert (await anext(events)).type == "token.delta"
+            await events.aclose()
             assert source.closed
-    source = Chunks([b'data: {"type":"token.delta","text":"hello"}\n\n'], stall=True)
-    async with (
-        httpx.AsyncClient(
-            transport=httpx.MockTransport(
-                lambda _: httpx.Response(
-                    200, headers={"Content-Type": "text/event-stream"}, stream=source
-                )
-            )
-        ) as http,
-        Client("http://example.test", http_client=http) as client,
-    ):
-        events = client.agent_runs.stream_run_events(run_id="x")
-        assert (await anext(events)).type == "token.delta"
-        await events.aclose()
-        assert source.closed
-        source.closed = False
-        events = client.agent_runs.stream_run_events(run_id="x")
-        await anext(events)
-        task = asyncio.create_task(anext(events))
-        await asyncio.sleep(0)
-        task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await task
-        assert source.closed
+            source.closed = False
+            events = client.agent_runs.stream_run_events(run_id="x")
+            await anext(events)
+            task = asyncio.create_task(anext(events))
+            await asyncio.sleep(0)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            assert source.closed
 
 
 @pytest.mark.snapshot

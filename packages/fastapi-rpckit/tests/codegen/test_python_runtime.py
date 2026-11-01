@@ -278,46 +278,49 @@ class ControlledSocket:
 async def test_late_duplicate_and_unknown_responses_leave_other_calls_alive(
     websocket_runtime: ModuleType, abandon: str
 ) -> None:
-    socket = ControlledSocket()
-    transport = websocket_runtime.WebSocketTransport(socket, request_timeout=None)
-    try:
-        if abandon == "timeout":
-            transport._request_timeout = 0
-        abandoned = asyncio.create_task(transport.request("slow"))
-        first = await socket.sent.get()
-        if abandon == "timeout":
-            with pytest.raises(websocket_runtime.RpcTransportError, match="timed out"):
-                await abandoned
-            transport._request_timeout = None
-        else:
-            abandoned.cancel()
-            with pytest.raises(asyncio.CancelledError):
-                await abandoned
+    async with asyncio.timeout(10):
+        socket = ControlledSocket()
+        transport = websocket_runtime.WebSocketTransport(socket, request_timeout=None)
+        try:
+            if abandon == "timeout":
+                transport._request_timeout = 0
+            abandoned = asyncio.create_task(transport.request("slow"))
+            first = await socket.sent.get()
+            if abandon == "timeout":
+                with pytest.raises(
+                    websocket_runtime.RpcTransportError, match="timed out"
+                ):
+                    await abandoned
+                transport._request_timeout = None
+            else:
+                abandoned.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await abandoned
+            assert not transport._pending
+
+            control = await socket.sent.get()
+            assert control == {
+                "jsonrpc": "2.0",
+                "method": "$/cancelRequest",
+                "params": {"id": first["id"]},
+            }
+
+            other = asyncio.create_task(transport.request("fast"))
+            second = await socket.sent.get()
+            socket.reply(first["id"], result="late")
+            socket.reply(123456, error={"code": -32601, "message": "unknown"})
+            socket.reply(second["id"], result="ok")
+            socket.reply(second["id"], result="duplicate")
+            assert await other == "ok"
+            last = asyncio.create_task(transport.request("later"))
+            third = await socket.sent.get()
+            socket.reply(third["id"], result="still connected")
+            assert await last == "still connected"
+            assert not transport.closed.done()
+        finally:
+            await transport.close()
         assert not transport._pending
-
-        control = await socket.sent.get()
-        assert control == {
-            "jsonrpc": "2.0",
-            "method": "$/cancelRequest",
-            "params": {"id": first["id"]},
-        }
-
-        other = asyncio.create_task(transport.request("fast"))
-        second = await socket.sent.get()
-        socket.reply(first["id"], result="late")
-        socket.reply(123456, error={"code": -32601, "message": "unknown"})
-        socket.reply(second["id"], result="ok")
-        socket.reply(second["id"], result="duplicate")
-        assert await other == "ok"
-        last = asyncio.create_task(transport.request("later"))
-        third = await socket.sent.get()
-        socket.reply(third["id"], result="still connected")
-        assert await last == "still connected"
-        assert not transport.closed.done()
-    finally:
-        await transport.close()
-    assert not transport._pending
-    assert transport._reader.done()
+        assert transport._reader.done()
 
 
 class ClientDeadlines:
@@ -342,16 +345,17 @@ class ClientDeadlines:
 
 
 async def test_cancel_before_request_starts_sends_no_frames(websocket_runtime):
-    socket = ControlledSocket()
-    transport = websocket_runtime.WebSocketTransport(socket, request_timeout=None)
-    task = asyncio.create_task(transport.request("unsent"))
-    task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await task
-    assert socket.sent.empty()
-    assert not transport._pending
-    assert not transport._cancellations
-    await transport.close()
+    async with asyncio.timeout(10):
+        socket = ControlledSocket()
+        transport = websocket_runtime.WebSocketTransport(socket, request_timeout=None)
+        task = asyncio.create_task(transport.request("unsent"))
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert socket.sent.empty()
+        assert not transport._pending
+        assert not transport._cancellations
+        await transport.close()
 
 
 async def test_best_effort_cancel_workers_have_bounded_capacity(
@@ -379,199 +383,209 @@ async def test_best_effort_cancel_workers_have_bounded_capacity(
 async def test_abandoned_call_cancels_server_once_and_preserves_local_outcome(
     websocket_runtime, monkeypatch, ending
 ):
-    from fastapi_canon.integrations.websockets import RpcChannel, RpcService
-    from fastapi_canon.integrations.websockets.testing import InMemorySocketFactory
+    async with asyncio.timeout(10):
+        from fastapi_canon.integrations.websockets import RpcChannel, RpcService
+        from fastapi_canon.integrations.websockets.testing import InMemorySocketFactory
 
-    before = asyncio.all_tasks()
-    clock = ClientDeadlines(monkeypatch, websocket_runtime)
-    channel = RpcChannel("cancellation")
-    entered, stopped = asyncio.Event(), asyncio.Event()
-    controls = []
+        before = asyncio.all_tasks()
+        clock = ClientDeadlines(monkeypatch, websocket_runtime)
+        channel = RpcChannel("cancellation")
+        entered, stopped = asyncio.Event(), asyncio.Event()
+        controls = []
 
-    @channel.method()
-    async def work() -> None:
-        entered.set()
-        try:
-            await asyncio.Future()
-        except asyncio.CancelledError:
-            stopped.set()
-            raise
+        @channel.method()
+        async def work() -> None:
+            entered.set()
+            try:
+                await asyncio.Future()
+            except asyncio.CancelledError:
+                stopped.set()
+                raise
 
-    @channel.method()
-    async def ping() -> str:
-        return "pong"
+        @channel.method()
+        async def ping() -> str:
+            return "pong"
 
-    def configure(socket, attempt):
-        def record(frame):
-            message = json.loads(frame)
-            if message.get("method") == "$/cancelRequest":
-                controls.append(message)
-            return False
+        def configure(socket, attempt):
+            def record(frame):
+                message = json.loads(frame)
+                if message.get("method") == "$/cancelRequest":
+                    controls.append(message)
+                return False
 
-        socket.client_to_server.drop_when = record
+            socket.client_to_server.drop_when = record
 
-    app = RpcService()
-    app.socket("/rpc", channels=[channel])
-    async with InMemorySocketFactory(app, configure=configure) as factory:
-        transport = await websocket_runtime.WebSocketTransport.open(
-            "ws://test/rpc", socket_factory=factory, request_timeout=5
-        )
-        try:
-            task = asyncio.create_task(transport.request("cancellation.work"))
-            duration, waiting = await clock.next()
-            assert duration == 5
-            await asyncio.wait_for(entered.wait(), 1)
-            if ending == "cancel":
-                task.cancel("user cancelled")
-                with pytest.raises(asyncio.CancelledError, match="user cancelled"):
-                    await task
-            else:
-                clock.expire(waiting)
-                with pytest.raises(websocket_runtime.RpcRequestTimeoutError):
-                    await task
-            await asyncio.wait_for(stopped.wait(), 1)
-            assert controls == [
-                {"jsonrpc": "2.0", "method": "$/cancelRequest", "params": {"id": 1}}
-            ]
-            assert not transport._pending
-            transport._request_timeout = None
-            assert await transport.request("cancellation.ping") == "pong"
-            assert not transport.closed.done()
-        finally:
-            await transport.close()
-        assert not transport._cancellations
-    assert not asyncio.all_tasks() - before
+        app = RpcService()
+        app.socket("/rpc", channels=[channel])
+        async with InMemorySocketFactory(app, configure=configure) as factory:
+            transport = await websocket_runtime.WebSocketTransport.open(
+                "ws://test/rpc", socket_factory=factory, request_timeout=5
+            )
+            try:
+                task = asyncio.create_task(transport.request("cancellation.work"))
+                duration, waiting = await clock.next()
+                assert duration == 5
+                await asyncio.wait_for(entered.wait(), 1)
+                if ending == "cancel":
+                    task.cancel("user cancelled")
+                    with pytest.raises(asyncio.CancelledError, match="user cancelled"):
+                        await task
+                else:
+                    clock.expire(waiting)
+                    with pytest.raises(websocket_runtime.RpcRequestTimeoutError):
+                        await task
+                await asyncio.wait_for(stopped.wait(), 1)
+                assert controls == [
+                    {"jsonrpc": "2.0", "method": "$/cancelRequest", "params": {"id": 1}}
+                ]
+                assert not transport._pending
+                transport._request_timeout = None
+                assert await transport.request("cancellation.ping") == "pong"
+                assert not transport.closed.done()
+            finally:
+                await transport.close()
+            assert not transport._cancellations
+        assert not asyncio.all_tasks() - before
 
 
 @pytest.mark.parametrize("ending", ["close", "disconnect", "expiry"])
 async def test_background_cancel_send_is_bounded_and_cleaned_up(
     websocket_runtime, monkeypatch, ending
 ):
-    before = asyncio.all_tasks()
-    clock = ClientDeadlines(monkeypatch, websocket_runtime)
-    socket = ControlledSocket()
-    transport = websocket_runtime.WebSocketTransport(socket, request_timeout=None)
-    task = asyncio.create_task(transport.request("work"))
-    await socket.sent.get()
-    socket.send_gate.clear()
-    task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await task
-    duration, waiting = await clock.next()
-    assert duration == 1.0
-    control = await socket.sent.get()
-    assert control["method"] == "$/cancelRequest"
-    sends = tuple(transport._cancellations)
-    assert len(sends) == 1 and not sends[0].done()
-    if ending == "expiry":
-        clock.expire(waiting)
-        await asyncio.wait_for(asyncio.gather(*sends), 1)
-    elif ending == "disconnect":
-        socket.inbox.put_nowait("invalid JSON")
-        await transport.closed
-    await transport.close()
-    assert not transport._pending
-    assert not transport._cancellations
-    assert all(t.done() for t in sends)
-    assert not asyncio.all_tasks() - before
+    async with asyncio.timeout(10):
+        before = asyncio.all_tasks()
+        clock = ClientDeadlines(monkeypatch, websocket_runtime)
+        socket = ControlledSocket()
+        transport = websocket_runtime.WebSocketTransport(socket, request_timeout=None)
+        task = asyncio.create_task(transport.request("work"))
+        await socket.sent.get()
+        socket.send_gate.clear()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        duration, waiting = await clock.next()
+        assert duration == 1.0
+        control = await socket.sent.get()
+        assert control["method"] == "$/cancelRequest"
+        sends = tuple(transport._cancellations)
+        assert len(sends) == 1 and not sends[0].done()
+        if ending == "expiry":
+            clock.expire(waiting)
+            await asyncio.wait_for(asyncio.gather(*sends), 1)
+        elif ending == "disconnect":
+            socket.inbox.put_nowait("invalid JSON")
+            await transport.closed
+        await transport.close()
+        assert not transport._pending
+        assert not transport._cancellations
+        assert all(t.done() for t in sends)
+        assert not asyncio.all_tasks() - before
 
 
 async def test_cancel_send_failure_is_consumed_and_does_not_close_transport(
     websocket_runtime,
 ):
-    class Socket(ControlledSocket):
-        async def send(self, message):
-            if json.loads(message)["method"] == "$/cancelRequest":
-                raise RuntimeError("control cannot be sent")
-            await super().send(message)
+    async with asyncio.timeout(10):
 
-    socket = Socket()
-    transport = websocket_runtime.WebSocketTransport(socket, request_timeout=None)
-    try:
-        task = asyncio.create_task(transport.request("work"))
-        await socket.sent.get()
-        task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await task
-        sends = tuple(transport._cancellations)
-        await asyncio.gather(*sends)
-        await asyncio.sleep(0)  # Run the task's removal callback.
-        assert not transport._cancellations
-        assert not transport.closed.done()
-    finally:
-        await transport.close()
+        class Socket(ControlledSocket):
+            async def send(self, message):
+                if json.loads(message)["method"] == "$/cancelRequest":
+                    raise RuntimeError("control cannot be sent")
+                await super().send(message)
+
+        socket = Socket()
+        transport = websocket_runtime.WebSocketTransport(socket, request_timeout=None)
+        try:
+            task = asyncio.create_task(transport.request("work"))
+            await socket.sent.get()
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            sends = tuple(transport._cancellations)
+            await asyncio.gather(*sends)
+            await asyncio.sleep(0)  # Run the task's removal callback.
+            assert not transport._cancellations
+            assert not transport.closed.done()
+        finally:
+            await transport.close()
 
 
 async def test_close_before_cancellation_skips_control_on_original_and_new_socket(
     websocket_runtime,
 ):
-    socket = ControlledSocket()
-    old = websocket_runtime.WebSocketTransport(socket, request_timeout=None)
-    task = asyncio.create_task(old.request("work"))
-    await socket.sent.get()
-    await old.close()
-    with pytest.raises(websocket_runtime.RpcConnectionLostError):
-        await task
-    new_socket = ControlledSocket()
-    new = websocket_runtime.WebSocketTransport(new_socket, request_timeout=None)
-    try:
-        old._cancel_request(1)
-        await asyncio.sleep(0)
-        assert socket.sent.empty()
-        assert new_socket.sent.empty()
-        assert not old._cancellations
-    finally:
-        await new.close()
+    async with asyncio.timeout(10):
+        socket = ControlledSocket()
+        old = websocket_runtime.WebSocketTransport(socket, request_timeout=None)
+        task = asyncio.create_task(old.request("work"))
+        await socket.sent.get()
+        await old.close()
+        with pytest.raises(websocket_runtime.RpcConnectionLostError):
+            await task
+        new_socket = ControlledSocket()
+        new = websocket_runtime.WebSocketTransport(new_socket, request_timeout=None)
+        try:
+            old._cancel_request(1)
+            await asyncio.sleep(0)
+            assert socket.sent.empty()
+            assert new_socket.sent.empty()
+            assert not old._cancellations
+        finally:
+            await new.close()
 
 
 async def test_late_response_from_a_served_endpoint_keeps_the_client_usable(
     websocket_runtime: ModuleType,
 ) -> None:
-    from fastapi_canon.integrations.websockets import RpcChannel, RpcService
-    from fastapi_canon.integrations.websockets.testing import InMemorySocketFactory
+    async with asyncio.timeout(10):
+        from fastapi_canon.integrations.websockets import RpcChannel, RpcService
+        from fastapi_canon.integrations.websockets.testing import InMemorySocketFactory
 
-    channel = RpcChannel("resilience")
-    entered, release = asyncio.Event(), asyncio.Event()
+        channel = RpcChannel("resilience")
+        entered, release = asyncio.Event(), asyncio.Event()
 
-    @channel.method
-    async def slow() -> str:
-        entered.set()
-        await release.wait()
-        return "late"
+        @channel.method
+        async def slow() -> str:
+            entered.set()
+            await release.wait()
+            return "late"
 
-    @channel.method
-    async def fast() -> str:
-        return "ok"
+        @channel.method
+        async def fast() -> str:
+            return "ok"
 
-    service = RpcService()
-    service.socket("/rpc", channels=[channel])
+        service = RpcService()
+        service.socket("/rpc", channels=[channel])
 
-    def configure(socket, attempt):
-        socket.server_to_client.hold()
+        def configure(socket, attempt):
+            socket.server_to_client.hold()
 
-    async with InMemorySocketFactory(service, configure=configure) as factory:
-        transport = await websocket_runtime.WebSocketTransport.open(
-            "ws://test/rpc", socket_factory=factory, request_timeout=None
+        async with InMemorySocketFactory(service, configure=configure) as factory:
+            transport = await websocket_runtime.WebSocketTransport.open(
+                "ws://test/rpc", socket_factory=factory, request_timeout=None
+            )
+            try:
+                pending = asyncio.create_task(transport.request("resilience.slow"))
+                await entered.wait()
+                release.set()
+                faults = factory.sockets[0].server_to_client
+                await faults.held.wait()
+                assert faults.held_count == 1
+                pending.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await pending
+                faults.release()
+                transport._request_timeout = None
+                assert await transport.request("resilience.fast") == "ok"
+                assert await transport.request("resilience.fast") == "ok"
+                assert not transport.closed.done()
+            finally:
+                release.set()
+                await transport.close()
+        # Verify the in-memory test transport releases its background tasks.
+        assert all(
+            task.done()
+            for task in factory._tasks  # smelt: ignore[SMT420] -- unit seam
         )
-        try:
-            pending = asyncio.create_task(transport.request("resilience.slow"))
-            await entered.wait()
-            release.set()
-            faults = factory.sockets[0].server_to_client
-            await faults.held.wait()
-            assert faults.held_count == 1
-            pending.cancel()
-            with pytest.raises(asyncio.CancelledError):
-                await pending
-            faults.release()
-            transport._request_timeout = None
-            assert await transport.request("resilience.fast") == "ok"
-            assert await transport.request("resilience.fast") == "ok"
-            assert not transport.closed.done()
-        finally:
-            release.set()
-            await transport.close()
-    assert all(task.done() for task in factory._tasks)
 
 
 @pytest.mark.parametrize(
@@ -588,15 +602,16 @@ async def test_late_response_from_a_served_endpoint_keeps_the_client_usable(
 async def test_malformed_unknown_responses_still_fail_pending_calls(
     websocket_runtime: ModuleType, payload: dict[str, Any]
 ) -> None:
-    socket = ControlledSocket()
-    transport = websocket_runtime.WebSocketTransport(socket, request_timeout=None)
-    pending = asyncio.create_task(transport.request("pending"))
-    await socket.sent.get()
-    socket.inbox.put_nowait(json.dumps({"jsonrpc": "2.0", **payload}))
-    with pytest.raises(websocket_runtime.RpcTransportError):
-        await pending
-    assert isinstance(await transport.closed, websocket_runtime.RpcTransportError)
-    assert not transport._pending
+    async with asyncio.timeout(10):
+        socket = ControlledSocket()
+        transport = websocket_runtime.WebSocketTransport(socket, request_timeout=None)
+        pending = asyncio.create_task(transport.request("pending"))
+        await socket.sent.get()
+        socket.inbox.put_nowait(json.dumps({"jsonrpc": "2.0", **payload}))
+        with pytest.raises(websocket_runtime.RpcTransportError):
+            await pending
+        assert isinstance(await transport.closed, websocket_runtime.RpcTransportError)
+        assert not transport._pending
 
 
 async def test_blocked_send_is_inside_request_timeout_and_retires_transport(
@@ -617,17 +632,18 @@ async def test_blocked_send_is_inside_request_timeout_and_retires_transport(
 async def test_cancel_during_send_preserves_cancellation_and_retires_transport(
     websocket_runtime: ModuleType,
 ) -> None:
-    socket = ControlledSocket()
-    socket.send_gate.clear()
-    transport = websocket_runtime.WebSocketTransport(socket, request_timeout=None)
-    request = asyncio.create_task(transport.request("blocked"))
-    await socket.sent.get()
-    request.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await request
-    assert socket.closed
-    assert not transport._pending
-    assert transport._reader.done()
+    async with asyncio.timeout(10):
+        socket = ControlledSocket()
+        socket.send_gate.clear()
+        transport = websocket_runtime.WebSocketTransport(socket, request_timeout=None)
+        request = asyncio.create_task(transport.request("blocked"))
+        await socket.sent.get()
+        request.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await request
+        assert socket.closed
+        assert not transport._pending
+        assert transport._reader.done()
 
 
 async def test_deep_json_fails_all_client_calls_without_leaked_futures(
@@ -671,32 +687,33 @@ async def test_integer_digit_limit_is_a_protocol_failure_not_connection_loss(
 async def test_socket_reset_is_a_client_error_with_cause_and_sent_state(
     websocket_runtime,
 ):
-    broken = asyncio.Event()
-    original = ConnectionResetError("connection reset")
+    async with asyncio.timeout(10):
+        broken = asyncio.Event()
+        original = ConnectionResetError("connection reset")
 
-    class Socket(ControlledSocket):
-        async def recv(self):
-            await broken.wait()
-            raise original
+        class Socket(ControlledSocket):
+            async def recv(self):
+                await broken.wait()
+                raise original
 
-    socket = Socket()
-    transport = websocket_runtime.WebSocketTransport(socket, request_timeout=None)
-    call = asyncio.create_task(transport.request("inflight"))
-    await socket.sent.get()
-    broken.set()
-    with pytest.raises(websocket_runtime.RpcClientError) as raised:
-        await call
-    assert isinstance(raised.value, websocket_runtime.RpcConnectionLostError)
-    assert raised.value.sent is True
-    assert raised.value.__cause__ is original
-    closed = await transport.closed
-    assert isinstance(closed, websocket_runtime.RpcConnectionLostError)
-    assert closed.__cause__ is original
-    with pytest.raises(websocket_runtime.RpcConnectionLostError) as unsent:
-        await transport.request("never sent")
-    assert unsent.value.sent is False
-    assert socket.sent.empty()
-    assert not transport._pending
+        socket = Socket()
+        transport = websocket_runtime.WebSocketTransport(socket, request_timeout=None)
+        call = asyncio.create_task(transport.request("inflight"))
+        await socket.sent.get()
+        broken.set()
+        with pytest.raises(websocket_runtime.RpcClientError) as raised:
+            await call
+        assert isinstance(raised.value, websocket_runtime.RpcConnectionLostError)
+        assert raised.value.sent is True
+        assert raised.value.__cause__ is original
+        closed = await transport.closed
+        assert isinstance(closed, websocket_runtime.RpcConnectionLostError)
+        assert closed.__cause__ is original
+        with pytest.raises(websocket_runtime.RpcConnectionLostError) as unsent:
+            await transport.request("never sent")
+        assert unsent.value.sent is False
+        assert socket.sent.empty()
+        assert not transport._pending
 
 
 async def test_send_that_delivers_then_raises_is_never_classified_unsent(
@@ -788,42 +805,43 @@ async def test_connect_errors_preserve_handshake_classification(
 async def test_served_close_preserves_code_in_requests_notifications_and_closed(
     websocket_runtime,
 ):
-    from fastapi_canon.integrations.websockets import (
-        Inject,
-        RpcChannel,
-        RpcConnection,
-        RpcConnectionClose,
-        RpcService,
-    )
-    from fastapi_canon.integrations.websockets.testing import InMemorySocketFactory
-
-    channel = RpcChannel("disconnect")
-
-    @channel.method
-    async def fail(connection: Inject[RpcConnection]) -> None:
-        await connection.close(
-            RpcConnectionClose.INTERNAL_ERROR, reason="server failure"
+    async with asyncio.timeout(10):
+        from fastapi_canon.integrations.websockets import (
+            Inject,
+            RpcChannel,
+            RpcConnection,
+            RpcConnectionClose,
+            RpcService,
         )
-        await asyncio.Event().wait()
+        from fastapi_canon.integrations.websockets.testing import InMemorySocketFactory
 
-    app = RpcService()
-    app.socket("/rpc", channels=[channel])
-    async with InMemorySocketFactory(app) as factory:
-        transport = await websocket_runtime.WebSocketTransport.open(
-            "ws://test/rpc", socket_factory=factory, request_timeout=None
-        )
-        notifications = transport.notifications()
-        listening = asyncio.create_task(anext(notifications))
-        with pytest.raises(websocket_runtime.RpcClientError) as raised:
-            await transport.request("disconnect.fail")
-        assert isinstance(raised.value, websocket_runtime.RpcConnectionLostError)
-        assert raised.value.code == 1011
-        assert raised.value.reason == "server failure"
-        assert raised.value.sent is True
-        with pytest.raises(websocket_runtime.RpcConnectionLostError):
-            await listening
-        assert (await transport.closed).code == 1011
-        await notifications.aclose()
+        channel = RpcChannel("disconnect")
+
+        @channel.method
+        async def fail(connection: Inject[RpcConnection]) -> None:
+            await connection.close(
+                RpcConnectionClose.INTERNAL_ERROR, reason="server failure"
+            )
+            await asyncio.Event().wait()
+
+        app = RpcService()
+        app.socket("/rpc", channels=[channel])
+        async with InMemorySocketFactory(app) as factory:
+            transport = await websocket_runtime.WebSocketTransport.open(
+                "ws://test/rpc", socket_factory=factory, request_timeout=None
+            )
+            notifications = transport.notifications()
+            listening = asyncio.create_task(anext(notifications))
+            with pytest.raises(websocket_runtime.RpcClientError) as raised:
+                await transport.request("disconnect.fail")
+            assert isinstance(raised.value, websocket_runtime.RpcConnectionLostError)
+            assert raised.value.code == 1011
+            assert raised.value.reason == "server failure"
+            assert raised.value.sent is True
+            with pytest.raises(websocket_runtime.RpcConnectionLostError):
+                await listening
+            assert (await transport.closed).code == 1011
+            await notifications.aclose()
 
 
 async def test_simultaneous_interrupted_sends_keep_their_own_delivery_state(
@@ -909,49 +927,51 @@ async def test_header_factory_errors_retain_application_exception_identity(
 async def test_static_transport_close_waits_for_all_and_finalizes_client(
     runtime: ModuleType,
 ) -> None:
-    started, release = asyncio.Event(), asyncio.Event()
+    async with asyncio.timeout(10):
+        started, release = asyncio.Event(), asyncio.Event()
 
-    class Failing(StubTransport):
-        async def close(self) -> None:
-            await started.wait()
-            raise OSError("close failed")
+        class Failing(StubTransport):
+            async def close(self) -> None:
+                await started.wait()
+                raise OSError("close failed")
 
-    class Blocking(StubTransport):
-        async def close(self) -> None:
-            started.set()
-            await release.wait()
-            await super().close()
+        class Blocking(StubTransport):
+            async def close(self) -> None:
+                started.set()
+                await release.wait()
+                await super().close()
 
-    blocking = Blocking()
-    core = runtime.RpcClientCore({"first": Failing(), "second": blocking})
-    closing = asyncio.create_task(core.close())
-    await started.wait()
-    release.set()
-    await closing
-    assert blocking.closed == 1
-    assert core.closed.done()
-    await core.close()
-    assert blocking.closed == 1
+        blocking = Blocking()
+        core = runtime.RpcClientCore({"first": Failing(), "second": blocking})
+        closing = asyncio.create_task(core.close())
+        await started.wait()
+        release.set()
+        await closing
+        assert blocking.closed == 1
+        assert core.closed.done()
+        await core.close()
+        assert blocking.closed == 1
 
 
 async def test_static_transport_close_preserves_caller_cancellation(
     runtime: ModuleType,
 ) -> None:
-    started, cancelled = asyncio.Event(), asyncio.Event()
+    async with asyncio.timeout(10):
+        started, cancelled = asyncio.Event(), asyncio.Event()
 
-    class Blocking(StubTransport):
-        async def close(self) -> None:
-            started.set()
-            try:
-                await asyncio.Event().wait()
-            finally:
-                cancelled.set()
+        class Blocking(StubTransport):
+            async def close(self) -> None:
+                started.set()
+                try:
+                    await asyncio.Event().wait()
+                finally:
+                    cancelled.set()
 
-    core = runtime.RpcClientCore({"first": Blocking(), "second": Blocking()})
-    closing = asyncio.create_task(core.close())
-    await started.wait()
-    closing.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await closing
-    assert cancelled.is_set()
-    assert core.closed.done()
+        core = runtime.RpcClientCore({"first": Blocking(), "second": Blocking()})
+        closing = asyncio.create_task(core.close())
+        await started.wait()
+        closing.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await closing
+        assert cancelled.is_set()
+        assert core.closed.done()

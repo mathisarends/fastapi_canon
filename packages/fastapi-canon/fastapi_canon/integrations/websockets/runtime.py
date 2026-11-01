@@ -8,8 +8,8 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from fastapi_canon.integrations.websockets._activity import _Activity, notify_activity
-from fastapi_canon.integrations.websockets._adapter import adapter
+from fastapi_canon.integrations.websockets.activity import _Activity, notify_activity
+from fastapi_canon.integrations.websockets.adapter import adapter
 from fastapi_canon.integrations.websockets.codec import RpcCodec
 from fastapi_canon.integrations.websockets.connection import (
     _STARTUP_EXPIRED,

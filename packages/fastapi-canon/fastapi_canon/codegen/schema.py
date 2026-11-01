@@ -70,7 +70,7 @@ class SchemaRegistry:
             raw.pop("definitions", None)
         else:
             raw.get("components", {}).pop("schemas", None)
-        document = self.rewrite(source, raw)
+        document = self._rewrite(source, raw)
         names = {name for (owner, _), name in self._refs.items() if owner == source}
         # Include only this source's definitions, then close over their references.
         queue = list(names)
@@ -94,7 +94,7 @@ class SchemaRegistry:
             document.setdefault("components", {})["schemas"] = schemas
         return cast(dict[str, Any], document)
 
-    def rewrite(
+    def _rewrite(
         self,
         source: str,
         value: Any,
@@ -106,7 +106,7 @@ class SchemaRegistry:
     ) -> Any:
         if isinstance(value, list):
             return [
-                self.rewrite(
+                self._rewrite(
                     source, item, scope=scope, address=address + "/" + str(index)
                 )
                 for index, item in enumerate(value)
@@ -141,7 +141,7 @@ class SchemaRegistry:
             elif not container and key in {"default", "examples", "example"}:
                 result[key] = copy.deepcopy(item)
             elif container or key not in {"$defs", "$id"}:
-                result[key] = self.rewrite(
+                result[key] = self._rewrite(
                     source,
                     item,
                     scope=scope,
@@ -232,7 +232,7 @@ class SchemaRegistry:
         self._compiling.add(marker)
         try:
             raw = copy.deepcopy(_pointer(self._documents[source], ref))
-            schema = self.rewrite(
+            schema = self._rewrite(
                 source,
                 raw,
                 scope=ref.split("/$defs/", 1)[0],

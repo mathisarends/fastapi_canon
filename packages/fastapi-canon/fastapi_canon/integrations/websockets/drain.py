@@ -6,7 +6,12 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from math import isfinite
 
-from .connection import RpcConnection, RpcConnectionClose, RpcRejection, RpcWebSocket
+from fastapi_canon.integrations.websockets.connection import (
+    RpcConnection,
+    RpcConnectionClose,
+    RpcRejection,
+    RpcWebSocket,
+)
 
 
 @dataclass(eq=False)

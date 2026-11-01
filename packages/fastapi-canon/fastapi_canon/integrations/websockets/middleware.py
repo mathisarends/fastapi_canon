@@ -7,7 +7,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
-from fastapi_canon.integrations.websockets._activity import _Activity, _activity_for
+from fastapi_canon.integrations.websockets.activity import _Activity, _activity_for
 from fastapi_canon.integrations.websockets.connection import (
     RpcConnection,
     RpcConnectionClose,

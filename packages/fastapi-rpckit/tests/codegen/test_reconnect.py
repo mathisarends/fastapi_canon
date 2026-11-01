@@ -64,84 +64,86 @@ def pool(runtime, factory, **options):
 
 
 async def test_shared_connect_attempt_survives_one_waiter_cancellation(pool_runtime):
-    before = asyncio.all_tasks()
-    entered, release = asyncio.Event(), asyncio.Event()
-    calls = 0
-    transport = Transport()
+    async with asyncio.timeout(10):
+        before = asyncio.all_tasks()
+        entered, release = asyncio.Event(), asyncio.Event()
+        calls = 0
+        transport = Transport()
 
-    async def factory(*args, **kwargs):
-        nonlocal calls
-        calls += 1
-        entered.set()
-        await release.wait()
-        return transport
+        async def factory(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            entered.set()
+            await release.wait()
+            return transport
 
-    source = pool(pool_runtime, factory)
-    first = asyncio.create_task(source.get("a"))
-    second = asyncio.create_task(source.get("a"))
-    await entered.wait()
-    first.cancel("one caller cancelled")
-    with pytest.raises(asyncio.CancelledError, match="one caller cancelled"):
-        await first
-    assert not second.done()
-    release.set()
-    assert await second is transport
-    assert calls == 1
-    assert source.state == "connected"
-    await source.close()
-    assert not source._connecting
-    assert not asyncio.all_tasks() - before
+        source = pool(pool_runtime, factory)
+        first = asyncio.create_task(source.get("a"))
+        second = asyncio.create_task(source.get("a"))
+        await entered.wait()
+        first.cancel("one caller cancelled")
+        with pytest.raises(asyncio.CancelledError, match="one caller cancelled"):
+            await first
+        assert not second.done()
+        release.set()
+        assert await second is transport
+        assert calls == 1
+        assert source.state == "connected"
+        await source.close()
+        assert not source._connecting
+        assert not asyncio.all_tasks() - before
 
 
 @pytest.mark.parametrize("phase", ["connect", "backoff"])
 async def test_close_interrupts_connect_or_backoff_without_later_state_changes(
     pool_runtime, monkeypatch, phase
 ):
-    before = asyncio.all_tasks()
-    clock = Clock(monkeypatch, pool_runtime)
-    entered = asyncio.Event()
-    exited = asyncio.Event()
-    states = []
-    count = 0
-    transport = Transport()
+    async with asyncio.timeout(10):
+        before = asyncio.all_tasks()
+        clock = Clock(monkeypatch, pool_runtime)
+        entered = asyncio.Event()
+        exited = asyncio.Event()
+        states = []
+        count = 0
+        transport = Transport()
 
-    async def factory(*args, **kwargs):
-        nonlocal count
-        count += 1
-        if phase == "backoff" and count == 1:
-            return transport
-        entered.set()
-        if phase == "backoff":
-            raise pool_runtime.RpcConnectError("unavailable")
-        try:
-            await asyncio.Future()
-        finally:
-            exited.set()
+        async def factory(*args, **kwargs):
+            nonlocal count
+            count += 1
+            if phase == "backoff" and count == 1:
+                return transport
+            entered.set()
+            if phase == "backoff":
+                raise pool_runtime.RpcConnectError("unavailable")
+            try:
+                await asyncio.Future()
+            finally:
+                exited.set()
 
-    source = pool(
-        pool_runtime,
-        factory,
-        reconnect=True,
-        on_state_change=lambda *event: states.append(event),
-    )
-    if phase == "backoff":
-        await source.get("a")
-        transport.closed.set_result(
-            pool_runtime.RpcConnectionLostError(sent=False, code=1012)
+        source = pool(
+            pool_runtime,
+            factory,
+            reconnect=True,
+            on_state_change=lambda *event: states.append(event),
         )
-        await clock.sleeps.get()
-    waiting = asyncio.create_task(source.get("a"))
-    await entered.wait()
-    await source.close()
-    with pytest.raises(pool_runtime.RpcConnectionLostError):
-        await waiting
-    assert source.state == "closed" and await source.closed is None
-    assert states[-1][1] == "closed"
-    assert not source._connecting
-    if phase == "connect":
-        assert exited.is_set()
-        assert "connected" not in [s[1] for s in states]
-    assert not asyncio.all_tasks() - before
+        if phase == "backoff":
+            await source.get("a")
+            transport.closed.set_result(
+                pool_runtime.RpcConnectionLostError(sent=False, code=1012)
+            )
+            await clock.sleeps.get()
+        waiting = asyncio.create_task(source.get("a"))
+        await entered.wait()
+        await source.close()
+        with pytest.raises(pool_runtime.RpcConnectionLostError):
+            await waiting
+        assert source.state == "closed" and await source.closed is None
+        assert states[-1][1] == "closed"
+        assert not source._connecting
+        if phase == "connect":
+            assert exited.is_set()
+            assert "connected" not in [s[1] for s in states]
+        assert not asyncio.all_tasks() - before
 
 
 async def test_full_jitter_caps_delay_and_exhaustion_preserves_last_error(
@@ -354,46 +356,47 @@ async def test_terminal_server_does_not_replace_other_server_transport(pool_runt
 async def test_request_deadline_bounds_shared_connection_wait_and_wire_work(
     pool_runtime, monkeypatch
 ):
-    clock = Clock(monkeypatch, pool_runtime)
-    entered, release, sent, cancelled = (asyncio.Event() for _ in range(4))
+    async with asyncio.timeout(10):
+        clock = Clock(monkeypatch, pool_runtime)
+        entered, release, sent, cancelled = (asyncio.Event() for _ in range(4))
 
-    class SlowTransport(Transport):
-        async def request(self, method, params=None, *, metadata=None):
-            sent.set()
-            try:
-                await asyncio.Future()
-            except asyncio.CancelledError:
-                cancelled.set()
-                raise
+        class SlowTransport(Transport):
+            async def request(self, method, params=None, *, metadata=None):
+                sent.set()
+                try:
+                    await asyncio.Future()
+                except asyncio.CancelledError:
+                    cancelled.set()
+                    raise
 
-    async def factory(*args, **kwargs):
-        entered.set()
-        await release.wait()
-        return SlowTransport()
+        async def factory(*args, **kwargs):
+            entered.set()
+            await release.wait()
+            return SlowTransport()
 
-    source = pool_runtime.RpcTransportPool(
-        endpoints=[SimpleNamespace(server="a", url="a", subprotocols=())],
-        transport_factory=factory,
-        request_timeout=5,
-    )
-    core = pool_runtime.RpcClientCore(source)
-    route = pool_runtime.RpcRouteInfo(
-        method="work", server="a", result_adapter=TypeAdapter(str)
-    )
-    task = asyncio.create_task(core.request(route))
-    await entered.wait()
-    duration, total = await clock.timers.get()
-    assert duration == 5
-    _, attempt = await clock.timers.get()
-    release.set()
-    await sent.wait()
-    total.reschedule(asyncio.get_running_loop().time())
-    with pytest.raises(pool_runtime.RpcRequestTimeoutError):
-        await task
-    assert cancelled.is_set()
-    with pytest.raises(RuntimeError, match="finished"):
-        attempt.reschedule(asyncio.get_running_loop().time())
-    await core.close()
+        source = pool_runtime.RpcTransportPool(
+            endpoints=[SimpleNamespace(server="a", url="a", subprotocols=())],
+            transport_factory=factory,
+            request_timeout=5,
+        )
+        core = pool_runtime.RpcClientCore(source)
+        route = pool_runtime.RpcRouteInfo(
+            method="work", server="a", result_adapter=TypeAdapter(str)
+        )
+        task = asyncio.create_task(core.request(route))
+        await entered.wait()
+        duration, total = await clock.timers.get()
+        assert duration == 5
+        _, attempt = await clock.timers.get()
+        release.set()
+        await sent.wait()
+        total.reschedule(asyncio.get_running_loop().time())
+        with pytest.raises(pool_runtime.RpcRequestTimeoutError):
+            await task
+        assert cancelled.is_set()
+        with pytest.raises(RuntimeError, match="finished"):
+            attempt.reschedule(asyncio.get_running_loop().time())
+        await core.close()
 
 
 @pytest.mark.parametrize("reject", [False, True])

@@ -86,6 +86,7 @@ exclude = ["fastapi_canon/integrations/(sse|websockets|webrtc)/", "examples/cano
 pretty = true
 show_error_codes = true
 warn_unreachable = true
+explicit_package_bases = true
 
 [[tool.mypy.overrides]]
 # These modules retain their own strict feature checks in scripts/check.py.
@@ -97,8 +98,9 @@ module = [
 follow_imports = "silent"
 
 [tool.pytest.ini_options]
-addopts = ["--strict-config", "--strict-markers"]
+addopts = ["--strict-config", "--strict-markers", "--import-mode=importlib"]
 testpaths = ["tests"]
+xfail_strict = true
 filterwarnings = [
     "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning:starlette.testclient",
 ]

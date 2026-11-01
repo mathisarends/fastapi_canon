@@ -70,7 +70,8 @@ class SocketFaults:
         self.sleep = sleep
         self.half_open = half_open
         self.frames_sent = 0
-        self.blocked = asyncio.Event()
+        # Public testing-library state is deliberately inspected by consumer tests.
+        self.blocked = asyncio.Event()  # smelt: ignore[SMT430] -- test API
         self.held = asyncio.Event()
         self._send_gate = asyncio.Event()
         self._send_gate.set()
@@ -319,7 +320,8 @@ class InMemorySocketFactory:
         self.resolver = resolver
         self.context = context
         self.limits = limits
-        self.attempts = 0
+        # Public testing-library state is deliberately inspected by consumer tests.
+        self.attempts = 0  # smelt: ignore[SMT430] -- test API
         self.sockets: list[InMemorySocket] = []
         self._tasks: list[asyncio.Task[None]] = []
         self._rejections: deque[RpcTestHandshakeRejected] = deque()
@@ -388,6 +390,12 @@ class InMemorySocketFactory:
             handshake.cancel()
             await asyncio.gather(handshake, return_exceptions=True)
 
+    async def __aenter__(self) -> "InMemorySocketFactory":
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        await self.close()
+
     async def close(self) -> None:
         if self._closed:
             return
@@ -398,12 +406,6 @@ class InMemorySocketFactory:
         for outcome in outcomes:
             if isinstance(outcome, Exception):
                 raise outcome
-
-    async def __aenter__(self) -> "InMemorySocketFactory":
-        return self
-
-    async def __aexit__(self, *exc: object) -> None:
-        await self.close()
 
 
 @dataclass(frozen=True, slots=True)

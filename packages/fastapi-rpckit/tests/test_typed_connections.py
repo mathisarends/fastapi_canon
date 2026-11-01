@@ -221,6 +221,7 @@ async def raw(socket: RpcSocket) -> None:
         capture_output=True,
         text=True,
         check=False,
+        timeout=120,
     )
     errors = [
         item

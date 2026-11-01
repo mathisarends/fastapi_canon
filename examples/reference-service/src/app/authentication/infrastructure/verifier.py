@@ -1,8 +1,10 @@
 from hmac import compare_digest
 
-from app.authentication.application.errors import AuthenticationFailed
-from app.authentication.application.principal import AuthenticatedPrincipal
-from app.authentication.application.token_verifier import TokenVerifier
+from app.authentication.application import (
+    AuthenticatedPrincipal,
+    AuthenticationFailed,
+    TokenVerifier,
+)
 from app.authentication.infrastructure.settings import AuthenticationSettings
 
 

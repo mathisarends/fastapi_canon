@@ -48,7 +48,9 @@ async def test_unregistered_middleware_allocates_no_operation_scopes(monkeypatch
 
     @channel.method()
     async def ping() -> str:
-        assert middleware_module._current_serving() is None
+        # Verify context-variable restoration across nested scopes and cancellation.
+        scope = middleware_module._current_serving()  # smelt: ignore[SMT420] -- ctx
+        assert scope is None
         return "pong"
 
     @channel.subscription()
@@ -57,7 +59,9 @@ async def test_unregistered_middleware_allocates_no_operation_scopes(monkeypatch
 
     @channel.stream()
     async def frames() -> AsyncIterator[bytes]:
-        assert middleware_module._current_serving() is None
+        # Verify context-variable restoration across nested scopes and cancellation.
+        scope = middleware_module._current_serving()  # smelt: ignore[SMT420] -- ctx
+        assert scope is None
         yield b"frame"
 
     server = channel.create_server()
@@ -88,7 +92,9 @@ async def test_nested_uninstrumented_connection_restores_outer_scope():
 
     @child_channel.method()
     async def ping() -> str:
-        assert middleware_module._current_serving() is None
+        # Verify context-variable restoration across nested scopes and cancellation.
+        scope = middleware_module._current_serving()  # smelt: ignore[SMT420] -- ctx
+        assert scope is None
         return "pong"
 
     child_service = RpcService()
@@ -98,11 +104,16 @@ async def test_nested_uninstrumented_connection_restores_outer_scope():
 
     @channel.stream()
     async def frames() -> AsyncIterator[bytes]:
-        outer = middleware_module._current_serving()
+        # Verify context-variable restoration across nested scopes and cancellation.
+        outer = (
+            middleware_module._current_serving()  # smelt: ignore[SMT420] -- unit seam
+        )
         connection = outer.scope.connection
         async with RpcTestClient(child_service, "/child") as client:
             assert await client.request("child.ping") == "pong"
-        assert middleware_module._current_serving() is outer
+        # Verify context-variable restoration across nested scopes and cancellation.
+        scope = middleware_module._current_serving()  # smelt: ignore[SMT420] -- ctx
+        assert scope is outer
         assert outer.scope.connection is connection
         yield b"frame"
 
@@ -112,7 +123,9 @@ async def test_nested_uninstrumented_connection_restores_outer_scope():
         assert await client.next_frame() == b"frame"
         await asyncio.wait_for(client.closed(), 1)
     assert recorder.connections[0].outcome.error is None
-    assert middleware_module._current_serving() is None
+    # Verify context-variable restoration across nested scopes and cancellation.
+    scope = middleware_module._current_serving()  # smelt: ignore[SMT420] -- ctx
+    assert scope is None
 
 
 async def test_uninstrumented_fastapi_rejection_does_not_update_outer_scope():
@@ -139,7 +152,8 @@ async def test_uninstrumented_fastapi_rejection_does_not_update_outer_scope():
     outer = RpcService(middleware=[Recorder()]).socket(
         "/outer", channels=[RpcChannel("outer")]
     )
-    async with middleware_module._serving_scope(
+    # Verify context-variable restoration across nested scopes and cancellation.
+    async with middleware_module._serving_scope(  # smelt: ignore[SMT420] -- unit seam
         outer, InMemorySocket("/outer")
     ) as state:
         await web(
@@ -234,34 +248,35 @@ async def test_batch_scopes_are_isolated_and_ordered():
 
 
 async def test_service_endpoint_and_serving_middleware_compose_once():
-    order = []
-    adapter, service, endpoint = [
-        Recorder(name, order) for name in ("adapter", "service", "endpoint")
-    ]
-    channel = RpcChannel("demo")
+    async with asyncio.timeout(10):
+        order = []
+        adapter, service, endpoint = [
+            Recorder(name, order) for name in ("adapter", "service", "endpoint")
+        ]
+        channel = RpcChannel("demo")
 
-    @channel.method()
-    async def ping() -> str:
-        assert connection_name.get() == "rpc"
-        return "pong"
+        @channel.method()
+        async def ping() -> str:
+            assert connection_name.get() == "rpc"
+            return "pong"
 
-    rpc = RpcService(middleware=[service])
-    mounted = rpc.socket("/rpc", channels=[channel], middleware=[endpoint])
-    socket = InMemorySocket("/rpc")
-    task = asyncio.create_task(mounted.serve(socket, middleware=[adapter]))
-    await socket.client_send('{"jsonrpc":"2.0","id":1,"method":"demo.ping"}')
-    assert "pong" in await socket.client_receive()
-    await socket.client_disconnect()
-    await task
-    assert order == [
-        "enter:adapter",
-        "enter:service",
-        "enter:endpoint",
-        "exit:endpoint",
-        "exit:service",
-        "exit:adapter",
-    ]
-    assert all(len(item.connections) == 1 for item in (adapter, service, endpoint))
+        rpc = RpcService(middleware=[service])
+        mounted = rpc.socket("/rpc", channels=[channel], middleware=[endpoint])
+        socket = InMemorySocket("/rpc")
+        task = asyncio.create_task(mounted.serve(socket, middleware=[adapter]))
+        await socket.client_send('{"jsonrpc":"2.0","id":1,"method":"demo.ping"}')
+        assert "pong" in await socket.client_receive()
+        await socket.client_disconnect()
+        await task
+        assert order == [
+            "enter:adapter",
+            "enter:service",
+            "enter:endpoint",
+            "exit:endpoint",
+            "exit:service",
+            "exit:adapter",
+        ]
+        assert all(len(item.connections) == 1 for item in (adapter, service, endpoint))
 
 
 async def test_notifications_invalid_json_and_invalid_batches_have_outcomes():
@@ -285,72 +300,74 @@ async def test_notifications_invalid_json_and_invalid_batches_have_outcomes():
 
 @pytest.mark.parametrize("with_middleware", [False, True])
 async def test_request_cancellation_finishes_all_middleware(with_middleware):
-    started = asyncio.Event()
-    recorder = Recorder()
-    finished = []
+    async with asyncio.timeout(10):
+        started = asyncio.Event()
+        recorder = Recorder()
+        finished = []
 
-    class Instrumentation(RpcMiddleware):
-        @asynccontextmanager
-        async def request(self, scope):
-            try:
-                yield
-            finally:
-                finished.append(scope.outcome)
+        class Instrumentation(RpcMiddleware):
+            @asynccontextmanager
+            async def request(self, scope):
+                try:
+                    yield
+                finally:
+                    finished.append(scope.outcome)
 
-    channel = RpcChannel("demo")
+        channel = RpcChannel("demo")
 
-    @channel.method()
-    async def wait() -> None:
-        started.set()
-        await asyncio.Event().wait()
+        @channel.method()
+        async def wait() -> None:
+            started.set()
+            await asyncio.Event().wait()
 
-    server = channel.create_server(
-        middleware=[Instrumentation(), *([recorder] if with_middleware else [])]
-    )
-    task = asyncio.create_task(
-        server.handle({"jsonrpc": "2.0", "id": 1, "method": "demo.wait"})
-    )
-    await started.wait()
-    task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await task
-    assert len(finished) == 1
-    assert isinstance(finished[0].error, asyncio.CancelledError)
-    if with_middleware:
-        assert recorder.requests[0].outcome.cancelled
+        server = channel.create_server(
+            middleware=[Instrumentation(), *([recorder] if with_middleware else [])]
+        )
+        task = asyncio.create_task(
+            server.handle({"jsonrpc": "2.0", "id": 1, "method": "demo.wait"})
+        )
+        await started.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert len(finished) == 1
+        assert isinstance(finished[0].error, asyncio.CancelledError)
+        if with_middleware:
+            assert recorder.requests[0].outcome.cancelled
 
 
 @pytest.mark.parametrize("cancel", [False, True])
 async def test_stream_cleanup_and_cancellation(cancel):
-    recorder = Recorder()
-    released = []
-    channel = RpcChannel("media")
+    async with asyncio.timeout(10):
+        recorder = Recorder()
+        released = []
+        channel = RpcChannel("media")
 
-    @channel.stream()
-    async def frames() -> AsyncIterator[bytes]:
-        try:
-            assert connection_name.get() == "media"
-            yield b"one"
-            await asyncio.Event().wait()
-        finally:
-            released.append(True)
+        @channel.stream()
+        async def frames() -> AsyncIterator[bytes]:
+            try:
+                assert connection_name.get() == "media"
+                yield b"one"
+                await asyncio.Event().wait()
+            finally:
+                released.append(True)
 
-    rpc = RpcService(middleware=[recorder])
-    endpoint = rpc.stream("/media", frames)
-    socket = InMemorySocket("/media")
-    task = asyncio.create_task(endpoint.serve(socket))
-    assert await socket.client_receive() == b"one"
-    if cancel:
-        task.cancel()
-        with pytest.raises(asyncio.CancelledError):
+        rpc = RpcService(middleware=[recorder])
+        endpoint = rpc.stream("/media", frames)
+        socket = InMemorySocket("/media")
+        task = asyncio.create_task(endpoint.serve(socket))
+        assert await socket.client_receive() == b"one"
+        if cancel:
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        else:
+            await socket.client_disconnect()
             await task
-    else:
-        await socket.client_disconnect()
-        await task
-    assert released == [True]
-    assert recorder.frames == [("sent", 3)]
-    assert recorder.streams[0].outcome.cancelled is cancel
-    assert recorder.connections[0].outcome.cancelled is cancel
+        assert released == [True]
+        assert recorder.frames == [("sent", 3)]
+        assert recorder.streams[0].outcome.cancelled is cancel
+        assert recorder.connections[0].outcome.cancelled is cancel
 
 
 async def test_handshake_rejection_is_observed():
@@ -485,41 +502,42 @@ async def test_partial_middleware_entry_cancellation_unwinds_entered_scopes():
 
 
 async def test_stream_generator_and_di_cleanup_errors_are_observed():
-    recorder = Recorder()
-    cleanup = []
+    async with asyncio.timeout(10):
+        recorder = Recorder()
+        cleanup = []
 
-    class Resolver:
-        async def resolve(self, dependency):
-            raise LookupError(dependency)
+        class Resolver:
+            async def resolve(self, dependency):
+                raise LookupError(dependency)
 
-        @asynccontextmanager
-        async def enter_scope(self) -> AsyncGenerator["Resolver", None]:
+            @asynccontextmanager
+            async def enter_scope(self) -> AsyncGenerator["Resolver", None]:
+                try:
+                    yield self
+                finally:
+                    cleanup.append("di")
+                    raise ValueError("DI cleanup failed")
+
+        channel = RpcChannel("media")
+
+        @channel.stream()
+        async def frames() -> AsyncIterator[bytes]:
             try:
-                yield self
+                yield b"one"
+                await asyncio.Event().wait()
             finally:
-                cleanup.append("di")
-                raise ValueError("DI cleanup failed")
+                cleanup.append("generator")
 
-    channel = RpcChannel("media")
-
-    @channel.stream()
-    async def frames() -> AsyncIterator[bytes]:
-        try:
-            yield b"one"
-            await asyncio.Event().wait()
-        finally:
-            cleanup.append("generator")
-
-    rpc = RpcService(middleware=[recorder])
-    endpoint = rpc.stream("/media", frames)
-    socket = InMemorySocket("/media")
-    task = asyncio.create_task(endpoint.serve(socket, resolver=Resolver()))
-    assert await socket.client_receive() == b"one"
-    await socket.client_disconnect()
-    await task
-    assert cleanup == ["generator", "di"]
-    assert isinstance(recorder.streams[0].outcome.error, ValueError)
-    assert isinstance(recorder.connections[0].outcome.error, ValueError)
+        rpc = RpcService(middleware=[recorder])
+        endpoint = rpc.stream("/media", frames)
+        socket = InMemorySocket("/media")
+        task = asyncio.create_task(endpoint.serve(socket, resolver=Resolver()))
+        assert await socket.client_receive() == b"one"
+        await socket.client_disconnect()
+        await task
+        assert cleanup == ["generator", "di"]
+        assert isinstance(recorder.streams[0].outcome.error, ValueError)
+        assert isinstance(recorder.connections[0].outcome.error, ValueError)
 
 
 @pytest.mark.parametrize("peer_disconnect", [False, True])
@@ -582,7 +600,9 @@ def test_custom_handlers_support_activity_callbacks_on_middleware(with_instrumen
 
     async def handler(websocket: WebSocket) -> None:
         if not with_instrumentation:
-            assert middleware_module._current_serving() is None
+            # Verify context-variable restoration across nested scopes and cancellation.
+            scope = middleware_module._current_serving()  # smelt: ignore[SMT420] -- ctx
+            assert scope is None
             assert websocket.send.__func__ is WebSocket.send
             assert websocket.receive.__func__ is WebSocket.receive
         await websocket.accept()
@@ -656,53 +676,59 @@ def test_custom_handlers_compose_delegated_middleware_once(stream, registered, s
 
 @pytest.mark.parametrize("cancel", [False, True])
 async def test_custom_handlers_report_cancellation_and_failed_acceptance(cancel):
-    recorder = Recorder()
-    endpoint = RpcService(middleware=[recorder]).socket(
-        "/rpc", channels=[RpcChannel("demo")]
-    )
-    accepted = asyncio.Event()
-    failure = RuntimeError("accept failed")
-
-    async def handler(websocket: WebSocket) -> None:
-        await websocket.accept()
-        accepted.set()
-        await asyncio.Event().wait()
-
-    router = APIRouter()
-    RpcRoutes(router).mount(endpoint, handler=handler)
-    web = FastAPI()
-    web.include_router(router)
-
-    async def receive():
-        return {"type": "websocket.connect"}
-
-    async def send(message):
-        if not cancel and message["type"] == "websocket.accept":
-            raise failure
-
-    task = asyncio.create_task(
-        web(
-            {"type": "websocket", "path": "/rpc", "query_string": b"", "headers": []},
-            receive,
-            send,
+    async with asyncio.timeout(10):
+        recorder = Recorder()
+        endpoint = RpcService(middleware=[recorder]).socket(
+            "/rpc", channels=[RpcChannel("demo")]
         )
-    )
-    if cancel:
-        try:
-            await asyncio.wait_for(accepted.wait(), timeout=5)
-        finally:
-            task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await task
-    else:
-        with pytest.raises(RuntimeError, match="accept failed"):
-            await task
-    outcome = recorder.connections[0].outcome
-    assert outcome.accepted is cancel
-    assert outcome.cancelled is cancel
-    if cancel:
-        assert outcome.close_code is RpcConnectionClose.SHUTDOWN
-        assert recorder.connections[0].connection.closed
-    else:
-        assert outcome.error is failure
-        assert outcome.accepted_duration is None
+        accepted = asyncio.Event()
+        failure = RuntimeError("accept failed")
+
+        async def handler(websocket: WebSocket) -> None:
+            await websocket.accept()
+            accepted.set()
+            await asyncio.Event().wait()
+
+        router = APIRouter()
+        RpcRoutes(router).mount(endpoint, handler=handler)
+        web = FastAPI()
+        web.include_router(router)
+
+        async def receive():
+            return {"type": "websocket.connect"}
+
+        async def send(message):
+            if not cancel and message["type"] == "websocket.accept":
+                raise failure
+
+        task = asyncio.create_task(
+            web(
+                {
+                    "type": "websocket",
+                    "path": "/rpc",
+                    "query_string": b"",
+                    "headers": [],
+                },
+                receive,
+                send,
+            )
+        )
+        if cancel:
+            try:
+                await asyncio.wait_for(accepted.wait(), timeout=5)
+            finally:
+                task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        else:
+            with pytest.raises(RuntimeError, match="accept failed"):
+                await task
+        outcome = recorder.connections[0].outcome
+        assert outcome.accepted is cancel
+        assert outcome.cancelled is cancel
+        if cancel:
+            assert outcome.close_code is RpcConnectionClose.SHUTDOWN
+            assert recorder.connections[0].connection.closed
+        else:
+            assert outcome.error is failure
+            assert outcome.accepted_duration is None

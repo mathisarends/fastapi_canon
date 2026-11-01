@@ -9,8 +9,7 @@ from pydantic import ValidationError
 from pydantic_core import PydanticSerializationError
 from typing_extensions import TypeVar
 
-from fastapi_canon.integrations.websockets._activity import _Activity, notify_activity
-from fastapi_canon.integrations.websockets._socket_messages import SocketMessages
+from fastapi_canon.integrations.websockets.activity import _Activity, notify_activity
 from fastapi_canon.integrations.websockets.connection import (
     RpcConnection,
     RpcConnectionClose,
@@ -18,6 +17,7 @@ from fastapi_canon.integrations.websockets.connection import (
     RpcLimits,
     RpcWebSocket,
 )
+from fastapi_canon.integrations.websockets.socket_messages import SocketMessages
 
 
 class RpcMessageType(StrEnum):
@@ -147,6 +147,15 @@ class RpcSocket(Generic[_IncomingT, _OutgoingT]):
         """The application protocol this endpoint declared, if any."""
         return self._protocol
 
+    def __aiter__(self) -> Self:
+        return self
+
+    async def __anext__(self) -> _IncomingT:
+        try:
+            return await self.receive()
+        except RpcDisconnect:
+            raise StopAsyncIteration from None
+
     @property
     def closed(self) -> bool:
         return self._connection.closed or self._connection.close_code is not None
@@ -159,15 +168,6 @@ class RpcSocket(Generic[_IncomingT, _OutgoingT]):
                 self._connection.close_reason,
             )
         return await self._queue.get()
-
-    def __aiter__(self) -> Self:
-        return self
-
-    async def __anext__(self) -> _IncomingT:
-        try:
-            return await self.receive()
-        except RpcDisconnect:
-            raise StopAsyncIteration from None
 
     async def send(self, message: _OutgoingT) -> None:
         """Validate and serialize typed JSON, then wait on socket backpressure."""

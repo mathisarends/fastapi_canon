@@ -393,7 +393,8 @@ output = "generated"
     assert main(["generate", "--offline", "--check"]) == 0
 
 
-def test_http_binding_preserves_absent_and_null_json_and_parameter_encoding(
+@pytest.mark.asyncio
+async def test_http_binding_preserves_absent_and_null_json_and_parameter_encoding(
     tmp_path: Path,
 ) -> None:
     operation = {
@@ -450,7 +451,8 @@ def test_http_binding_preserves_absent_and_null_json_and_parameter_encoding(
     try:
         sdk: Any = importlib.import_module("http_sdk")
 
-        async def exercise() -> None:
+        async with asyncio.timeout(15):
+
             def respond(request: httpx.Request) -> httpx.Response:
                 assert request.url.raw_path.startswith(b"/items/a%2Fb%3F?")
                 assert request.url.params.get_list("q") == ["true", "false"]
@@ -471,7 +473,6 @@ def test_http_binding_preserves_absent_and_null_json_and_parameter_encoding(
                     )
                 ) == {"n": 3}
 
-        asyncio.run(asyncio.wait_for(exercise(), timeout=15))
     finally:
         sys.path.remove(str(tmp_path))
         for name in tuple(sys.modules):

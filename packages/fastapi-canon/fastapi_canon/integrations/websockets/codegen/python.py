@@ -58,17 +58,6 @@ class _Imports:
         """Import a whole module, as in ``import asyncio``."""
         self._plain.add(module)
 
-    def _resolve(self, module: str) -> str:
-        """Render imports of the own package as relative imports."""
-        package = self._relative_to
-        if package is None:
-            return module
-        if module == package:
-            return "."
-        if module.startswith(f"{package}."):
-            return f".{module[len(package) + 1 :]}"
-        return module
-
     def render(self) -> str:
         groups: dict[int, list[str]] = {}
         for module in sorted(self._plain):
@@ -84,6 +73,17 @@ class _Imports:
                 )
             )
         return "\n\n".join("\n".join(groups[rank]) for rank in sorted(groups))
+
+    def _resolve(self, module: str) -> str:
+        """Render imports of the own package as relative imports."""
+        package = self._relative_to
+        if package is None:
+            return module
+        if module == package:
+            return "."
+        if module.startswith(f"{package}."):
+            return f".{module[len(package) + 1 :]}"
+        return module
 
 
 def render_files(ir: ClientIr, options: PythonClientOptions) -> dict[str, str]:
@@ -1458,34 +1458,6 @@ def _import_name_key(name: str) -> tuple[int, str]:
     return group, name.casefold()
 
 
-def _import_group(module: str) -> int:
-    if module.startswith("."):
-        return 3
-    root = module.split(".", 1)[0]
-    if root in {
-        "__future__",
-        "abc",
-        "asyncio",
-        "collections",
-        "contextlib",
-        "dataclasses",
-        "datetime",
-        "enum",
-        "types",
-        "typing",
-        "uuid",
-    }:
-        return 0
-    if root in {
-        "pydantic",
-        "pydantic_core",
-        "typing_extensions",
-        "fastapi_canon",
-    }:
-        return 1
-    return 2
-
-
 _CONNECT_OPTIONS = (
     "middleware",
     "retry_attempts",
@@ -1547,6 +1519,35 @@ _SOCKET_EXPORTS = (
     "SocketTransport",
     "SocketConnectionStream",
 )
+
+
+def _import_group(module: str) -> int:
+    if module.startswith("."):
+        return 3
+    root = module.split(".", 1)[0]
+    if root in {
+        "__future__",
+        "abc",
+        "asyncio",
+        "collections",
+        "contextlib",
+        "dataclasses",
+        "datetime",
+        "enum",
+        "types",
+        "typing",
+        "uuid",
+    }:
+        return 0
+    if root in {
+        "pydantic",
+        "pydantic_core",
+        "typing_extensions",
+        "fastapi_canon",
+    }:
+        return 1
+    return 2
+
 
 _RUNTIME_NAMES = frozenset(
     {

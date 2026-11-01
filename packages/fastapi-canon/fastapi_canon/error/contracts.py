@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
-from typing import TYPE_CHECKING, Any
+from typing import Any, Protocol
 
+from fastapi_canon.error.error import Error
 from fastapi_canon.error.types import ErrorConfigurationError
 
-if TYPE_CHECKING:
-    from fastapi_canon.error.registry import AnyError, ErrorRegistry
+type AnyError = Error[Any]
 
 ERRORS_EXTENSION = "x-fastapi-canon-errors"
 HTTP_STATUSES_EXTENSION = "x-fastapi-canon-http-statuses"
@@ -18,6 +18,24 @@ INSTALLED_OPENAPI_STATE_KEY = "_fastapi_canon_openapi"
 HTTP_METHODS = frozenset(
     {"get", "put", "post", "delete", "options", "head", "patch", "trace"}
 )
+
+
+class ErrorCatalog(Protocol):
+    """Read-only error catalog consumed by HTTP and OpenAPI adapters."""
+
+    @property
+    def errors(self) -> tuple[AnyError, ...]: ...
+
+    @property
+    def type_base(self) -> str | None: ...
+
+    def resolve(self, exception: Exception) -> AnyError | None: ...
+
+    def type_uri_for(self, error: AnyError) -> str | None: ...
+
+    def contains(self, error: AnyError) -> bool: ...
+
+    def require_resolved(self) -> None: ...
 
 
 def iter_operations(
@@ -34,7 +52,7 @@ def iter_operations(
 
 
 def contracts_from_responses(
-    path: str, responses: Mapping[str, Any], registry: ErrorRegistry | None
+    path: str, responses: Mapping[str, Any], registry: ErrorCatalog | None
 ) -> tuple[
     tuple[AnyError, ...],
     tuple[int, ...],

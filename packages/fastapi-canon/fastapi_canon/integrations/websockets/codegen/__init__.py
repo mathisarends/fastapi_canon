@@ -16,8 +16,6 @@ from fastapi_canon.integrations.websockets.codegen.options import (
 )
 from fastapi_canon.integrations.websockets.codegen.writer import MANIFEST, write_files
 
-LAYOUT_VERSION = 12
-
 __all__ = [
     "ClientIr",
     "PythonClientOptions",
@@ -30,6 +28,8 @@ __all__ = [
     "render_typescript_client",
     "write_files",
 ]
+
+LAYOUT_VERSION = 12
 
 
 def render_python_client(

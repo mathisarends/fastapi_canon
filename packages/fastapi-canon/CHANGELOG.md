@@ -78,6 +78,10 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Fixed
 
+- Enforce architecture and test-quality policies with pinned Smelt in the
+  workspace gate, pre-commit and CI. Mirror focused HTTP tests, bound async waits
+  and compiler subprocesses, and make generated-output and async outcomes explicit.
+
 - Generate Python validation for valid string patterns using lookarounds or
   backreferences, including decimal-string schemas from earlier Pydantic
   exporters. Compiled Python patterns preserve validation in fields and aliases.

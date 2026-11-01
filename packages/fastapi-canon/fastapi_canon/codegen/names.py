@@ -15,14 +15,14 @@ _RESERVED = {
 }
 
 
-def words(value: str) -> list[str]:
+def _words(value: str) -> list[str]:
     value = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", value)
     value = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", value)
     return re.findall(r"[A-Za-z0-9]+", value)
 
 
 def camel(value: str) -> str:
-    parts = words(value)
+    parts = _words(value)
     if not parts:
         raise GenerationError(f"Invalid identifier {value!r}")
     return parts[0].lower() + "".join(p[:1].upper() + p[1:].lower() for p in parts[1:])
@@ -34,7 +34,7 @@ def pascal(value: str) -> str:
 
 
 def snake(value: str) -> str:
-    result = "_".join(p.lower() for p in words(value))
+    result = "_".join(p.lower() for p in _words(value))
     if result and result[0].isdigit():
         result = "value_" + result
     if keyword.iskeyword(result):

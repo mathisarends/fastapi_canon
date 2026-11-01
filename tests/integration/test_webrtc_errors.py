@@ -221,6 +221,7 @@ def test_embedded_problem_schema_preserves_nested_extension_references() -> None
     app = Composition(Feature(name="browser", routers=[router])).apply(FastAPI())
     contract = build_contract(app)
     schema = contract["sessions"][0]["admission_errors"][0]["schema"]
+    assert schema["$defs"]
     with TestClient(app) as client:
         # Validate a real denial with the embedded schema, including local $defs.
         @app.get("/missing")

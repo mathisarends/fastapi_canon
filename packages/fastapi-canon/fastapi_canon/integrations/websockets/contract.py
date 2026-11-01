@@ -77,7 +77,7 @@ class RpcContract:
             )
 
     def to_openrpc(self) -> dict[str, Any]:
-        from fastapi_canon.integrations.websockets.schema.openrpc import render_openrpc
+        from fastapi_canon.integrations.websockets.schema import render_openrpc
 
         with registry_scope(self._error_registry):
             return render_openrpc(
@@ -136,63 +136,64 @@ def contract_from_service(
             name: supplied.get(name, ServerVariable(default=f"{{{name}}}")).document()
             for name in names
         }
-        if isinstance(endpoint, RpcEndpoint):
-            transport: dict[str, Any] = {
-                "type": "websocket",
-                "messageEncoding": "json",
-                "frameType": "text",
-            }
-            if endpoint.subprotocol:
-                transport["subprotocols"] = [endpoint.subprotocol]
-            server: dict[str, Any] = {
-                "name": endpoint.name,
-                "url": url,
-                "x-rpckit-transport": transport,
-            }
-            if endpoint.summary:
-                server["summary"] = endpoint.summary
-            if variable_docs:
-                server["variables"] = variable_docs
-            servers.append(server)
-        elif isinstance(endpoint, RpcStreamEndpoint):
-            stream = endpoint.stream
-            item: dict[str, Any] = {
-                "name": stream.name,
-                "url": url,
-                "direction": stream.direction.value,
-            }
-            if stream.direction is not RpcStreamDirection.CLIENT_TO_SERVER:
-                item["contentType"] = stream.content_type
-            if stream.input_content_type is not None:
-                item["inputContentType"] = stream.input_content_type
-            item["frameType"] = "binary"
-            summary = stream.summary or endpoint.summary
-            if summary:
-                item["summary"] = summary
-            if variable_docs:
-                item["variables"] = variable_docs
-            if endpoint.subprotocol:
-                item["subprotocols"] = [endpoint.subprotocol]
-            streams.append(item)
-        elif isinstance(endpoint, RpcSocketEndpoint):
-            definition = endpoint.socket
-            entry: dict[str, Any] = {
-                "name": definition.name,
-                "url": url,
-                "messageTypes": [item.value for item in definition.messages],
-            }
-            summary = definition.summary or endpoint.summary
-            if summary:
-                entry["summary"] = summary
-            if variable_docs:
-                entry["variables"] = variable_docs
-            if endpoint.subprotocol:
-                entry["subprotocols"] = [endpoint.subprotocol]
-            if definition.closes:
-                entry["closes"] = [_close(binding) for binding in definition.closes]
-            if definition.protocol is not None:
-                entry["x-rpckit-protocol"] = _socket_protocol(definition.protocol)
-            sockets.append(entry)
+        match endpoint:
+            case RpcEndpoint():
+                transport: dict[str, Any] = {
+                    "type": "websocket",
+                    "messageEncoding": "json",
+                    "frameType": "text",
+                }
+                if endpoint.subprotocol:
+                    transport["subprotocols"] = [endpoint.subprotocol]
+                server: dict[str, Any] = {
+                    "name": endpoint.name,
+                    "url": url,
+                    "x-rpckit-transport": transport,
+                }
+                if endpoint.summary:
+                    server["summary"] = endpoint.summary
+                if variable_docs:
+                    server["variables"] = variable_docs
+                servers.append(server)
+            case RpcStreamEndpoint():
+                stream = endpoint.stream
+                item: dict[str, Any] = {
+                    "name": stream.name,
+                    "url": url,
+                    "direction": stream.direction.value,
+                }
+                if stream.direction is not RpcStreamDirection.CLIENT_TO_SERVER:
+                    item["contentType"] = stream.content_type
+                if stream.input_content_type is not None:
+                    item["inputContentType"] = stream.input_content_type
+                item["frameType"] = "binary"
+                summary = stream.summary or endpoint.summary
+                if summary:
+                    item["summary"] = summary
+                if variable_docs:
+                    item["variables"] = variable_docs
+                if endpoint.subprotocol:
+                    item["subprotocols"] = [endpoint.subprotocol]
+                streams.append(item)
+            case RpcSocketEndpoint():
+                definition = endpoint.socket
+                entry: dict[str, Any] = {
+                    "name": definition.name,
+                    "url": url,
+                    "messageTypes": [item.value for item in definition.messages],
+                }
+                summary = definition.summary or endpoint.summary
+                if summary:
+                    entry["summary"] = summary
+                if variable_docs:
+                    entry["variables"] = variable_docs
+                if endpoint.subprotocol:
+                    entry["subprotocols"] = [endpoint.subprotocol]
+                if definition.closes:
+                    entry["closes"] = [_close(binding) for binding in definition.closes]
+                if definition.protocol is not None:
+                    entry["x-rpckit-protocol"] = _socket_protocol(definition.protocol)
+                sockets.append(entry)
     unused = set(supplied) - used
     if unused:
         raise ProtocolDefinitionError(

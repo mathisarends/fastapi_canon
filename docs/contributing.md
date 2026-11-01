@@ -16,7 +16,9 @@ uv run --locked python scripts/check_streams_artifacts.py
 uv run --locked python scripts/check_webrtc_artifacts.py
 ```
 
-`check.py` accepts `lint`, `types`, `test`, `clients` and `browser` individually.
+`check.py` accepts `architecture`, `lint`, `types`, `test`, `clients` and `browser`
+individually. The [Smelt policy](architecture-guardrails.md) runs first in `all`
+and also runs through the root pre-commit hook; warnings fail the gate.
 Each feature suite keeps its lint/type settings and runs tests in a separate process:
 their top-level `tests` and `examples` namespaces cannot share one pytest run.
 Use `uv run --locked --directory packages/fastapi-canon python -m pytest -q` for a focused

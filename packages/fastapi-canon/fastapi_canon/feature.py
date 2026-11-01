@@ -14,6 +14,9 @@ from starlette.types import ExceptionHandler, Lifespan
 from fastapi_canon.error import ErrorConfigurationError, ErrorRegistry
 from fastapi_canon.error.contracts import iter_operations
 from fastapi_canon.error.openapi import install_policy_contracts
+from fastapi_canon.error.types import (
+    FeatureConfigurationError as FeatureConfigurationError,
+)
 from fastapi_canon.openapi import (
     install_openapi_contracts,
     validate_openapi_contracts,
@@ -31,10 +34,6 @@ type ProviderSource = Provider | ProviderFactory
 type RouterFactory = Callable[[], APIRouter]
 
 _INSTALLATION_STATE_KEY = "_fastapi_canon_installation"
-
-
-class FeatureConfigurationError(ErrorConfigurationError):
-    """Raised when feature contributions cannot be installed coherently."""
 
 
 @dataclass(frozen=True, slots=True, init=False)

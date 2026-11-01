@@ -165,37 +165,38 @@ async def test_cleanup_preserves_existing_error_and_cleanup_only_fault_never_ret
 async def test_cancel_and_overall_timeout_finalize_pending_acquisition(
     pool_runtime, monkeypatch, timeout
 ):
-    before = asyncio.all_tasks()
-    clock = Clock(monkeypatch, pool_runtime)
-    entered = asyncio.Event()
-    events, calls = [], []
+    async with asyncio.timeout(10):
+        before = asyncio.all_tasks()
+        clock = Clock(monkeypatch, pool_runtime)
+        entered = asyncio.Event()
+        events, calls = [], []
 
-    async def acquire(server):
-        entered.set()
-        await asyncio.Future()
+        async def acquire(server):
+            entered.set()
+            await asyncio.Future()
 
-    async def close():
-        pass
+        async def close():
+            pass
 
-    source = SimpleNamespace(get=acquire, close=close, request_timeout=5)
-    core = pool_runtime.RpcClientCore(
-        source, middleware=[recorder(events, calls, "metrics")]
-    )
-    task = asyncio.create_task(core.request(route(pool_runtime)))
-    await entered.wait()
-    if timeout:
-        _, waiting = await clock.timers.get()
-        waiting.reschedule(asyncio.get_running_loop().time())
-        with pytest.raises(pool_runtime.RpcRequestTimeoutError) as raised:
-            await task
-    else:
-        task.cancel("caller abort")
-        with pytest.raises(asyncio.CancelledError, match="caller abort") as raised:
-            await task
-    assert calls[0].outcome.error is raised.value
-    assert calls[0].transport is None
-    await core.close()
-    assert not asyncio.all_tasks() - before
+        source = SimpleNamespace(get=acquire, close=close, request_timeout=5)
+        core = pool_runtime.RpcClientCore(
+            source, middleware=[recorder(events, calls, "metrics")]
+        )
+        task = asyncio.create_task(core.request(route(pool_runtime)))
+        await entered.wait()
+        if timeout:
+            _, waiting = await clock.timers.get()
+            waiting.reschedule(asyncio.get_running_loop().time())
+            with pytest.raises(pool_runtime.RpcRequestTimeoutError) as raised:
+                await task
+        else:
+            task.cancel("caller abort")
+            with pytest.raises(asyncio.CancelledError, match="caller abort") as raised:
+                await task
+        assert calls[0].outcome.error is raised.value
+        assert calls[0].transport is None
+        await core.close()
+        assert not asyncio.all_tasks() - before
 
 
 async def test_mutated_params_revalidated_before_send(pool_runtime):
@@ -311,7 +312,13 @@ def test_removed_hook_options_are_rejected(client_module, factory):
             client.with_transports(object(), hooks=[])
         else:
             client.connect(hooks=[])
-    for name in ("RpcClientHook", "RpcMetadataTransport", "RpcConnectionClosed"):
+    # Check the complete set of removed exports alongside each rejected constructor
+    # form.
+    for name in (  # smelt: ignore[SMT427] -- shared scenario
+        "RpcClientHook",
+        "RpcMetadataTransport",
+        "RpcConnectionClosed",
+    ):
         assert not hasattr(client_module, name)
     assert hasattr(client_module, "RpcTransport")
 
@@ -396,22 +403,23 @@ async def test_close_interrupts_borrowed_requests_and_reports_outcome(
 
 
 async def test_close_preserves_prior_caller_cancellation(pool_runtime):
-    started = asyncio.Event()
+    async with asyncio.timeout(10):
+        started = asyncio.Event()
 
-    async def acquire(server):
-        started.set()
-        await asyncio.Future()
+        async def acquire(server):
+            started.set()
+            await asyncio.Future()
 
-    core = pool_runtime.RpcClientCore(
-        SimpleNamespace(get=acquire), close_transport=False
-    )
-    task = asyncio.create_task(core.request(route(pool_runtime)))
-    await asyncio.wait_for(started.wait(), 1)
-    task.cancel("caller stopped")
-    await core.close()
-    with pytest.raises(asyncio.CancelledError, match="caller stopped"):
-        await task
-    assert not core._active_requests
+        core = pool_runtime.RpcClientCore(
+            SimpleNamespace(get=acquire), close_transport=False
+        )
+        task = asyncio.create_task(core.request(route(pool_runtime)))
+        await asyncio.wait_for(started.wait(), 1)
+        task.cancel("caller stopped")
+        await core.close()
+        with pytest.raises(asyncio.CancelledError, match="caller stopped"):
+            await task
+        assert not core._active_requests
 
 
 async def test_close_cannot_send_after_cancellation_resistant_acquisition(pool_runtime):

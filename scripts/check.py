@@ -26,12 +26,31 @@ WEBRTC_CLIENT = ("--output", "examples/practice/client", "--check")
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run Canon workspace quality gates")
     parser.add_argument(
-        "gate", choices=("all", "lint", "types", "test", "clients", "browser")
+        "gate",
+        choices=("all", "architecture", "lint", "types", "test", "clients", "browser"),
     )
     args = parser.parse_args()
-    gates = ("lint", "types", "test", "clients") if args.gate == "all" else (args.gate,)
+    gates = (
+        ("architecture", "lint", "types", "test", "clients")
+        if args.gate == "all"
+        else (args.gate,)
+    )
     for gate in gates:
-        if gate == "lint":
+        if gate == "architecture":
+            _run(
+                ROOT,
+                "uv",
+                "run",
+                "--locked",
+                "smelt",
+                "check",
+                "--config",
+                "smelt.yml",
+                "--fail-on",
+                "warning",
+                python=False,
+            )
+        elif gate == "lint":
             _run(ROOT, "scripts/check_documentation.py")
             for root in (ROOT, *MEMBERS):
                 targets = (

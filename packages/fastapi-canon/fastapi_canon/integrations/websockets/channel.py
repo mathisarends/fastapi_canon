@@ -25,7 +25,10 @@ from fastapi_canon.integrations.websockets.errors import (
     merge_error_declarations,
     rejecting_contracts,
 )
-from fastapi_canon.integrations.websockets.middleware import RpcMiddlewareLike
+from fastapi_canon.integrations.websockets.middleware import (  # smelt: ignore[SMT104] -- types  # noqa: E501
+    # Channel factories and serving ports share forward-only service annotations.
+    RpcMiddlewareLike,
+)
 from fastapi_canon.integrations.websockets.protocol import (
     RpcNotificationDefinition,
     RpcProtocol,

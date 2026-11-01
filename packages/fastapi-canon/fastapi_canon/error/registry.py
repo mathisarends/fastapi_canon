@@ -3,11 +3,12 @@ from __future__ import annotations
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from types import MappingProxyType
-from typing import Any, Self
+from typing import Self
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI
 
+from fastapi_canon.error.contracts import AnyError as AnyError
 from fastapi_canon.error.error import Error
 from fastapi_canon.error.handlers import install_handlers
 from fastapi_canon.error.openapi import compile_responses
@@ -18,8 +19,6 @@ from fastapi_canon.error.types import (
 )
 from fastapi_canon.error.validation import unique_instances
 from fastapi_canon.response import CanonResponse
-
-type AnyError = Error[Any]
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +62,12 @@ class ErrorRegistry:
             name=normalized_name,
             type_base=normalized_base,
         )
+
+    def __iter__(self) -> Iterator[AnyError]:
+        return iter(self.errors)
+
+    def __len__(self) -> int:
+        return len(self._entries)
 
     @classmethod
     def merge(
@@ -120,12 +125,6 @@ class ErrorRegistry:
     def errors(self) -> tuple[AnyError, ...]:
         """Return definitions in deterministic declaration order."""
         return tuple(entry.error for entry in self._entries)
-
-    def __iter__(self) -> Iterator[AnyError]:
-        return iter(self.errors)
-
-    def __len__(self) -> int:
-        return len(self._entries)
 
     def resolve(self, exception: Exception) -> AnyError | None:
         """Resolve the most specific registered error through normal Python MRO."""

@@ -6,7 +6,8 @@ from typing import Annotated, Any
 import pytest
 from fastapi_canon.integrations.websockets import Inject
 from fastapi_canon.integrations.websockets.dependencies import (
-    _INJECT,
+    # Verify identity of the internal injection sentinel.
+    _INJECT,  # smelt: ignore[SMT420] -- unit seam
     ContextResolver,
     EmptyResolver,
     RpcInjectedParameter,

@@ -120,6 +120,7 @@ def test_every_file_names_its_source(
     options: PythonClientOptions,
 ) -> None:
     files = render_python_client(document, options)
+    assert "__init__.py" in files
 
     assert all(
         content.startswith(
@@ -136,6 +137,7 @@ def test_generated_modules_end_with_one_newline(
     options: PythonClientOptions,
 ) -> None:
     files = render_python_client(document, options)
+    assert "__init__.py" in files
 
     assert all(
         content.endswith("\n") and not content.endswith("\n\n")
@@ -466,7 +468,7 @@ def test_generated_python_is_ruff_formatted(
         }
     ]
 
-    _assert_ruff_clean(deployed, options, tmp_path)
+    assert _assert_ruff_clean(deployed, options, tmp_path)
 
 
 def test_long_event_models_and_route_annotations_are_ruff_clean(
@@ -530,7 +532,7 @@ def test_long_event_models_and_route_annotations_are_ruff_clean(
     )
     deployed["methods"].append(shorter)
 
-    _assert_ruff_clean(deployed, options, tmp_path)
+    assert _assert_ruff_clean(deployed, options, tmp_path)
 
 
 def _methods_only() -> RpcChannel:
@@ -609,7 +611,7 @@ def test_generated_python_from_services_is_ruff_clean(
         service.stream(f"{prefix}/{local}", stream.function)
     contract = service.contract(title="Gateway", base_url="http://localhost")
 
-    _assert_ruff_clean(
+    assert _assert_ruff_clean(
         contract.to_openrpc(),
         PythonClientOptions(package=PACKAGE, with_transport=transport),
         tmp_path,
@@ -620,7 +622,7 @@ def _assert_ruff_clean(
     document: dict[str, Any],
     options: PythonClientOptions,
     tmp_path: Path,
-) -> None:
+) -> tuple[Path, ...]:
     output = tmp_path / PACKAGE
     generate_python_client(document, output, options)
     (tmp_path / "pyproject.toml").write_text(
@@ -635,6 +637,7 @@ def _assert_ruff_clean(
         capture_output=True,
         text=True,
         check=False,
+        timeout=120,
     )
     formatting = subprocess.run(
         [sys.executable, "-m", "ruff", "format", "--check", str(output)],
@@ -642,7 +645,9 @@ def _assert_ruff_clean(
         capture_output=True,
         text=True,
         check=False,
+        timeout=120,
     )
 
     assert lint.returncode == 0, lint.stdout + lint.stderr
     assert formatting.returncode == 0, formatting.stdout + formatting.stderr
+    return tuple(output.rglob("*.py"))

@@ -397,7 +397,10 @@ def named_types(expression: TypeExpr) -> set[str]:
     return set()
 
 
-def type_expression(schema: dict[str, Any] | bool) -> TypeExpr:
+# Public IR rendering utility for custom client generators.
+def type_expression(  # smelt: ignore[SMT429] -- external API
+    schema: dict[str, Any] | bool,
+) -> TypeExpr:
     """Lower one JSON Schema node into a type expression."""
     if isinstance(schema, bool):
         return PrimitiveType(Primitive.ANY)
@@ -419,6 +422,9 @@ def type_expression(schema: dict[str, Any] | bool) -> TypeExpr:
 
 def ref_name(schema: dict[str, Any]) -> str:
     return schema["$ref"].rsplit("/", 1)[-1]
+
+
+_STREAM_DIRECTIONS = ("server-to-client", "client-to-server", "bidirectional")
 
 
 def _roots(
@@ -963,7 +969,6 @@ def _url_variables(value: dict[str, Any], owner: str) -> tuple[ServerVariableDec
     )
 
 
-_STREAM_DIRECTIONS = ("server-to-client", "client-to-server", "bidirectional")
 _PROTOCOL_TOKEN = re.compile(r"[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*")
 _MESSAGE_TYPES = ("text", "binary")
 

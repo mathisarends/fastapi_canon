@@ -56,8 +56,8 @@ declaration produces `CAN001` with the call path. If the same service calls an
 abstract repository method, that call also produces `CAN003`: a known gap and an
 incomplete analysis can appear together.
 
-The command is the supported entry point. The `_checks` modules, their types and
-constants, and the report objects are private implementation details;
+The command is the supported entry point. The `checks` implementation modules,
+their types and constants, and the report objects are private implementation details;
 the documented JSON fields are the machine-readable interface.
 
 ## Findings and CI

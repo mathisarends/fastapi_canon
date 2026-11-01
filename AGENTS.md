@@ -47,11 +47,22 @@ uv run --locked python scripts/check.py all
 uv run --locked python scripts/check_distributions.py
 ```
 
-`check.py` also accepts `lint`, `types`, `test`, `clients`, and `browser`. It runs each
+`check.py` also accepts `architecture`, `lint`, `types`, `test`, `clients`, and
+`browser`. It runs each
 package with its own configuration and working directory. Do not combine all
 package suites into one pytest process: their `tests`/`examples` modules collide.
 For a focused feature suite, run `uv run --locked --project ../.. python -m pytest ...`
 from its retained test directory.
+
+The root `smelt.yml` defines strict architecture, source and test policies; see
+`docs/architecture-guardrails.md`. Before editing, run
+`uv run --locked smelt context <module-or-path>`. After editing, run
+`uv run --locked smelt check --config smelt.yml --changed --fail-on warning` and
+fix findings. `scripts/check.py architecture` and `scripts/check.py all` run the
+full check, as does the root pre-commit hook. Warnings fail the gate. Use
+`smelt explain <rule-or-code>` when unsure; do not introduce a debt baseline or
+weaken rules merely to pass. Keep any deliberate exception narrowly located and
+give its concrete reason; unused suppressions fail.
 
 Keep one root `uv.lock`. Preserve package-specific type/lint settings. Generated
 clients are changed through generators/templates, then checked for drift.

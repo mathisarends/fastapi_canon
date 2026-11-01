@@ -252,7 +252,11 @@ def test_report_describes_actual_target_phases_and_stable_schema_content(
     assert result["version"] == 1 and result["diagnostics"] == []
     validation = result["validation"]
     assert validation["full_json_schema"] is False
-    for boundary in ("parameters", "request_body"):
+    # Both request boundaries must agree with the same generated diagnostic report.
+    for boundary in (  # smelt: ignore[SMT427] -- shared scenario
+        "parameters",
+        "request_body",
+    ):
         assert validation[boundary] == {
             "phase": "method_call" if backend else "not_performed",
             "schema_validation": bool(backend),

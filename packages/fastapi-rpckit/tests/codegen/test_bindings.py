@@ -575,6 +575,7 @@ def test_bound_typescript_sockets_return_the_binding_session(
         capture_output=True,
         text=True,
         check=False,
+        timeout=120,
     )
     assert formatting.returncode == 0, formatting.stdout + formatting.stderr
     namespace = (output / "namespaces" / "echo.ts").read_text("utf-8")
@@ -608,6 +609,7 @@ def test_bound_typescript_sockets_return_the_binding_session(
         capture_output=True,
         text=True,
         check=False,
+        timeout=120,
     )
     assert type_check.returncode == 0, type_check.stdout + type_check.stderr
 
@@ -616,5 +618,6 @@ def test_bound_typescript_sockets_return_the_binding_session(
         capture_output=True,
         text=True,
         check=False,
+        timeout=120,
     )
     assert behavior.returncode == 0, behavior.stdout + behavior.stderr

@@ -11,7 +11,7 @@ from dishka import FromComponent, Provider, Scope, decorate
 from dishka.dependency_source import CompositeDependencySource
 from starlette.types import Scope as ASGIScope
 
-from fastapi_canon.feature import FeatureConfigurationError
+from fastapi_canon.error.types import FeatureConfigurationError
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -30,13 +30,6 @@ __all__ = ["Telemetry", "observe"]
 class _Observation:
     port: type[Any]
     expected: tuple[type[Exception], ...]
-
-
-class _PortObserver:
-    """No-op implementation for compositions without telemetry."""
-
-    def wrap(self, spec: _Observation, component: str, instance: Any) -> Any:
-        return instance
 
 
 def observe(
@@ -76,6 +69,13 @@ def observe(
     }
     wrap._canon_observation = spec  # type: ignore[attr-defined]
     return decorate(wrap, provides=port)
+
+
+class _PortObserver:
+    """No-op implementation for compositions without telemetry."""
+
+    def wrap(self, spec: _Observation, component: str, instance: Any) -> Any:
+        return instance
 
 
 def _observer_provider(
@@ -169,7 +169,10 @@ class Telemetry:
                 "Canon telemetry requires FastAPI >=0.143; core still supports FastAPI >=0.115"
             )
         try:
-            from fastapi_canon.integrations.opentelemetry.native import validate_app
+            # lazy telemetry adapter factory
+            from fastapi_canon.integrations.opentelemetry.native import (  # smelt: ignore[SMT104] -- factory cycle
+                validate_app,
+            )
         except ModuleNotFoundError as exc:
             if exc.name is None or not exc.name.startswith("opentelemetry"):
                 raise

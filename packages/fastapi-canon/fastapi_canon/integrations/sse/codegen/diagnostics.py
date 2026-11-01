@@ -7,7 +7,11 @@ from dataclasses import asdict, dataclass
 from typing import Any, Literal, cast
 from urllib.parse import unquote
 
-from fastapi_canon.integrations.sse.codegen.ir import Contract, Operation
+# The IR builder lazily invokes diagnostics and enum passes over its own model graph.
+from fastapi_canon.integrations.sse.codegen.ir import (  # smelt: ignore[SMT104] -- factory cycle  # noqa: E501
+    Contract,
+    Operation,
+)
 from fastapi_canon.integrations.sse.codegen.openapi import (
     ContractError,
     Document,
@@ -71,6 +75,14 @@ class GenerationDiagnostic:
     path: str
     message: str
 
+    def __str__(self) -> str:
+        return (
+            f"{self.code} [{self.id}] {self.operation_id} "
+            f"({self.method} {self.path}) at {self.pointer}: "
+            f"{self.keyword}: {json.dumps(self.value, sort_keys=True)}; "
+            f"target={self.target}. {self.message}"
+        )
+
     @property
     def id(self) -> str:
         identity = asdict(self)
@@ -80,14 +92,6 @@ class GenerationDiagnostic:
 
     def to_dict(self, *, accepted: bool = False) -> Document:
         return {"id": self.id, **asdict(self), "accepted": accepted}
-
-    def __str__(self) -> str:
-        return (
-            f"{self.code} [{self.id}] {self.operation_id} "
-            f"({self.method} {self.path}) at {self.pointer}: "
-            f"{self.keyword}: {json.dumps(self.value, sort_keys=True)}; "
-            f"target={self.target}. {self.message}"
-        )
 
 
 def collect_diagnostics(
@@ -270,7 +274,7 @@ class _SourceDiagnostics:
                 + " SDK.",
             )
         if event and self.target == "python":
-            self.optional_discriminator(node, pointer)
+            self._optional_discriminator(node, pointer)
         for keyword in ("properties", "patternProperties", "dependentSchemas"):
             for name, child in node.get(keyword, {}).items():
                 self.schema(
@@ -295,7 +299,7 @@ class _SourceDiagnostics:
             if keyword in node:
                 self.schema(node[keyword], pointer + "/" + keyword, event=event)
 
-    def optional_discriminator(self, node: Document, pointer: str) -> None:
+    def _optional_discriminator(self, node: Document, pointer: str) -> None:
         field = node.get("discriminator", {}).get("propertyName")
         if not isinstance(field, str):
             return

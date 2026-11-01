@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import FrozenInstanceError
@@ -62,7 +63,8 @@ def test_composition_includes_routers_in_declaration_order() -> None:
         Feature(name="second", routers=[second]),
     ).apply(FastAPI())
 
-    assert TestClient(app).get("/same").json() == {"feature": "first"}
+    with TestClient(app) as client:
+        assert client.get("/same").json() == {"feature": "first"}
 
 
 def test_composition_router_factory_applies_shared_router_configuration() -> None:
@@ -95,7 +97,8 @@ def test_composition_router_factory_applies_shared_router_configuration() -> Non
         router_factory=router_factory,
     ).apply(FastAPI())
 
-    response = TestClient(app).get("/api/v1/catalog/items")
+    with TestClient(app) as client:
+        response = client.get("/api/v1/catalog/items")
 
     assert response.status_code == 200
     assert calls == ["dependency"]
@@ -414,8 +417,12 @@ def test_lifespan_cleans_up_when_later_startup_fails() -> None:
         Feature(name="failing", lifespan=failing),
     ).apply(app)
 
-    with pytest.raises(RuntimeError, match="startup failed"), TestClient(app):
-        pass
+    async def startup() -> None:
+        async with asyncio.timeout(5), app.router.lifespan_context(app):
+            pytest.fail("the failing feature must prevent startup")
+
+    with pytest.raises(RuntimeError, match="startup failed"):
+        asyncio.run(startup())
 
     assert events == ["start", "stop"]
 

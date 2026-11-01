@@ -3,7 +3,7 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-from fastapi_canon.integrations.websockets._adapter import adapter
+from fastapi_canon.integrations.websockets.adapter import adapter
 from fastapi_canon.integrations.websockets.dependencies import (
     EmptyResolver,
     RpcResolver,

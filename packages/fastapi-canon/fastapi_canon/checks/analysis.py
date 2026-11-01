@@ -3,7 +3,7 @@
 import ast
 from dataclasses import dataclass, field
 
-from .source import _Definition, _Environment, _Source
+from fastapi_canon.checks.source import _Definition, _Environment, _Source
 
 
 @dataclass(frozen=True)
@@ -97,7 +97,7 @@ class _Analyzer:
                 )
         if any(
             isinstance(child, ast.Yield | ast.YieldFrom)
-            for child in self._executed_nodes(node.body)
+            for child in _executed_nodes(node.body)
         ):
             flow.unknowns.append(
                 _Unknown(
@@ -110,23 +110,6 @@ class _Analyzer:
         env = self.source.environment(function)
         flow.extend(self.block(node.body, function, env, (*stack, function.name)))
         return flow
-
-    @staticmethod
-    def _executed_nodes(body: list[ast.stmt]) -> list[ast.AST]:
-        result: list[ast.AST] = []
-
-        def visit(node: ast.AST) -> None:
-            if isinstance(
-                node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Lambda
-            ):
-                return
-            result.append(node)
-            for child in ast.iter_child_nodes(node):
-                visit(child)
-
-        for node in body:
-            visit(node)
-        return result
 
     def expression(
         self,
@@ -362,7 +345,7 @@ class _Analyzer:
                 )
                 if any(
                     isinstance(child, ast.Return | ast.Raise)
-                    for child in self._executed_nodes(node.finalbody)
+                    for child in _executed_nodes(node.finalbody)
                 ):
                     flow.unknowns.append(
                         _Unknown(
@@ -449,7 +432,7 @@ class _Analyzer:
                     node.lineno,
                 )
             )
-            for child in self._executed_nodes([node]):
+            for child in _executed_nodes([node]):
                 if isinstance(child, ast.Raise) and child.exc:
                     target = (
                         child.exc.func if isinstance(child.exc, ast.Call) else child.exc
@@ -473,3 +456,20 @@ class _Analyzer:
 _ROUTE_METHODS = frozenset(
     {"get", "post", "put", "patch", "delete", "head", "options", "trace", "api_route"}
 )
+
+
+def _executed_nodes(body: list[ast.stmt]) -> list[ast.AST]:
+    result: list[ast.AST] = []
+
+    def visit(node: ast.AST) -> None:
+        if isinstance(
+            node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Lambda
+        ):
+            return
+        result.append(node)
+        for child in ast.iter_child_nodes(node):
+            visit(child)
+
+    for node in body:
+        visit(node)
+    return result

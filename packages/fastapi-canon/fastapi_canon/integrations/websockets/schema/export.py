@@ -49,7 +49,10 @@ def load_contract_source(reference: str) -> ContractSource:
     return source
 
 
-def load_protocol(reference: str) -> RpcProtocol:
+# Public protocol loader for external contract-export tooling.
+def load_protocol(  # smelt: ignore[SMT429] -- external API
+    reference: str,
+) -> RpcProtocol:
     """Import a channel or contract and return its internal protocol."""
     source = load_contract_source(reference)
     return source.protocol

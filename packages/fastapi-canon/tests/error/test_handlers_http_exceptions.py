@@ -26,10 +26,9 @@ def test_framework_generated_404_and_405_are_problem_details() -> None:
         return None
 
     registry().install(app)
-    client = TestClient(app)
-
-    not_found = client.get("/missing")
-    method_not_allowed = client.post("/existing")
+    with TestClient(app) as client:
+        not_found = client.get("/missing")
+        method_not_allowed = client.post("/existing")
 
     assert not_found.status_code == 404
     assert not_found.headers["content-type"] == "application/problem+json"
@@ -64,7 +63,8 @@ def test_declared_error_does_not_change_custom_success_response_class() -> None:
     app = FastAPI()
     app.include_router(router)
     errors.install(app)
-    response = TestClient(app).get("/text")
+    with TestClient(app) as client:
+        response = client.get("/text")
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/plain")
@@ -79,9 +79,8 @@ def test_debug_mode_keeps_starlette_debug_response_precedence() -> None:
         raise RuntimeError("debug marker")
 
     registry().install(app)
-    response = TestClient(app, raise_server_exceptions=False).get(
-        "/failure", headers={"accept": "text/html"}
-    )
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.get("/failure", headers={"accept": "text/html"})
 
     assert response.status_code == 500
     assert response.headers["content-type"].startswith("text/html")

@@ -123,6 +123,11 @@ def test_registry_accepts_empty_resolved_collection() -> None:
 
     registry.require_resolved()
 
+    assert registry.errors == ()
+    assert tuple(registry) == ()
+    assert len(registry) == 0
+    assert registry.resolve(UnknownError()) is None
+
 
 def test_merge_retains_feature_type_base_and_fills_unresolved_errors() -> None:
     session = make_error(SessionNotFound, "session_not_found")
