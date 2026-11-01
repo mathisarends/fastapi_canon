@@ -70,6 +70,64 @@ def test_release_rejects_stale_installation_docs(release_repo: Path) -> None:
         release.validate_release("fastapi-canon", "0.10.0", root=release_repo)
 
 
+@pytest.mark.parametrize(
+    ("target_date", "previous_date", "include_previous"),
+    [
+        ("unreleased", "unreleased", True),
+        ("2026-11-01", "unreleased", True),
+        ("unreleased", "2026-10-31", False),
+    ],
+)
+def test_release_cli_includes_only_unpublished_predecessor_migrations(
+    release_repo: Path, target_date: str, previous_date: str, include_previous: bool
+) -> None:
+    scripts = release_repo / "scripts"
+    scripts.mkdir()
+    shutil.copyfile(release.ROOT / "scripts/release.py", scripts / "release.py")
+    shutil.copyfile(
+        release.ROOT / "scripts/check_documentation.py",
+        scripts / "check_documentation.py",
+    )
+    changelog = release_repo / "packages/fastapi-canon/CHANGELOG.md"
+    source = (
+        f"# Changelog\n\n## 0.10.0 - {target_date}\n\n### Breaking changes\n\n"
+        "- Regenerate SDKs.\n\n"
+        f"## 0.9.0 - {previous_date}\n\n### Breaking changes\n\n"
+        "- Consolidation migration: replace old packages and imports.\n"
+        "- [Migration](docs/package-migration.md).\n\n"
+        "## 0.8.1 - 2026-10-25\n\n- Already published changes.\n"
+    )
+    changelog.write_text(source, encoding="utf-8")
+    report = release_repo / "dist/report/release.json"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(scripts / "release.py"),
+            "validate",
+            "--package",
+            "fastapi-canon",
+            "--version",
+            "0.10.0",
+            "--report",
+            str(report),
+        ],
+        cwd=release_repo,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    notes = (report.parent / "release-notes.md").read_text("utf-8")
+    assert "Regenerate SDKs." in notes
+    assert ("Consolidation migration" in notes) is include_previous
+    assert "Already published changes" not in notes
+    if include_previous:
+        assert "Included unpublished changes" in notes
+        assert "packages/fastapi-canon/docs/package-migration.md" in notes
+    assert changelog.read_text("utf-8") == source
+
+
 def test_release_notes_resolve_links_against_the_release_commit(
     release_repo: Path,
 ) -> None:

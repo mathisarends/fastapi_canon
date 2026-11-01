@@ -78,8 +78,9 @@ deployed TURN/NAT, database concurrency and proxy validation remain separate wor
 
 ## Prepared source versions
 
-Canon 0.9.0 is prepared as an unreleased breaking minor containing the unified
-package and the optional native OpenTelemetry integration. See the [migration guide](../packages/fastapi-canon/docs/package-migration.md).
+Canon 0.10.0 includes the unpublished 0.9.0 package consolidation and optional
+native OpenTelemetry integration, plus canonical error bindings and common SDK
+generation. See the [migration guide](../packages/fastapi-canon/docs/package-migration.md).
 Only Canon is an active release target; the old feature directories retain
 tests, examples and historical changelogs. No publication is implied by source versions.
 
@@ -138,7 +139,11 @@ Python 3.12, plus installed Streams/WebRTC CLI and generated-client checks.
 
 Each run uploads `release-PACKAGE-VERSION` containing `release/` and
 `release-report/`: the package/version/commit/tag, CI/run links, check results,
-SHA-256 hashes and changelog-derived notes. Artifacts are retained for 90 days.
+SHA-256 hashes and changelog-derived notes. Notes include the selected version and
+consecutive older sections marked `unreleased`, stopping at the first published
+section. Thus the 0.10.0 notes carry the 0.9.0 migrations when upgrading from 0.8.1,
+even after the 0.10.0 changelog date is finalized. Relative documentation links
+resolve against the verified source commit. Artifacts are retained for 90 days.
 Dry runs have neither OIDC nor repository write permissions and skip publication
 and finalization. Preparation artifacts can be replaced on a preparation retry;
 publication uses the successful run's original verified bytes.

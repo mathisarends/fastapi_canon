@@ -29,6 +29,7 @@ Use Dishka for application dependencies: repositories, services, settings, datab
 ```python
 AuthenticatedUserId = Annotated[UUID, Depends(authenticated_user_id)]
 
+
 async def endpoint(
     user_id: AuthenticatedUserId,
     task_service: FromDishka[TaskService],

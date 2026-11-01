@@ -398,7 +398,23 @@ def _changelog(path: Path, version: str) -> str:
 
 
 def _release_notes(root: Path, package: Package, version: str, commit: str) -> str:
-    section = _changelog(root / package.directory / "CHANGELOG.md", version)
+    path = root / package.directory / "CHANGELOG.md"
+    section = _changelog(path, version)
+    headings = re.findall(
+        rf"^## ({VERSION.pattern})([^\n]*)$", path.read_text("utf-8"), re.MULTILINE
+    )
+    versions = [value for value, _ in headings]
+    unpublished = []
+    for previous, suffix in headings[versions.index(version) + 1 :]:
+        if not re.search(r"\bunreleased\b", suffix, re.IGNORECASE):
+            break
+        unpublished.append(_changelog(path, previous))
+    if unpublished:
+        section += (
+            "\n\n## Included unpublished changes\n\n"
+            f"The following changes are included in {version} and were not "
+            "published separately.\n\n" + "\n\n".join(unpublished)
+        )
     repository = _toml(root / "release.toml")["repository"]
     base = (
         f"https://github.com/{repository}/blob/{commit}/"

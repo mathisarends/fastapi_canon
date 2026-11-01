@@ -12,6 +12,13 @@ All notable changes to `fastapi-canon` are documented in this file.
   response body"; await bodyless calls normally or check for `undefined`.
   Empty JSON and unexpected bodies for bodyless contracts now raise
   `ProtocolError`; handle that error instead of accepting a silent null value.
+- Regenerated Python HTTP clients validate the response schema for the actual
+  status, with exact codes taking precedence over `2XX`. Empty JSON, bodies on
+  bodyless responses, and payloads matching only another status now raise
+  `ProtocolError`. Regenerate SDKs and correct those server responses instead of
+  relying on their previous acceptance. Required query/header parameters cannot
+  be null; provide a non-null value. Optional null parameters continue to be
+  omitted.
 
 - Rename the console command from `canon` to `fastapi-canon`, including all
   transport and check subcommands. Update scripts and CI invocations; the Python
@@ -78,6 +85,14 @@ All notable changes to `fastapi-canon` are documented in this file.
 
 ### Fixed
 
+- Generated TypeScript HTTP clients omit optional null query/header parameters,
+  give exact response statuses precedence over `2XX`, and wrap connection
+  failures while reading response bodies in `TransportError`, including problem
+  responses. Explicit cancellation retains its native abort error.
+- Release notes include consecutive older unreleased changelog sections, so
+  upgrading from published 0.8.1 to 0.10.0 includes the unpublished 0.9.0 package
+  and telemetry migrations below.
+
 - Enforce architecture and test-quality policies with pinned Smelt in the
   workspace gate, pre-commit and CI. Mirror focused HTTP tests, bound async waits
   and compiler subprocesses, and make generated-output and async outcomes explicit.
@@ -109,9 +124,9 @@ remain available. See `docs/problems.md` and the root codegen guide.
   path with `fastapi_canon.integrations.sse`. WebSocket framework adapters now
   live under `fastapi_canon.integrations.websockets.adapters`; update former
   `fastapi_rpckit.integrations` imports to that prefix. The former top-level
-  modules and console scripts are removed. Use `canon sse`, `canon websockets`
-  and `canon webrtc` for the existing generator commands.
-- Regenerate clients: generator metadata now identifies Canon 0.9.0. Existing
+  modules and console scripts are removed. Use `fastapi-canon sse`,
+  `fastapi-canon websockets` and `fastapi-canon webrtc` for generator commands.
+- Regenerate clients: generator metadata now uses the unified Canon version. Existing
   generated layouts, contract formats and transport behavior are retained,
   including JSON-RPC 2.0 and `fastapi-webrtc.v1`. Socket binding entry points move
   to `fastapi_canon.integrations.websockets.socket_bindings`; update binding
@@ -128,8 +143,8 @@ remain available. See `docs/problems.md` and the root codegen guide.
 - Return unified development and future releases to `mathisarends/fastapi_canon`
   with the complete imported Git history. Update package links and publisher
   configuration; preserve historical release evidence in its original repository.
-- One `canon` command and `python -m fastapi_canon` entry point, including
-  `canon check errors`. Root CLI help loads no transport generators.
+- One `fastapi-canon` command and `python -m fastapi_canon` entry point, including
+  `fastapi-canon check errors`. Root CLI help loads no transport generators.
 - Optional `codegen`, `aiortc` and `otel` dependencies in Canon.
   Native engine and generation dependencies remain absent from the base install.
 - Fresh-wheel checks for the base package, each feature, codegen-only and
