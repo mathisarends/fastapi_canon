@@ -380,8 +380,10 @@ sequence, publisher setup and historical release locations.
 ## Current releases
 
 Canon 0.10.0 is the current published unified distribution. The source on `main`
-prepares **0.11.0 (unreleased)**; its breaking telemetry migration is recorded in
-the [changelog](packages/fastapi-canon/CHANGELOG.md#0110---unreleased).
+prepares **0.11.0 (unreleased)**. It replaces `observe()` with feature-owned
+`instrument()` declarations and fixes generated Python RPC clients. See the
+[migration notes](packages/fastapi-canon/CHANGELOG.md#0110---2026-11-01)
+and [release preparation](docs/releases.md#current-versions).
 The other names below are historical releases from the earlier four-distribution
 layout; use Canon's feature extras for current development.
 
