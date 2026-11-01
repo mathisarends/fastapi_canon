@@ -69,7 +69,7 @@ class IncomingTrack:
         return await self._track.recv()
 
     # Public incoming-track lifecycle operation for application handlers.
-    async def wait_ended(self) -> None:  # smelt: ignore[SMT316] -- public lifecycle
+    async def wait_ended(self) -> None:
         await self._ended.wait()
 
     async def _frames(self) -> AsyncIterator[Any]:

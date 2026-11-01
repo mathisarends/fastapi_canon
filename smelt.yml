@@ -192,6 +192,7 @@ structure:
   contracts:
     canon:
       match: fastapi_canon
+      export_at: 3
       required: [error, feature, openapi, response, router]
       public: [., error, integrations.**, testing.**, check_error_contracts]
       imports:
@@ -205,8 +206,12 @@ structure:
         constants_exempt: true
     error-models:
       match: fastapi_canon.error
+      export_at: 3
       required: [error, problem, registry, rendering, handlers, openapi, types]
       module_docstrings: forbid
+    integration-facades:
+      match: fastapi_canon.integrations.*
+      export_at: 3
 tests:
   layout: mirror
   mirror: '{path}/test_{module}.py'
@@ -223,6 +228,7 @@ rules:
   public-definitions-first: error
   bundled-instance-assignment: error
   internal-public-member: error
+  internal-public-module-symbol: warning
   internal-static-helper: error
   redundant-str-enum-value: error
   prefer-package-import: error

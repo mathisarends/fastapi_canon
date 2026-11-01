@@ -15,7 +15,7 @@ INSTALLED_REGISTRY_STATE_KEY = "_fastapi_canon_error_registry"
 INSTALLED_OPENAPI_STATE_KEY = "_fastapi_canon_openapi"
 
 
-HTTP_METHODS = frozenset(
+_HTTP_METHODS = frozenset(
     {"get", "put", "post", "delete", "options", "head", "patch", "trace"}
 )
 
@@ -47,7 +47,7 @@ def iter_operations(
             if not isinstance(item, dict):
                 continue
             for method, operation in item.items():
-                if method in HTTP_METHODS and isinstance(operation, dict):
+                if method in _HTTP_METHODS and isinstance(operation, dict):
                     yield f"{method.upper()} {path}", operation
 
 

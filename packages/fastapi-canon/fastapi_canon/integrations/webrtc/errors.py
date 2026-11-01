@@ -63,13 +63,13 @@ _CLOSE_CODES = {
     ErrorCode.SESSION_LIMIT: 1013,
 }
 
-SESSION_FAILURE_CLOSE_CODE = 4000
+_SESSION_FAILURE_CLOSE_CODE = 4000
 """Close code for WebRTC-specific session failures; the reason holds the category."""
 
 
 def close_code(code: ErrorCode) -> int:
     """Return the WebSocket close code that accompanies a terminal error code."""
-    return _CLOSE_CODES.get(code, SESSION_FAILURE_CLOSE_CODE)
+    return _CLOSE_CODES.get(code, _SESSION_FAILURE_CLOSE_CODE)
 
 
 _MESSAGES = {

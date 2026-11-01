@@ -71,7 +71,7 @@ class SocketFaults:
         self.half_open = half_open
         self.frames_sent = 0
         # Public testing-library state is deliberately inspected by consumer tests.
-        self.blocked = asyncio.Event()  # smelt: ignore[SMT430] -- test API
+        self.blocked = asyncio.Event()
         self.held = asyncio.Event()
         self._send_gate = asyncio.Event()
         self._send_gate.set()
@@ -321,7 +321,7 @@ class InMemorySocketFactory:
         self.context = context
         self.limits = limits
         # Public testing-library state is deliberately inspected by consumer tests.
-        self.attempts = 0  # smelt: ignore[SMT430] -- test API
+        self.attempts = 0
         self.sockets: list[InMemorySocket] = []
         self._tasks: list[asyncio.Task[None]] = []
         self._rejections: deque[RpcTestHandshakeRejected] = deque()
@@ -539,28 +539,6 @@ class RpcTestClient:
             raise self._connection_closed()
         return item  # type: ignore[return-value]
 
-    async def _read(self) -> None:
-        try:
-            while True:
-                value = json.loads(await self.socket.client_receive())
-                if not isinstance(value, dict):
-                    continue
-                if "method" in value:
-                    await self._notifications.put((value["method"], value["params"]))
-                else:
-                    response = self._pending.get(value.get("id"))
-                    if response is not None and not response.done():
-                        response.set_result(value)
-        except RpcDisconnect:
-            error = self._connection_closed()
-            for response in self._pending.values():
-                if not response.done():
-                    response.set_exception(error)
-            await self._notifications.put(_CLOSED)
-
-    def _connection_closed(self) -> "RpcTestConnectionClosed":
-        return RpcTestConnectionClosed(self.socket.rejection or self.socket.closed)
-
     async def next_message(self) -> str | bytes:
         """Receive the next text or binary message of a socket endpoint."""
         if not self._socket:
@@ -605,6 +583,28 @@ class RpcTestClient:
             with suppress(asyncio.CancelledError):
                 await self._task
         return self.socket.closed
+
+    async def _read(self) -> None:
+        try:
+            while True:
+                value = json.loads(await self.socket.client_receive())
+                if not isinstance(value, dict):
+                    continue
+                if "method" in value:
+                    await self._notifications.put((value["method"], value["params"]))
+                else:
+                    response = self._pending.get(value.get("id"))
+                    if response is not None and not response.done():
+                        response.set_result(value)
+        except RpcDisconnect:
+            error = self._connection_closed()
+            for response in self._pending.values():
+                if not response.done():
+                    response.set_exception(error)
+            await self._notifications.put(_CLOSED)
+
+    def _connection_closed(self) -> "RpcTestConnectionClosed":
+        return RpcTestConnectionClosed(self.socket.rejection or self.socket.closed)
 
 
 class RpcTestStream(RpcTestClient):

@@ -194,6 +194,31 @@ class WebRtcRouter(APIRouter):
 
         return decorator
 
+    async def aclose(self, timeout: float | None = None) -> None:
+        """Close every active session with ``shutdown`` and wait for cleanup.
+
+        New sessions are refused afterwards. ``timeout`` defaults to the largest
+        configured shutdown deadline plus the minimum budgets of ``on_close`` and
+        engine cleanup.
+        """
+        self._closing = True
+        runtimes = list(self._runtimes)
+        for runtime in runtimes:
+            runtime.terminate(ErrorCode.SHUTDOWN)
+        if not runtimes:
+            return
+        if timeout is None:
+            timeout = 2 * MINIMUM_CLEANUP_STEP_SECONDS + max(
+                runtime.declaration.limits.shutdown_timeout_seconds
+                for runtime in runtimes
+            )
+        waiters = [asyncio.ensure_future(r.wait_finished()) for r in runtimes]
+        _, pending = await asyncio.wait(waiters, timeout=timeout)
+        for waiter in pending:
+            waiter.cancel()
+        if pending:
+            logger.warning("%d WebRTC session(s) did not finish cleanup", len(pending))
+
     async def _serve(
         self,
         declaration: SessionDeclaration,
@@ -285,31 +310,6 @@ class WebRtcRouter(APIRouter):
             self.event_hook(event)
         except Exception:
             logger.exception("Session event hook failed")
-
-    async def aclose(self, timeout: float | None = None) -> None:
-        """Close every active session with ``shutdown`` and wait for cleanup.
-
-        New sessions are refused afterwards. ``timeout`` defaults to the largest
-        configured shutdown deadline plus the minimum budgets of ``on_close`` and
-        engine cleanup.
-        """
-        self._closing = True
-        runtimes = list(self._runtimes)
-        for runtime in runtimes:
-            runtime.terminate(ErrorCode.SHUTDOWN)
-        if not runtimes:
-            return
-        if timeout is None:
-            timeout = 2 * MINIMUM_CLEANUP_STEP_SECONDS + max(
-                runtime.declaration.limits.shutdown_timeout_seconds
-                for runtime in runtimes
-            )
-        waiters = [asyncio.ensure_future(r.wait_finished()) for r in runtimes]
-        _, pending = await asyncio.wait(waiters, timeout=timeout)
-        for waiter in pending:
-            waiter.cancel()
-        if pending:
-            logger.warning("%d WebRTC session(s) did not finish cleanup", len(pending))
 
     @asynccontextmanager
     async def _lifespan(self, _app: Any) -> AsyncIterator[None]:

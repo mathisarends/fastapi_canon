@@ -36,10 +36,10 @@ if TYPE_CHECKING:
 # Builds Annotated types from runtime values, which type checkers cannot follow.
 _ANNOTATED: Any = Annotated
 
-CONTRACT_VERSION = 1
-REF_TEMPLATE = "#/definitions/{model}"
+_CONTRACT_VERSION = 1
+_REF_TEMPLATE = "#/definitions/{model}"
 
-type ParameterLocation = Literal["path", "query"]
+type _ParameterLocation = Literal["path", "query"]
 
 
 class _SchemaGenerator(GenerateJsonSchema):
@@ -104,13 +104,13 @@ def build_contract(app: FastAPI | Sequence[BaseRoute]) -> dict[str, Any]:
     definitions: dict[str, Any] = {}
     if inputs:
         mapping, defs = TypeAdapter.json_schemas(
-            inputs, ref_template=REF_TEMPLATE, schema_generator=_SchemaGenerator
+            inputs, ref_template=_REF_TEMPLATE, schema_generator=_SchemaGenerator
         )
         schemas = {key: schema for (key, _mode), schema in mapping.items()}
         definitions = dict(defs.get("$defs", {}))
 
     return {
-        "contract_version": CONTRACT_VERSION,
+        "contract_version": _CONTRACT_VERSION,
         "protocol": PROTOCOL_VERSION,
         "subprotocol": SUBPROTOCOL,
         "sessions": [
@@ -218,10 +218,10 @@ def _flatten(routes: Sequence[BaseRoute]) -> Iterator[tuple[str, Any]]:
 
 def _parameters(
     dependant: Dependant | None,
-) -> list[tuple[ParameterLocation, str, Any, bool]]:
+) -> list[tuple[_ParameterLocation, str, Any, bool]]:
     if dependant is None:
         return []
-    found: dict[tuple[str, str], tuple[ParameterLocation, str, Any, bool]] = {}
+    found: dict[tuple[str, str], tuple[_ParameterLocation, str, Any, bool]] = {}
     for location, alias, field_info in _fields(dependant):
         key = (location, alias)
         required = bool(field_info.is_required())
@@ -240,7 +240,7 @@ def _parameters(
 
 def _fields(
     dependant: Dependant,
-) -> Iterable[tuple[ParameterLocation, str, FieldInfo]]:
+) -> Iterable[tuple[_ParameterLocation, str, FieldInfo]]:
     """Yield ``(location, wire name, field info)`` of every path/query field."""
     for field in dependant.path_params:
         yield "path", _wire_name(field), field.field_info
