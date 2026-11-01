@@ -1,6 +1,6 @@
 from dishka import Provider, Scope, provide
 
-from app.authentication.application.token_verifier import TokenVerifier
+from app.authentication.application import TokenVerifier
 from app.authentication.infrastructure.settings import AuthenticationSettings
 from app.authentication.infrastructure.verifier import LocalTokenVerifier
 

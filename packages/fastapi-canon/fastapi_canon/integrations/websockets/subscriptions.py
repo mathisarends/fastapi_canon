@@ -6,8 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-from fastapi_canon.integrations.websockets._activity import _Activity, notify_activity
-from fastapi_canon.integrations.websockets._adapter import adapter
+from fastapi_canon.integrations.websockets.activity import _Activity, notify_activity
+from fastapi_canon.integrations.websockets.adapter import adapter
 from fastapi_canon.integrations.websockets.codec import RpcCodec
 from fastapi_canon.integrations.websockets.envelopes import (
     RpcErrorData,
@@ -93,6 +93,16 @@ class SubscriptionSession:
         finally:
             self._responded.reset(token)
 
+    def owns(self, method: str) -> bool:
+        return method in self._methods
+
+    async def close(self) -> None:
+        tasks = tuple(task for _, task in self._tasks.values())
+        self._tasks.clear()
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
     async def _handle(self, request: RpcRequestEnvelope) -> None:
         if not request.expects_response:
             return
@@ -152,16 +162,6 @@ class SubscriptionSession:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
         await self._respond(request, RpcSuccess(id=request.id, result=None))
-
-    def owns(self, method: str) -> bool:
-        return method in self._methods
-
-    async def close(self) -> None:
-        tasks = tuple(task for _, task in self._tasks.values())
-        self._tasks.clear()
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _respond(self, request: RpcRequestEnvelope, response: Any) -> None:
         scope = self._request.get()

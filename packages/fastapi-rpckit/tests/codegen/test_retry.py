@@ -147,86 +147,97 @@ async def test_delivery_certainty_and_default_disabled(
 async def test_retry_backoff_stays_within_logical_deadline_and_cleans_up(
     pool_runtime, monkeypatch, finish
 ):
-    before = asyncio.all_tasks()
-    clock = Clock(monkeypatch, pool_runtime)
-    delayed = asyncio.Event()
-    calls = 0
+    async with asyncio.timeout(10):
+        before = asyncio.all_tasks()
+        clock = Clock(monkeypatch, pool_runtime)
+        delayed = asyncio.Event()
+        calls = 0
 
-    class Flaky(Transport):
-        async def request(self, method, params=None, *, metadata=None):
-            nonlocal calls
-            calls += 1
-            raise pool_runtime.RpcConnectionLostError(sent=False)
+        class Flaky(Transport):
+            async def request(self, method, params=None, *, metadata=None):
+                nonlocal calls
+                calls += 1
+                raise pool_runtime.RpcConnectionLostError(sent=False)
 
-    transport = Flaky()
+        transport = Flaky()
 
-    async def acquire(_):
-        return transport
+        async def acquire(_):
+            return transport
 
-    def delay(_):
-        delayed.set()
-        return 100
+        def delay(_):
+            delayed.set()
+            return 100
 
-    source = SimpleNamespace(
-        get=acquire, close=transport.close, request_timeout=5, retry_delay=delay
-    )
-    core = pool_runtime.RpcClientCore(source, retry_attempts=3)
-    route = pool_runtime.RpcRouteInfo(method="work", result_adapter=TypeAdapter(str))
-    task = asyncio.create_task(core.request(route))
-    _, total = await clock.timers.get()
-    await delayed.wait()
-    if finish == "deadline":
-        total.reschedule(asyncio.get_running_loop().time())
-        with pytest.raises(pool_runtime.RpcRequestTimeoutError):
-            await task
-    elif finish == "cancel":
-        task.cancel("stop retry")
-        with pytest.raises(asyncio.CancelledError, match="stop retry"):
-            await task
-    else:
+        source = SimpleNamespace(
+            get=acquire, close=transport.close, request_timeout=5, retry_delay=delay
+        )
+        core = pool_runtime.RpcClientCore(source, retry_attempts=3)
+        route = pool_runtime.RpcRouteInfo(
+            method="work", result_adapter=TypeAdapter(str)
+        )
+        task = asyncio.create_task(core.request(route))
+        _, total = await clock.timers.get()
+        await delayed.wait()
+        if finish == "deadline":
+            total.reschedule(asyncio.get_running_loop().time())
+            with pytest.raises(pool_runtime.RpcRequestTimeoutError):
+                await task
+        elif finish == "cancel":
+            task.cancel("stop retry")
+            with pytest.raises(asyncio.CancelledError, match="stop retry"):
+                await task
+        else:
+            await core.close()
+            with pytest.raises(pool_runtime.RpcConnectionLostError):
+                await task
+        assert calls == 1
         await core.close()
-        with pytest.raises(pool_runtime.RpcConnectionLostError):
-            await task
-    assert calls == 1
-    await core.close()
-    assert not asyncio.all_tasks() - before
+        assert not asyncio.all_tasks() - before
 
 
 async def test_per_attempt_timeout_can_retry_without_resetting_total_budget(
     pool_runtime, monkeypatch
 ):
-    clock = Clock(monkeypatch, pool_runtime)
-    sent = asyncio.Event()
-    attempts = 0
+    async with asyncio.timeout(10):
+        clock = Clock(monkeypatch, pool_runtime)
+        sent = asyncio.Event()
+        attempts = 0
 
-    class SlowFirst(Transport):
-        async def request(self, method, params=None, *, metadata=None):
-            nonlocal attempts
-            attempts += 1
-            if attempts == 1:
-                sent.set()
-                await asyncio.Future()
-            return "ok"
+        class SlowFirst(Transport):
+            async def request(self, method, params=None, *, metadata=None):
+                nonlocal attempts
+                attempts += 1
+                if attempts == 1:
+                    sent.set()
+                    await asyncio.Future()
+                return "ok"
 
-    transport = SlowFirst()
+        transport = SlowFirst()
 
-    async def acquire(_):
-        return transport
+        async def acquire(_):
+            return transport
 
-    source = SimpleNamespace(
-        get=acquire, close=transport.close, request_timeout=5, retry_delay=lambda _: 0
-    )
-    core = pool_runtime.RpcClientCore(source, retry_attempts=1, retry_attempt_timeout=1)
-    route = pool_runtime.RpcRouteInfo(
-        method="read", result_adapter=TypeAdapter(str), idempotent=True
-    )
-    task = asyncio.create_task(core.request(route))
-    _, total = await clock.timers.get()
-    _, first = await clock.timers.get()
-    await sent.wait()
-    first.reschedule(asyncio.get_running_loop().time())
-    assert await task == "ok"
-    assert attempts == 2
-    assert not total.expired()
-    assert clock.timers.qsize() == 1  # Second attempt, no replacement overall timer.
-    await core.close()
+        source = SimpleNamespace(
+            get=acquire,
+            close=transport.close,
+            request_timeout=5,
+            retry_delay=lambda _: 0,
+        )
+        core = pool_runtime.RpcClientCore(
+            source, retry_attempts=1, retry_attempt_timeout=1
+        )
+        route = pool_runtime.RpcRouteInfo(
+            method="read", result_adapter=TypeAdapter(str), idempotent=True
+        )
+        task = asyncio.create_task(core.request(route))
+        _, total = await clock.timers.get()
+        _, first = await clock.timers.get()
+        await sent.wait()
+        first.reschedule(asyncio.get_running_loop().time())
+        assert await task == "ok"
+        assert attempts == 2
+        assert not total.expired()
+        assert (
+            clock.timers.qsize() == 1
+        )  # Second attempt, no replacement overall timer.
+        await core.close()

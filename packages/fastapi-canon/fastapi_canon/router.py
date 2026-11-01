@@ -6,9 +6,8 @@ from typing import Any
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse, Response
 
-from fastapi_canon.error.contracts import SUCCESS_EXTENSION
-from fastapi_canon.error.error import Error
-from fastapi_canon.error.registry import AnyError, ErrorRegistry
+from fastapi_canon.error import Error, ErrorRegistry
+from fastapi_canon.error.contracts import SUCCESS_EXTENSION, AnyError
 from fastapi_canon.error.types import OpenAPIResponses
 from fastapi_canon.error.validation import unique_instances
 from fastapi_canon.policy import (

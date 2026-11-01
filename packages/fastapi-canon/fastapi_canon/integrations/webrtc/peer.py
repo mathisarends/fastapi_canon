@@ -43,6 +43,12 @@ class IncomingTrack:
         self._ended = asyncio.Event()
         track.on_ended(self._ended.set)
 
+    def __aiter__(self) -> AsyncIterator[Any]:
+        return self._frames()
+
+    def __repr__(self) -> str:
+        return f"IncomingTrack(id={self.id!r}, kind={self.kind!r})"
+
     @property
     def id(self) -> str:
         return self._track.id
@@ -62,11 +68,9 @@ class IncomingTrack:
     async def recv(self) -> Any:
         return await self._track.recv()
 
-    async def wait_ended(self) -> None:
+    # Public incoming-track lifecycle operation for application handlers.
+    async def wait_ended(self) -> None:  # smelt: ignore[SMT316] -- public lifecycle
         await self._ended.wait()
-
-    def __aiter__(self) -> AsyncIterator[Any]:
-        return self._frames()
 
     async def _frames(self) -> AsyncIterator[Any]:
         while not self._ended.is_set():
@@ -81,9 +85,6 @@ class IncomingTrack:
     def _stop(self) -> None:
         self._track.stop()
         self._ended.set()
-
-    def __repr__(self) -> str:
-        return f"IncomingTrack(id={self.id!r}, kind={self.kind!r})"
 
 
 class OutgoingTrack:
@@ -103,12 +104,12 @@ class OutgoingTrack:
         self._sender: EngineSender | None = None
         self.removed = False
 
+    def __repr__(self) -> str:
+        return f"OutgoingTrack(kind={self.kind!r}, owned={self.owned})"
+
     async def remove(self) -> None:
         """Detach the track and renegotiate. Idempotent."""
         await self._runtime.remove_track(self)
-
-    def __repr__(self) -> str:
-        return f"OutgoingTrack(kind={self.kind!r}, owned={self.owned})"
 
 
 # The type parameters have defaults, which need Python 3.13 syntax.
@@ -122,6 +123,16 @@ class Channel(Generic[Receive, Send]):  # noqa: UP046
     def __init__(self, runtime: SessionRuntime, state: _Channel) -> None:
         self._runtime = runtime
         self._state = state
+
+    def __aiter__(self) -> Channel[Receive, Send]:
+        """Iterate over received messages of a channel without an ``on_message``
+        handler. Iteration ends when the session or channel closes; one task at
+        a time may wait for a message."""
+        return self
+
+    async def __anext__(self) -> Receive:
+        message: Receive = await self._runtime.next_message(self._state)
+        return message
 
     @property
     def name(self) -> str:
@@ -143,16 +154,6 @@ class Channel(Generic[Receive, Send]):  # noqa: UP046
     async def send(self, message: Send) -> None:
         """Validate, encode and send ``message``; see :meth:`Peer.send_message`."""
         await self._runtime.send_message(self.name, message)
-
-    def __aiter__(self) -> Channel[Receive, Send]:
-        """Iterate over received messages of a channel without an ``on_message``
-        handler. Iteration ends when the session or channel closes; one task at
-        a time may wait for a message."""
-        return self
-
-    async def __anext__(self) -> Receive:
-        message: Receive = await self._runtime.next_message(self._state)
-        return message
 
 
 class Peer:
@@ -232,8 +233,8 @@ class Peer:
         or is cancelled."""
         self._runtime.terminate(code)
 
-    async def wait_closed(self) -> ErrorCode:
-        return await self._runtime.wait_closed()
-
     def __repr__(self) -> str:
         return f"Peer(name={self.name!r}, session_id={self.session_id!r})"
+
+    async def wait_closed(self) -> ErrorCode:
+        return await self._runtime.wait_closed()

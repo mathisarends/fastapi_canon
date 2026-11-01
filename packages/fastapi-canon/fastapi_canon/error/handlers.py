@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 from fastapi import FastAPI, Request
 from fastapi.exception_handlers import (
@@ -17,6 +17,7 @@ from starlette.types import ExceptionHandler
 
 from fastapi_canon.error.contracts import (
     INSTALLED_REGISTRY_STATE_KEY,
+    ErrorCatalog,
 )
 from fastapi_canon.error.openapi import install_openapi
 from fastapi_canon.error.rendering import render_problem
@@ -26,14 +27,11 @@ from fastapi_canon.error.types import (
     http_problem_title,
 )
 
-if TYPE_CHECKING:
-    from fastapi_canon.error.registry import ErrorRegistry
-
 logger = logging.getLogger(__name__)
 
 
 def install_handlers(
-    registry: ErrorRegistry,
+    registry: ErrorCatalog,
     app: FastAPI,
     *,
     include_validation_error: bool,
@@ -98,7 +96,7 @@ def install_handlers(
     setattr(app.state, INSTALLED_REGISTRY_STATE_KEY, registry)
 
 
-def _domain_handler(registry: ErrorRegistry) -> ExceptionHandler:
+def _domain_handler(registry: ErrorCatalog) -> ExceptionHandler:
     async def handler(connection: Request, exception: Exception) -> Response:
         error = registry.resolve(exception)
         if error is None:
@@ -142,7 +140,7 @@ async def _http_exception_handler(request: Request, exception: Exception) -> Res
     return _problem_response(request, payload, status, headers=exception.headers)
 
 
-def _request_validation_handler(registry: ErrorRegistry) -> ExceptionHandler:
+def _request_validation_handler(registry: ErrorCatalog) -> ExceptionHandler:
     async def handler(request: Request, exception: Exception) -> Response:
         if not isinstance(exception, RequestValidationError):
             raise exception
@@ -161,7 +159,7 @@ def _request_validation_handler(registry: ErrorRegistry) -> ExceptionHandler:
     return cast(ExceptionHandler, handler)
 
 
-def _response_validation_handler(registry: ErrorRegistry) -> ExceptionHandler:
+def _response_validation_handler(registry: ErrorCatalog) -> ExceptionHandler:
     async def handler(request: Request, exception: Exception) -> Response:
         if not isinstance(exception, ResponseValidationError):
             raise exception
@@ -174,7 +172,7 @@ def _response_validation_handler(registry: ErrorRegistry) -> ExceptionHandler:
     return cast(ExceptionHandler, handler)
 
 
-def _unhandled_handler(registry: ErrorRegistry) -> ExceptionHandler:
+def _unhandled_handler(registry: ErrorCatalog) -> ExceptionHandler:
     async def handler(request: Request, exception: Exception) -> Response:
         logger.error(
             "Unhandled application exception",
@@ -206,7 +204,7 @@ def _escape_pointer(value: object) -> str:
     return str(value).replace("~", "~0").replace("/", "~1")
 
 
-def _internal_error_response(registry: ErrorRegistry, request: Request) -> Response:
+def _internal_error_response(registry: ErrorCatalog, request: Request) -> Response:
     return _problem_response(
         request,
         {
@@ -219,7 +217,7 @@ def _internal_error_response(registry: ErrorRegistry, request: Request) -> Respo
     )
 
 
-def _builtin_type(registry: ErrorRegistry, code: str) -> str:
+def _builtin_type(registry: ErrorCatalog, code: str) -> str:
     if registry.type_base is None:
         msg = f"type_base is required to render built-in problem {code!r}"
         raise ErrorConfigurationError(msg)

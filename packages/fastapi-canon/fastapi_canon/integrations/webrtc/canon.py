@@ -6,10 +6,10 @@ from typing import Any, TypeVar
 from fastapi import FastAPI
 from fastapi.params import Depends as DependsParam
 
+from fastapi_canon.error import ErrorConfigurationError
 from fastapi_canon.error.catalog import problem_schema
 from fastapi_canon.error.contracts import INSTALLED_REGISTRY_STATE_KEY
 from fastapi_canon.error.registry import AnyError, ErrorRegistry
-from fastapi_canon.error.types import ErrorConfigurationError
 from fastapi_canon.integrations.webrtc.declarations import (
     AdmissionErrors,
     DataChannelSpec,

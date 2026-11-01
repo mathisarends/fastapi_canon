@@ -104,13 +104,11 @@ def render(plan: Plan, target: TargetConfig) -> dict[str, str]:
             )
             prefix = f"internal/{source.name}_sse"
         elif source.kind == "openrpc":
-            from fastapi_canon.integrations.websockets.codegen.ir import (
-                build_ir as rpc_ir,
-            )
-            from fastapi_canon.integrations.websockets.codegen.options import (
+            from fastapi_canon.integrations.websockets.codegen import (
                 PythonClientOptions,
                 TypeScriptClientOptions,
             )
+            from fastapi_canon.integrations.websockets.codegen import build_ir as rpc_ir
             from fastapi_canon.integrations.websockets.codegen.python import (
                 render_files as rpc_python,
             )

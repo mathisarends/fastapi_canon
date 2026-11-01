@@ -129,7 +129,7 @@ class _Renderer:
             body=body,
         )
 
-    def template(self, name: str, **context: object) -> str:
+    def _template(self, name: str, **context: object) -> str:
         return render_template(
             f"typescript/{name}.ts.j2",
             filters=self._filters(),
@@ -178,22 +178,11 @@ class _Renderer:
             "union_alias": _union_alias,
         }
 
-    def _compact_notification(
-        self,
-        event: NotificationDecl,
-        root: bool,
-    ) -> bool:
-        receiver = "this.#rpc" if root else "this.rpc"
-        call = (
-            f"    return {receiver}.notifications(notifications.{_route_key(event)});"
-        )
-        return len(call) <= 80
-
     def models(self) -> str:
-        return self.module(self.template("models", declarations=self.ir.declarations))
+        return self.module(self._template("models", declarations=self.ir.declarations))
 
     def namespaces_index(self) -> str:
-        return self.module(self.template("namespace_index", nodes=self.nodes))
+        return self.module(self._template("namespace_index", nodes=self.nodes))
 
     def routes(self) -> str:
         model_names = _route_model_names(self.ir.operations)
@@ -203,7 +192,7 @@ class _Renderer:
             for name in _model_names(event.payload)
         )
         return self.module(
-            self.template(
+            self._template(
                 "routes",
                 routes=self.ir.operations,
                 notifications=self.ir.notifications,
@@ -227,7 +216,7 @@ class _Renderer:
 
     def streams(self) -> str:
         return self.module(
-            self.template(
+            self._template(
                 "streams",
                 streams=self.ir.binary_streams,
                 with_websocket=self.options.with_transport == "websocket",
@@ -236,7 +225,7 @@ class _Renderer:
 
     def sockets(self) -> str:
         return self.module(
-            self.template(
+            self._template(
                 "sockets",
                 sockets=self.ir.sockets,
                 with_websocket=self.options.with_transport == "websocket",
@@ -301,12 +290,23 @@ class _Renderer:
             )
         if model_names:
             imports.append(_type_import(model_names, f"{root}models"))
-        body = self.template(
+        body = self._template(
             "api",
             imports=imports,
             nodes=tuple(_walk_postorder((root_node,))),
         )
         return self.module(body)
+
+    def _compact_notification(
+        self,
+        event: NotificationDecl,
+        root: bool,
+    ) -> bool:
+        receiver = "this.#rpc" if root else "this.rpc"
+        call = (
+            f"    return {receiver}.notifications(notifications.{_route_key(event)});"
+        )
+        return len(call) <= 80
 
     def _socket_binding(self, socket: SocketDecl) -> SocketBinding | None:
         if socket.protocol is None:
@@ -324,46 +324,6 @@ class _Renderer:
             f'from "{root}bindings/{binding.module}";'
             for binding in modules.values()
         ]
-
-    def _socket_handle_signature(self, socket: SocketDecl) -> str:
-        binding = self._socket_binding(socket)
-        session = (
-            "Socket"
-            if binding is None
-            else f"socketBinding_{binding.module}.{binding.session}"
-        )
-        if binding is None and socket.client_message is not None:
-            session = (
-                f"Socket<{self._type(socket.server_message)}, "
-                f"{self._type(socket.client_message)}>"
-            )
-        return _socket_signature(socket, f"Promise<{session}>")
-
-    def _socket_handle_connect(self, socket: SocketDecl) -> str:
-        """The ``openSocket`` connect callback, laid out as Prettier would."""
-        binding = self._socket_binding(socket)
-        create = "new Socket(transport, endpoint)"
-        if socket.client_message is not None:
-            create = (
-                f"new Socket<{self._type(socket.server_message)}, "
-                f"{self._type(socket.client_message)}>(transport, endpoint, true)"
-            )
-        if binding is None:
-            inline = f"      (transport, endpoint) => {create},"
-            if len(inline) <= _TS_WIDTH:
-                return inline
-            if len(f"        {create},") <= _TS_WIDTH:
-                return f"      (transport, endpoint) =>\n        {create},"
-            constructor = create.removesuffix("(transport, endpoint, true)")
-            return (
-                f"      (transport, endpoint) =>\n        {constructor}(\n"
-                "          transport,\n          endpoint,\n          true,\n        ),"
-            )
-        open_binding = f"socketBinding_{binding.module}.{binding.open}"
-        inline = f"      (transport, endpoint) => {open_binding}({create}),"
-        if len(inline) <= _TS_WIDTH:
-            return inline
-        return f"      (transport, endpoint) =>\n        {open_binding}({create}),"
 
     def client(self) -> str:
         core_imports = [
@@ -465,7 +425,7 @@ class _Renderer:
                     "./namespaces",
                 )
             )
-        body = self.template(
+        body = self._template(
             "client",
             imports=imports,
             client_name=self.client_name,
@@ -483,6 +443,86 @@ class _Renderer:
             request_metadata=self.ir.request_metadata,
         )
         return self.module(body)
+
+    def endpoints(self) -> str:
+        return self.module(self._template("endpoints", servers=self.ir.servers))
+
+    def errors(self) -> str:
+        named = {
+            error.name: error
+            for route in (*self.ir.operations, *self.ir.notifications)
+            for error in route.errors
+            if error.name is not None
+        }
+        model_names = {
+            name
+            for error in named.values()
+            if error.data is not None
+            for name in _model_names(error.data)
+        }
+        model_import = _type_import(model_names, "./models") if model_names else ""
+        return self.module(
+            self._template(
+                "errors",
+                errors=tuple(named.values()),
+                model_import=model_import,
+            )
+        )
+
+    def index(self) -> str:
+        body = self._template(
+            "index",
+            client_name=self.client_name,
+            servers=self.ir.servers,
+            with_websocket=self.options.with_transport == "websocket",
+            nodes=self.nodes,
+            routes=bool(self.ir.operations),
+            notifications=self.ir.notifications,
+            binary_streams=self.ir.binary_streams,
+            sockets=self.ir.sockets,
+            models=bool(self.ir.declarations),
+        )
+        return self.module(body)
+
+    def _socket_handle_signature(self, socket: SocketDecl) -> str:
+        binding = self._socket_binding(socket)
+        session = (
+            "Socket"
+            if binding is None
+            else f"socketBinding_{binding.module}.{binding.session}"
+        )
+        if binding is None and socket.client_message is not None:
+            session = (
+                f"Socket<{self._type(socket.server_message)}, "
+                f"{self._type(socket.client_message)}>"
+            )
+        return _socket_signature(socket, f"Promise<{session}>")
+
+    def _socket_handle_connect(self, socket: SocketDecl) -> str:
+        """The ``openSocket`` connect callback, laid out as Prettier would."""
+        binding = self._socket_binding(socket)
+        create = "new Socket(transport, endpoint)"
+        if socket.client_message is not None:
+            create = (
+                f"new Socket<{self._type(socket.server_message)}, "
+                f"{self._type(socket.client_message)}>(transport, endpoint, true)"
+            )
+        if binding is None:
+            inline = f"      (transport, endpoint) => {create},"
+            if len(inline) <= _TS_WIDTH:
+                return inline
+            if len(f"        {create},") <= _TS_WIDTH:
+                return f"      (transport, endpoint) =>\n        {create},"
+            constructor = create.removesuffix("(transport, endpoint, true)")
+            return (
+                f"      (transport, endpoint) =>\n        {constructor}(\n"
+                "          transport,\n          endpoint,\n          true,\n        ),"
+            )
+        open_binding = f"socketBinding_{binding.module}.{binding.open}"
+        inline = f"      (transport, endpoint) => {open_binding}({create}),"
+        if len(inline) <= _TS_WIDTH:
+            return inline
+        return f"      (transport, endpoint) =>\n        {open_binding}({create}),"
 
     def _operation_signature(self, route: RouteDecl) -> str:
         parameters = []
@@ -521,46 +561,6 @@ class _Renderer:
         if self.options.with_transport == "websocket":
             return "./transport"
         return self.options.transport_module
-
-    def endpoints(self) -> str:
-        return self.module(self.template("endpoints", servers=self.ir.servers))
-
-    def errors(self) -> str:
-        named = {
-            error.name: error
-            for route in (*self.ir.operations, *self.ir.notifications)
-            for error in route.errors
-            if error.name is not None
-        }
-        model_names = {
-            name
-            for error in named.values()
-            if error.data is not None
-            for name in _model_names(error.data)
-        }
-        model_import = _type_import(model_names, "./models") if model_names else ""
-        return self.module(
-            self.template(
-                "errors",
-                errors=tuple(named.values()),
-                model_import=model_import,
-            )
-        )
-
-    def index(self) -> str:
-        body = self.template(
-            "index",
-            client_name=self.client_name,
-            servers=self.ir.servers,
-            with_websocket=self.options.with_transport == "websocket",
-            nodes=self.nodes,
-            routes=bool(self.ir.operations),
-            notifications=self.ir.notifications,
-            binary_streams=self.ir.binary_streams,
-            sockets=self.ir.sockets,
-            models=bool(self.ir.declarations),
-        )
-        return self.module(body)
 
     def _type(self, expression: TypeExpr) -> str:
         if isinstance(expression, PrimitiveType):

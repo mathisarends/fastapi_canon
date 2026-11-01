@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 
+from fastapi_canon.error import ErrorConfigurationError
 from fastapi_canon.error.openapi import install_openapi
-from fastapi_canon.error.types import ErrorConfigurationError
 
 
 def install_openapi_contracts(app: FastAPI) -> None:

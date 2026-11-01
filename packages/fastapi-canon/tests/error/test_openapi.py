@@ -177,7 +177,8 @@ def test_runtime_payload_validates_against_documented_schema() -> None:
     app.include_router(router)
     registry.install(app)
     document = app.openapi()
-    response = TestClient(app).get("/resource")
+    with TestClient(app) as client:
+        response = client.get("/resource")
     documented_response = document["paths"]["/resource"]["get"]["responses"]["404"]
     schema = document["components"]["schemas"]["ResourceMissingProblem"]
 
@@ -231,7 +232,8 @@ def test_request_validation_contract_replaces_fastapi_default() -> None:
     assert response["content"]["application/problem+json"]["schema"] == {
         "$ref": "#/components/schemas/RequestValidationProblem"
     }
-    runtime = TestClient(app).get("/resource", params={"limit": "bad"})
+    with TestClient(app) as client:
+        runtime = client.get("/resource", params={"limit": "bad"})
     schema = document["components"]["schemas"]["RequestValidationProblem"]
     Draft202012Validator(schema).validate(runtime.json())
 

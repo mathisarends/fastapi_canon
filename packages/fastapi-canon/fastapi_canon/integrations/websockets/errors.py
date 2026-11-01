@@ -297,12 +297,12 @@ class RpcErrorBinding[ExceptionT: Exception]:
         self._message = message
         self._details = details
 
+    def __repr__(self) -> str:
+        return f"RpcErrorBinding({self.exception.__name__}, code={self.code!r})"
+
     @property
     def code(self) -> str:
         return self.error_type.code
-
-    def __repr__(self) -> str:
-        return f"RpcErrorBinding({self.exception.__name__}, code={self.code!r})"
 
     def message_for(self, error: ExceptionT) -> str:
         if callable(self._message):

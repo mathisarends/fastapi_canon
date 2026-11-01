@@ -113,7 +113,8 @@ class ContractError(ValueError):
     """The contract cannot be turned into a client."""
 
 
-def runtime_source() -> str:
+# Supported generator runtime-resource accessor; callers may be external.
+def runtime_source() -> str:  # smelt: ignore[SMT429] -- external API
     """Return the static TypeScript runtime shipped with the package."""
     return (
         resources.files("fastapi_canon.integrations.webrtc.codegen")
@@ -376,16 +377,6 @@ def _union(parts: Sequence[str]) -> str:
     return " | ".join(unique) if unique else "never"
 
 
-def _wrap(part: str) -> str:
-    if " | " in part or " & " in part or part.startswith("..."):
-        return f"({part})"
-    return part
-
-
-def _property(name: str) -> str:
-    return name if _IDENTIFIER.fullmatch(name) else json.dumps(name)
-
-
 # ------------------------------------------------------------------ client
 
 _RECEIVE_TYPES = {
@@ -400,6 +391,16 @@ _SEND_TYPES = {
     "binary": "ArrayBuffer | ArrayBufferView",
     "none": "never",
 }
+
+
+def _wrap(part: str) -> str:
+    if " | " in part or " & " in part or part.startswith("..."):
+        return f"({part})"
+    return part
+
+
+def _property(name: str) -> str:
+    return name if _IDENTIFIER.fullmatch(name) else json.dumps(name)
 
 
 def _client(

@@ -6,7 +6,7 @@ import sys
 import timeit
 from pathlib import Path
 
-from fastapi_canon.integrations.websockets._socket_messages import SocketMessages
+from fastapi_canon.integrations.websockets.socket_messages import SocketMessages
 from pydantic import BaseModel
 
 

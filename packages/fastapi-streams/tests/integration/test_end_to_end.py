@@ -153,18 +153,17 @@ async def test_current_canon_sse_immediately_and_closes_on_disconnect(
             events = client.compat.open_stream(stream_id=stream_id)
             async with asyncio.timeout(3):
                 async with aclosing(events):
-                    async for event in events:
-                        assert event.n == 1
-                        assert (
-                            await http.get(server + "/lifecycle/" + stream_id)
-                        ).json() == ["dependency_open"]
-                        if mode == "cancel":
-                            task = asyncio.create_task(anext(events))
-                            await asyncio.sleep(0)
-                            task.cancel()
-                            with pytest.raises(asyncio.CancelledError):
-                                await task
-                        break
+                    event = await anext(events)
+                    assert event.n == 1
+                    assert (
+                        await http.get(server + "/lifecycle/" + stream_id)
+                    ).json() == ["dependency_open"]
+                    if mode == "cancel":
+                        task = asyncio.create_task(anext(events))
+                        await asyncio.sleep(0)
+                        task.cancel()
+                        with pytest.raises(asyncio.CancelledError):
+                            await task
             await assert_server_cleanup(http, server, stream_id)
 
 

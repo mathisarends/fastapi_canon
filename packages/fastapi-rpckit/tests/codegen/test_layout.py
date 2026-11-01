@@ -108,6 +108,7 @@ def test_generated_python_modules_only_import_generated_modules(
         plain,
         PythonClientOptions(package="plain_client", with_transport="websocket"),
     )
+    assert "__init__.py" in files
 
     modules = _python_modules(files, "plain_client")
     for name, content in files.items():
@@ -128,6 +129,7 @@ def test_generated_typescript_modules_only_import_generated_modules(
         plain,
         TypeScriptClientOptions(client_name="PlainClient", with_transport="websocket"),
     )
+    assert "index.ts" in files
 
     emitted = {name[: -len(".ts")] for name in files if name.endswith(".ts")}
     for name, content in files.items():

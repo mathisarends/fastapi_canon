@@ -1,6 +1,12 @@
 repos:
   - repo: local
     hooks:
+      - id: smelt
+        name: Smelt architecture and test policies
+        entry: uv run --locked smelt check --config smelt.yml --fail-on warning
+        language: system
+        pass_filenames: false
+        always_run: true
       - id: workspace-lint
         name: Lint and format workspace members
         entry: uv run --locked python scripts/check.py lint

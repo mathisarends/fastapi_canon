@@ -92,7 +92,10 @@ async def test_expiry_closes_every_endpoint_with_exact_reason(path, expiry_clock
         timer = await expiry_clock.get()
         assert connection.expires_at == timer.timestamp == 1000
         timer.callback()
-        await factory._tasks[0]
+        # clock unit seam
+        await factory._tasks[  # smelt: ignore[SMT420] -- unit seam
+            0
+        ]
         assert client.close_code == 1008
         assert client.close_reason == "credentials_expired"
         assert closed[0].close_code == RpcConnectionClose.POLICY_VIOLATION
@@ -133,13 +136,17 @@ async def test_expiry_can_be_renewed_or_removed_and_disconnect_cancels_timer(
         connection.expire_at(3000)
         third = await expiry_clock.get()
         await client.close()
-        await factory._tasks[0]
+        # clock unit seam
+        await factory._tasks[  # smelt: ignore[SMT420] -- unit seam
+            0
+        ]
         assert third.cancelled and connection._expiry_timer is None
         third.callback()  # A stale callback cannot reopen or change the close.
         assert client.close_code == 1000
 
 
-def test_wall_clock_expiry_converts_to_monotonic_schedule(monkeypatch):
+# both clocks
+def test_expiry_clock_conversion(monkeypatch):  # smelt: ignore[SMT423] -- two seams
     captured = []
     monkeypatch.setattr(module, "time", lambda: 1000)
     monkeypatch.setattr(
@@ -155,8 +162,14 @@ def test_wall_clock_expiry_converts_to_monotonic_schedule(monkeypatch):
     def callback():
         pass
 
-    module._schedule_expiry(1005, callback)
-    module._schedule_expiry(999, callback)
+    # clock unit seam
+    module._schedule_expiry(  # smelt: ignore[SMT420] -- unit seam
+        1005, callback
+    )
+    # clock unit seam
+    module._schedule_expiry(  # smelt: ignore[SMT420] -- unit seam
+        999, callback
+    )
     assert captured == [(55, callback), (50, callback)]
 
 

@@ -26,7 +26,10 @@ from fastapi_canon.integrations.webrtc.errors import ErrorCode
 
 if TYPE_CHECKING:
     from fastapi_canon.integrations.webrtc.engine import Engine
-    from fastapi_canon.integrations.webrtc.ice import IceServerSource
+    from fastapi_canon.integrations.webrtc.ice import (  # smelt: ignore[SMT104] -- type
+        # Session declarations and peer/engine ports have mutual forward annotations.
+        IceServerSource,
+    )
     from fastapi_canon.integrations.webrtc.peer import IncomingTrack, Peer
 
 
@@ -213,6 +216,14 @@ class DataChannelSpec(Generic[Receive, Send]):
             object.__setattr__(self, key, value)
         self._validate()
 
+    @property
+    def receive_format(self) -> MessageFormat:
+        return _format(self.receive_model)
+
+    @property
+    def send_format(self) -> MessageFormat:
+        return _format(self.send_model)
+
     def _validate(self) -> None:
         if not _CHANNEL_NAME.fullmatch(self.name):
             raise ValueError(
@@ -238,14 +249,6 @@ class DataChannelSpec(Generic[Receive, Send]):
             raise ValueError("max_message_bytes must be positive")
         if self.id is not None and not 0 <= self.id <= 65534:
             raise ValueError("Data channel IDs must be between 0 and 65534")
-
-    @property
-    def receive_format(self) -> MessageFormat:
-        return _format(self.receive_model)
-
-    @property
-    def send_format(self) -> MessageFormat:
-        return _format(self.send_model)
 
     @cached_property
     def receive_adapter(self) -> TypeAdapter[Any] | None:

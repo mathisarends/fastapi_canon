@@ -1,0 +1,261 @@
+# yaml-language-server: $schema=.smelt.schema.json
+# Canon workspace guardrails; rationale: docs/architecture-guardrails.md.
+# Run: uv run --locked smelt check --fail-on warning
+version: 1
+project:
+  root_packages: [fastapi_canon, app]
+  source_roots: [packages/fastapi-canon, examples/reference-service/src]
+  test_roots: [packages/fastapi-canon/tests, packages/fastapi-streams/tests, packages/fastapi-rpckit/tests,
+    packages/fastapi-webrtc/tests, examples/reference-service/tests, tests]
+  coverage: strict
+  exclude:
+  - path: '**/codegen/templates/**'
+    reason: Generated SDK runtime assets; checked by generator drift, consumer and client-runtime
+      suites.
+  - path: packages/fastapi-canon/examples/**
+    reason: Runnable integration demos and generated SDKs; exercised by consumer and distribution
+      checks.
+  - path: '**/dist/**'
+    reason: Build outputs and disposable validation environments.
+architecture:
+  modules:
+    fastapi_canon.error: adapters
+    fastapi_canon.error.types: values
+    fastapi_canon.error.error: values
+    fastapi_canon.error.problem: values
+    fastapi_canon.error.validation: values
+    fastapi_canon.error.rendering: values
+    fastapi_canon.response: responses
+    fastapi_canon.error.contracts: values
+    fastapi_canon.error.openapi: adapters
+    fastapi_canon.error.handlers: adapters
+    fastapi_canon.error.registry: adapters
+    fastapi_canon.openapi: adapters
+    fastapi_canon.router: routing
+    fastapi_canon.feature: composition
+    fastapi_canon._version: values
+    fastapi_canon.policy: routing
+    fastapi_canon.error.catalog: adapters
+    fastapi_canon.codegen: generation
+    fastapi_canon.integrations: transport
+    fastapi_canon.integrations.sse: sse
+    fastapi_canon.integrations.websockets: rpc
+    fastapi_canon.integrations.webrtc: rtc
+    fastapi_canon.integrations.opentelemetry: telemetry
+    fastapi_canon.testing: testing
+    app: application
+    fastapi_canon.checks: analysis
+    fastapi_canon.check_error_contracts: analysis
+    fastapi_canon.cli: generation
+    fastapi_canon.__main__: generation
+    fastapi_canon.integrations.sse.codegen: generation
+    fastapi_canon.integrations.websockets.codegen: generation
+    fastapi_canon.integrations.webrtc.codegen: generation
+    fastapi_canon.integrations.websockets.adapters.opentelemetry: telemetry
+  layers:
+    values:
+      path: values
+      third_party:
+        default: deny
+        allow: [pydantic]
+    responses:
+      path: response
+      may_depend_on: [values]
+      third_party:
+        default: deny
+        allow: [pydantic]
+    adapters:
+      path: error
+      may_depend_on: [values, responses]
+      third_party:
+        default: deny
+        allow: [fastapi, starlette, pydantic]
+    routing:
+      path: router
+      may_depend_on: [values, responses, adapters]
+      third_party:
+        default: deny
+        allow: [fastapi, starlette, pydantic]
+    composition:
+      path: feature
+      may_depend_on: [values, responses, adapters, routing, telemetry, rpc]
+      third_party:
+        default: deny
+        allow: [dishka, fastapi, starlette, pydantic, opentelemetry, typing_extensions, pydantic_core]
+    analysis:
+      path: checks
+      may_depend_on: []
+      third_party:
+        default: deny
+        allow: []
+    transport:
+      path: integrations
+      may_depend_on: [values, responses, adapters, routing]
+      third_party:
+        default: deny
+        allow: [dishka, fastapi, starlette, pydantic, typing_extensions, pydantic_core]
+    sse:
+      path: sse
+      may_depend_on: [values, responses, adapters, routing]
+      third_party:
+        default: deny
+        allow: [dishka, fastapi, starlette, pydantic, typing_extensions, pydantic_core, jsonschema,
+          jinja2]
+    rpc:
+      path: websockets
+      may_depend_on: [values, responses, adapters, routing]
+      third_party:
+        default: deny
+        allow: [dishka, fastapi, starlette, pydantic, typing_extensions, pydantic_core, jinja2,
+          opentelemetry]
+    rtc:
+      path: webrtc
+      may_depend_on: [values, responses, adapters, routing]
+      third_party:
+        default: deny
+        allow:
+        - dishka
+        - fastapi
+        - starlette
+        - pydantic
+        - typing_extensions
+        - pydantic_core
+        - anyio
+        - aiortc
+        - av
+        - jinja2
+    telemetry:
+      path: opentelemetry
+      may_depend_on: [values, responses, adapters, routing, rpc]
+      third_party:
+        default: deny
+        allow: [dishka, fastapi, starlette, pydantic, typing_extensions, pydantic_core, opentelemetry]
+    generation:
+      path: codegen
+      may_depend_on:
+      - values
+      - responses
+      - adapters
+      - routing
+      - sse
+      - rpc
+      - rtc
+      - composition
+      - telemetry
+      - analysis
+      - testing
+      third_party:
+        default: deny
+        allow:
+        - dishka
+        - fastapi
+        - starlette
+        - pydantic
+        - typing_extensions
+        - pydantic_core
+        - jsonschema
+        - jinja2
+        - anyio
+        - aiortc
+        - av
+        - opentelemetry
+    testing:
+      path: testing
+      may_depend_on: [values, responses, adapters, routing, composition, telemetry, rpc]
+      third_party:
+        default: deny
+        allow: [dishka, fastapi, starlette, pydantic, typing_extensions, pydantic_core, opentelemetry]
+    application:
+      path: application
+      may_depend_on: [values, responses, adapters, routing, composition, telemetry, rpc]
+      third_party:
+        default: deny
+        allow:
+        - dishka
+        - fastapi
+        - starlette
+        - pydantic
+        - typing_extensions
+        - pydantic_core
+        - opentelemetry
+        - httpx
+        - httpx2
+        - sqlmodel
+        - sqlalchemy
+        - pydantic_settings
+  imports:
+    transitive: true
+    type_checking: include
+    cycles: [layers, siblings]
+structure:
+  forbidden_names: [utils, helpers, common, misc]
+  contracts:
+    canon:
+      match: fastapi_canon
+      required: [error, feature, openapi, response, router]
+      public: [., error, integrations.**, testing.**, check_error_contracts]
+      imports:
+        style: absolute
+      private_modules: forbid
+      future_annotations: when-needed
+      type_dispatch:
+        style: match
+        min_branches: 3
+      ordering:
+        constants_exempt: true
+    error-models:
+      match: fastapi_canon.error
+      required: [error, problem, registry, rendering, handlers, openapi, types]
+      module_docstrings: forbid
+tests:
+  layout: mirror
+  mirror: '{path}/test_{module}.py'
+  mirror_suffixes: true
+  forbid_mocks_in: [packages/fastapi-canon/tests/error/**]
+  max_patches_per_test: 1
+  unmirrored: [packages/fastapi-canon/tests/integrations/**, packages/fastapi-canon/tests/test_opentelemetry.py,
+    packages/fastapi-canon/tests/test_optional_streams.py, packages/fastapi-streams/tests/**,
+    packages/fastapi-rpckit/tests/**, packages/fastapi-webrtc/tests/**, examples/reference-service/tests/**,
+    tests/**]
+rules:
+  import-cycle: error
+  unclassified-module: error
+  public-definitions-first: error
+  bundled-instance-assignment: error
+  internal-public-member: error
+  internal-static-helper: error
+  redundant-str-enum-value: error
+  prefer-package-import: error
+  unnecessary-future-annotations: warning
+  prefer-match-type-dispatch: warning
+  private-test-access: error
+  string-patch-target: error
+  test-without-outcome-check: error
+  test-only-checks-possibly-empty-data: error
+  unbounded-test-wait: error
+  independent-test-case-loop: warning
+  async-mock-without-await-check: error
+  test-only-public-function: error
+  test-only-public-attribute: warning
+  unused-suppression: error
+  resolved-debt: error
+suppressions:
+  require_reason: true
+ignore:
+- rule: import-style
+  paths: ['**/__init__.py']
+  reason: Package facades deliberately use relative imports; ordinary Canon modules use absolute
+    imports (guides/imports-and-reexports.md).
+- rule: unknown-layer
+  modules: [app.**]
+  reason: The reference application uses its own feature topology, not the library layer directory
+    names; architecture.modules still classifies its complete source inventory.
+- rule: no-private-modules
+  paths: [packages/fastapi-canon/fastapi_canon/_version.py]
+  reason: The version literal is the documented input to release.toml and the build/release
+    tooling, not a hidden implementation module.
+- rule: prefer-package-import
+  paths: [examples/reference-service/src/app/features/tasks/infrastructure/repository.py]
+  reason: Concrete repository implementations deliberately import their owned ABC from its
+    definition for nominal conformance and IDE navigation (guides/imports-and-reexports.md).
+    Omit this exception if that guide changes.

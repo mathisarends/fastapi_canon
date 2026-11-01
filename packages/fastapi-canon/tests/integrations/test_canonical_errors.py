@@ -177,14 +177,14 @@ def test_nested_public_extensions_keep_aliases_and_valid_contract_references() -
     assert "not of type" in str(caught.value)
 
 
-def test_generated_python_stream_consumes_controls_and_exposes_typed_problem(
+@pytest.mark.asyncio
+async def test_generated_python_stream_consumes_controls_and_exposes_typed_problem(
     tmp_path: Path,
 ) -> None:
     app = create_app()
     files = generate_python(stream_ir(export_schema(app)))
     with _sdk(tmp_path, "canonical_sse_sdk", files) as sdk:
-
-        async def consume() -> None:
+        async with asyncio.timeout(15):
             async with (
                 app.router.lifespan_context(app),
                 httpx.AsyncClient(
@@ -206,16 +206,14 @@ def test_generated_python_stream_consumes_controls_and_exposes_typed_problem(
                     _ = [value async for value in client.projects.events(project_id=0)]
                 assert http_error.value.problem.status == 404
 
-        asyncio.run(consume())
 
-
-def test_python_stream_rejects_incomplete_or_malformed_controls_and_cleans_up(
+@pytest.mark.asyncio
+async def test_python_stream_rejects_incomplete_or_malformed_controls_and_cleans_up(
     tmp_path: Path,
 ) -> None:
     files = generate_python(stream_ir(export_schema(create_app())))
     with _sdk(tmp_path, "canonical_sse_sdk", files) as sdk:
-
-        async def consume() -> None:
+        async with asyncio.timeout(15):
             for wire, error_type in [
                 ('data: {"sequence":1}\n\n', sdk.TransportError),
                 ("event: canon.complete\ndata: null\n\n", sdk.ProtocolError),
@@ -238,8 +236,6 @@ def test_python_stream_rejects_incomplete_or_malformed_controls_and_cleans_up(
                             async for value in client.projects.events(project_id=1)
                         ]
                 assert response.is_closed
-
-        asyncio.run(consume())
 
 
 def test_stream_shared_declarations_and_safe_renderer_failures() -> None:
@@ -281,7 +277,8 @@ def test_stream_shared_declarations_and_safe_renderer_failures() -> None:
     )
 
 
-def test_cancelled_server_stream_runs_cleanup_without_terminal_problem() -> None:
+@pytest.mark.asyncio
+async def test_cancelled_server_stream_runs_cleanup_without_terminal_problem() -> None:
     from fastapi import FastAPI
 
     from examples.canonical_errors.app import ProjectEvent, errors
@@ -300,7 +297,7 @@ def test_cancelled_server_stream_runs_cleanup_without_terminal_problem() -> None
 
     app = Composition(Feature(name="events", routers=[router])).apply(FastAPI())
 
-    async def disconnect() -> None:
+    async with asyncio.timeout(15):
         started = asyncio.Event()
         messages = []
         first = True
@@ -340,8 +337,6 @@ def test_cancelled_server_stream_runs_cleanup_without_terminal_problem() -> None
         assert b"canon.complete" not in b"".join(
             message.get("body", b"") for message in messages
         )
-
-    asyncio.run(disconnect())
 
 
 def test_generated_python_rpc_error_uses_type_uri_and_preserves_extensions(

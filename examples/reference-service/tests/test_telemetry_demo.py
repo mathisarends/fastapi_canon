@@ -21,7 +21,8 @@ from opentelemetry.trace import SpanKind  # noqa: E402
 import app.telemetry_demo as demo  # noqa: E402
 
 
-async def test_demo_sql_and_cross_service_http_trace(
+# providers and HTTP
+async def test_cross_service_trace(  # smelt: ignore[SMT423] -- two seams
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     url = f"sqlite+aiosqlite:///{tmp_path / 'demo.db'}"

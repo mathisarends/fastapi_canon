@@ -123,7 +123,8 @@ def test_json_response_is_self_contained_without_an_openapi_hook() -> None:
         "description": "Service health",
         "content": {"application/json": {"schema": {"type": "object"}}},
     }
-    assert TestClient(app).get("/health").json() == {"status": "ok"}
+    with TestClient(app) as client:
+        assert client.get("/health").json() == {"status": "ok"}
     assert "x-fastapi-canon" not in str(schema)
 
 

@@ -167,6 +167,7 @@ async def test_query_models_generate_working_flat_connections(
         check=True,
         capture_output=True,
         text=True,
+        timeout=120,
     )
     (tmp_path / "js/package.json").write_text('{"type":"module"}')
     async with serve(app) as base:
@@ -185,6 +186,7 @@ async def test_query_models_generate_working_flat_connections(
             check=True,
             capture_output=True,
             text=True,
+            timeout=120,
         )
         url = result.stdout.strip()
         assert url == f"{base}/filters?access_token=valid&tags=a&tags=b&region=eu"
@@ -364,6 +366,7 @@ def test_generated_names_reject_collisions_before_writing(
         capture_output=True,
         text=True,
         check=False,
+        timeout=120,
     )
     assert result.returncode == 0, result.stdout + result.stderr
 
@@ -653,5 +656,6 @@ def test_generated_clients_type_check(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
         check=False,
+        timeout=120,
     )
     assert result.returncode == 0, result.stdout + result.stderr

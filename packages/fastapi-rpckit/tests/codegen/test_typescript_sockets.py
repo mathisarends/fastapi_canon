@@ -248,6 +248,7 @@ def test_generated_typescript_sockets_pass_messages_through(
         capture_output=True,
         text=True,
         check=False,
+        timeout=120,
     )
     assert type_check.returncode == 0, type_check.stdout + type_check.stderr
 
@@ -256,6 +257,7 @@ def test_generated_typescript_sockets_pass_messages_through(
         capture_output=True,
         text=True,
         check=False,
+        timeout=120,
     )
     assert behavior.returncode == 0, behavior.stdout + behavior.stderr
 
@@ -275,6 +277,7 @@ def test_generated_typescript_sockets_are_prettier_formatted(
         capture_output=True,
         text=True,
         check=False,
+        timeout=120,
     )
 
     assert formatting.returncode == 0, formatting.stdout + formatting.stderr

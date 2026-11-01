@@ -127,6 +127,7 @@ async def test_the_typescript_binding_speaks_calc_over_a_real_socket(
         capture_output=True,
         text=True,
         check=False,
+        timeout=120,
     )
     assert type_check.returncode == 0, type_check.stdout + type_check.stderr
 

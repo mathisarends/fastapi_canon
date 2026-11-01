@@ -466,9 +466,9 @@ class _Types:
                 "supported; put constraints on scalar branches instead"
             )
         if "const" in node:
-            return self.literal(node["const"])
+            return _literal(node["const"])
         if "enum" in node:
-            return Union(tuple(self.literal(value) for value in node["enum"]))
+            return Union(tuple(_literal(value) for value in node["enum"]))
         for keyword in ("oneOf", "anyOf", "allOf"):
             if keyword in node:
                 members = tuple(self.parse(part) for part in node[keyword])
@@ -547,7 +547,7 @@ class _Types:
                         name,
                         self.parse(value),
                         name in required,
-                        self.literal(value["default"])
+                        _literal(value["default"])
                         if isinstance(value, dict)
                         and "default" in value
                         and isinstance(
@@ -571,12 +571,6 @@ class _Types:
         }:
             return Scalar("JsonValue")
         raise ContractError(f"Unsupported or ambiguous JSON Schema: {node!r}")
-
-    @staticmethod
-    def literal(value: Any) -> LiteralType:
-        if value is not None and not isinstance(value, str | int | float | bool):
-            raise ContractError("Object and array enum/const values are not supported")
-        return LiteralType(value)
 
     def declarations(self) -> tuple[Declaration, ...]:
         result: dict[str, Declaration] = {}
@@ -611,3 +605,9 @@ def _parameter_type(
             )
         case _:
             return False
+
+
+def _literal(value: Any) -> LiteralType:
+    if value is not None and not isinstance(value, str | int | float | bool):
+        raise ContractError("Object and array enum/const values are not supported")
+    return LiteralType(value)

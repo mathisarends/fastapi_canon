@@ -5,8 +5,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .analysis import _ROUTE_METHODS, _Analyzer, _Flow, _Unknown
-from .source import _Definition, _Source
+from fastapi_canon.checks.analysis import _ROUTE_METHODS, _Analyzer, _Flow, _Unknown
+from fastapi_canon.checks.source import _Definition, _Source
 
 _CANON_ROUTER = "fastapi_canon.CanonRouter"
 _ERROR = "fastapi_canon.Error"
@@ -74,7 +74,8 @@ def _keyword(node: ast.Call, name: str) -> ast.expr | None:
 class _Checker:
     def __init__(self, source: _Source) -> None:
         self.source = source
-        self.analyzer = _Analyzer(source)
+        # flow-analysis unit seam
+        self._analyzer = _Analyzer(source)
 
     def check(self) -> _Report:
         operations: list[_Operation] = []
@@ -248,7 +249,7 @@ class _Checker:
                 if dependency and isinstance(
                     dependency.node, ast.FunctionDef | ast.AsyncFunctionDef
                 ):
-                    flow.extend(self.analyzer.function(dependency))
+                    flow.extend(self._analyzer.function(dependency))
                     flow.extend(self._dependencies(dependency, seen | {function.name}))
                 else:
                     flow.unknowns.append(
@@ -355,7 +356,7 @@ class _Checker:
             self._errors(_keyword(decorator, "raises"), function.module, operation)
         )
         contracts_known = not operation.diagnostics
-        flow = self.analyzer.function(function)
+        flow = self._analyzer.function(function)
         flow.extend(self._dependencies(function))
         for scope, layer in layers:
             flow.extend(self._router_dependencies(layer, scope, operation))

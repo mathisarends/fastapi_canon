@@ -377,6 +377,7 @@ def test_generated_typescript_is_prettier_formatted(
         capture_output=True,
         text=True,
         check=False,
+        timeout=120,
     )
 
     assert formatting.returncode == 0, formatting.stdout + formatting.stderr
@@ -487,6 +488,7 @@ def test_generated_typescript_passes_strict_type_checking(
         capture_output=True,
         text=True,
         check=False,
+        timeout=120,
     )
 
     assert type_check.returncode == 0, type_check.stdout + type_check.stderr
@@ -566,5 +568,6 @@ def test_sdk_error_types_do_not_require_upgrading_the_consumers_lib_target(
         ],
         capture_output=True,
         text=True,
+        timeout=120,
     )
     assert result.returncode == 0, result.stdout + result.stderr

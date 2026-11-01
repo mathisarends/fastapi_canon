@@ -61,7 +61,8 @@ def test_generic_http_responses_match_the_runtime_handler() -> None:
         "instance": {"type": "string", "format": "uri-reference"},
     }
 
-    response = TestClient(app).get("/protected")
+    with TestClient(app) as client:
+        response = client.get("/protected")
 
     assert response.status_code == 401
     assert response.headers["content-type"] == "application/problem+json"

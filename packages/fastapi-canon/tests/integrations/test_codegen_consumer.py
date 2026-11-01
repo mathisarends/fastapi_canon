@@ -23,7 +23,8 @@ class InvoiceLine(BaseModel):
     unit_price: Decimal | None
 
 
-def test_python_decimal_schema_imports_validates_and_round_trips(
+@pytest.mark.asyncio
+async def test_python_decimal_schema_imports_validates_and_round_trips(
     tmp_path: Path,
 ) -> None:
     schema = InvoiceLine.model_json_schema(mode="serialization")
@@ -67,7 +68,7 @@ def test_python_decimal_schema_imports_validates_and_round_trips(
     try:
         sdk: Any = importlib.import_module("invoice_sdk")
 
-        async def exercise() -> None:
+        async with asyncio.timeout(15):
             wire = {"quantity": "2.125", "unit_price": "220.10"}
             response: dict[str, Any] = wire.copy()
 
@@ -89,7 +90,6 @@ def test_python_decimal_schema_imports_validates_and_round_trips(
                     with pytest.raises(sdk.ProtocolError):
                         await client.invoices.line()
 
-        asyncio.run(asyncio.wait_for(exercise(), timeout=15))
     finally:
         sys.path.remove(str(tmp_path))
         for name in tuple(sys.modules):

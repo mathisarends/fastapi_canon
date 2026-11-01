@@ -74,7 +74,8 @@ def test_fixture_generation_is_current():
     document = export_schema(app)
     snapshot = Path("tests/fixtures/models.openapi.json")
     assert json.loads(snapshot.read_text()) == document
-    for language, directory in (
+    # Verify both committed SDK fixtures against one shared exported contract.
+    for language, directory in (  # smelt: ignore[SMT427] -- shared scenario
         ("typescript", "generated"),
         ("python", "generated_python"),
     ):

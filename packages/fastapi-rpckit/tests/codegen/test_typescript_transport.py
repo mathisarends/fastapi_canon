@@ -283,9 +283,13 @@ def test_transport_resilience_in_node(document: dict[str, Any], tmp_path: Path) 
         ],
         capture_output=True,
         text=True,
+        timeout=120,
     )
     assert checked.returncode == 0, checked.stdout + checked.stderr
     result = subprocess.run(
-        [node, str(compiled / "transport.test.js")], capture_output=True, text=True
+        [node, str(compiled / "transport.test.js")],
+        capture_output=True,
+        text=True,
+        timeout=120,
     )
     assert result.returncode == 0, result.stdout + result.stderr

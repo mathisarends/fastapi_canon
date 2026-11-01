@@ -182,85 +182,87 @@ async def test_ten_reconnects_share_one_pump_and_retire_old_hubs(pool_runtime, t
 async def test_overflow_callback_failure_is_reported_once_and_delivery_continues(
     pool_runtime, caplog
 ):
-    transport = Notifications()
+    async with asyncio.timeout(10):
+        transport = Notifications()
 
-    async def factory(*args, **kwargs):
-        return transport
+        async def factory(*args, **kwargs):
+            return transport
 
-    def broken(*event):
-        raise ValueError("observer failed")
+        def broken(*event):
+            raise ValueError("observer failed")
 
-    core = pool_runtime.RpcClientCore(
-        pool(pool_runtime, factory), notification_queue_size=1, on_overflow=broken
-    )
-    stream = core.notifications("update", server="a")
-    first = asyncio.create_task(anext(stream))
-    await transport.started.wait()
-    transport.emit(0)
-    await first
-    await transport.processed.get()
-    for value in (1, 2, 3, 4):
-        transport.emit(value)
-    for _ in range(4):
-        await transport.processed.get()
-    assert core.dropped_notifications == 3
-    assert (await anext(stream))["params"]["value"] == 4
-    assert (
-        len(
-            [
-                record
-                for record in caplog.records
-                if record.message == "RPC overflow callback failed"
-            ]
+        core = pool_runtime.RpcClientCore(
+            pool(pool_runtime, factory), notification_queue_size=1, on_overflow=broken
         )
-        == 1
-    )
-    await stream.aclose()
-    await core.close()
+        stream = core.notifications("update", server="a")
+        first = asyncio.create_task(anext(stream))
+        await transport.started.wait()
+        transport.emit(0)
+        await first
+        await transport.processed.get()
+        for value in (1, 2, 3, 4):
+            transport.emit(value)
+        for _ in range(4):
+            await transport.processed.get()
+        assert core.dropped_notifications == 3
+        assert (await anext(stream))["params"]["value"] == 4
+        assert (
+            len(
+                [
+                    record
+                    for record in caplog.records
+                    if record.message == "RPC overflow callback failed"
+                ]
+            )
+            == 1
+        )
+        await stream.aclose()
+        await core.close()
 
 
 async def test_subscriber_overflow_counts_are_cumulative_and_warn_once(
     pool_runtime, caplog
 ):
-    transport = Notifications()
+    async with asyncio.timeout(10):
+        transport = Notifications()
 
-    async def factory(*args, **kwargs):
-        return transport
+        async def factory(*args, **kwargs):
+            return transport
 
-    source = pool(pool_runtime, factory)
-    events = []
-    core = pool_runtime.RpcClientCore(
-        source,
-        notification_queue_size=1,
-        on_overflow=lambda *event: events.append(event),
-    )
-    stream = core.notifications("update", server="a")
-    try:
-        first = asyncio.create_task(anext(stream))
-        await transport.started.wait()
-        transport.emit(1)
-        assert (await first)["params"]["value"] == 1
-        await transport.processed.get()
-        for value in (2, 3, 4):
-            transport.emit(value)
-        for _ in range(3):
-            await transport.processed.get()
-        assert core.dropped_notifications == 2
-        assert events == [("update", 1, "subscriber"), ("update", 2, "subscriber")]
-        assert (await anext(stream))["params"]["value"] == 4
-        assert (
-            len(
-                [
-                    r
-                    for r in caplog.records
-                    if "subscriber queue overflowed" in r.message
-                ]
-            )
-            == 1
+        source = pool(pool_runtime, factory)
+        events = []
+        core = pool_runtime.RpcClientCore(
+            source,
+            notification_queue_size=1,
+            on_overflow=lambda *event: events.append(event),
         )
-    finally:
-        await stream.aclose()
-        await core.close()
+        stream = core.notifications("update", server="a")
+        try:
+            first = asyncio.create_task(anext(stream))
+            await transport.started.wait()
+            transport.emit(1)
+            assert (await first)["params"]["value"] == 1
+            await transport.processed.get()
+            for value in (2, 3, 4):
+                transport.emit(value)
+            for _ in range(3):
+                await transport.processed.get()
+            assert core.dropped_notifications == 2
+            assert events == [("update", 1, "subscriber"), ("update", 2, "subscriber")]
+            assert (await anext(stream))["params"]["value"] == 4
+            assert (
+                len(
+                    [
+                        r
+                        for r in caplog.records
+                        if "subscriber queue overflowed" in r.message
+                    ]
+                )
+                == 1
+            )
+        finally:
+            await stream.aclose()
+            await core.close()
 
 
 async def test_transport_overflow_counts_drops_and_reports_its_buffer(
@@ -299,60 +301,62 @@ async def test_transport_overflow_counts_drops_and_reports_its_buffer(
 async def test_close_wakes_consumers_waiting_for_recovery_without_ending_shared_source(
     pool_runtime, borrowed
 ):
-    before = asyncio.all_tasks()
-    first = Notifications()
-    opening = asyncio.Event()
-    release = asyncio.Event()
-    calls = 0
+    async with asyncio.timeout(10):
+        before = asyncio.all_tasks()
+        first = Notifications()
+        opening = asyncio.Event()
+        release = asyncio.Event()
+        calls = 0
 
-    async def factory(*args, **kwargs):
-        nonlocal calls
-        calls += 1
-        if calls == 1:
-            return first
-        opening.set()
-        await release.wait()
-        return Notifications()
+        async def factory(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return first
+            opening.set()
+            await release.wait()
+            return Notifications()
 
-    source = pool(pool_runtime, factory, reconnect=True)
-    core = pool_runtime.RpcClientCore(source, close_transport=not borrowed)
-    one, two = (
-        core.notifications("update", server="a"),
-        core.notifications("update", server="a"),
-    )
-    a, b = asyncio.create_task(anext(one)), asyncio.create_task(anext(two))
-    await first.started.wait()
-    first.drop(pool_runtime)
-    await opening.wait()
-    a.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await a
-    await one.aclose()
-    await core.close()
-    with pytest.raises(StopAsyncIteration):
-        await asyncio.wait_for(b, 1)
-    await two.aclose()
-    if borrowed:
-        assert not source.closed.done()
-    await source.close()
-    assert not core._hubs
-    assert not asyncio.all_tasks() - before
+        source = pool(pool_runtime, factory, reconnect=True)
+        core = pool_runtime.RpcClientCore(source, close_transport=not borrowed)
+        one, two = (
+            core.notifications("update", server="a"),
+            core.notifications("update", server="a"),
+        )
+        a, b = asyncio.create_task(anext(one)), asyncio.create_task(anext(two))
+        await first.started.wait()
+        first.drop(pool_runtime)
+        await opening.wait()
+        a.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await a
+        await one.aclose()
+        await core.close()
+        with pytest.raises(StopAsyncIteration):
+            await asyncio.wait_for(b, 1)
+        await two.aclose()
+        if borrowed:
+            assert not source.closed.done()
+        await source.close()
+        assert not core._hubs
+        assert not asyncio.all_tasks() - before
 
 
 async def test_without_reconnect_notification_failure_is_preserved(pool_runtime):
-    transport = Notifications()
+    async with asyncio.timeout(10):
+        transport = Notifications()
 
-    async def factory(*args, **kwargs):
-        return transport
+        async def factory(*args, **kwargs):
+            return transport
 
-    source = pool(pool_runtime, factory)
-    core = pool_runtime.RpcClientCore(source)
-    stream = core.notifications("update", server="a")
-    call = asyncio.create_task(anext(stream))
-    await transport.started.wait()
-    transport.drop(pool_runtime)
-    with pytest.raises(pool_runtime.RpcConnectionLostError):
-        await call
-    assert not core._hubs
-    await stream.aclose()
-    await core.close()
+        source = pool(pool_runtime, factory)
+        core = pool_runtime.RpcClientCore(source)
+        stream = core.notifications("update", server="a")
+        call = asyncio.create_task(anext(stream))
+        await transport.started.wait()
+        transport.drop(pool_runtime)
+        with pytest.raises(pool_runtime.RpcConnectionLostError):
+            await call
+        assert not core._hubs
+        await stream.aclose()
+        await core.close()

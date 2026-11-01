@@ -52,7 +52,10 @@ _REGULAR_CLOSES = (
 )
 
 
-def trace_metadata(*, include_baggage: bool = False) -> dict[str, str]:
+# Public trace-propagation helper for application clients.
+def trace_metadata(  # smelt: ignore[SMT429] -- external API
+    *, include_baggage: bool = False
+) -> dict[str, str]:
     """Return the current W3C context as an RPC request metadata carrier."""
     carrier: dict[str, str] = {}
     TraceContextTextMapPropagator().inject(carrier)
@@ -340,16 +343,6 @@ class OpenTelemetry(RpcMiddleware):
             self._active_connections.add(1, attributes)
             self._connections.add(1, {**attributes, "rpckit.outcome": "accepted"})
 
-    async def _frame(self, size: int, direction: str) -> None:
-        state = _current_serving()
-        if self._metrics and not self._excluded.get() and state is not None:
-            attributes = {
-                **_endpoint_attributes(state.scope),
-                "rpckit.direction": direction,
-            }
-            self._frames.add(1, attributes)
-            self._bytes.add(size, attributes)
-
     async def stream_frame_sent(self, connection: RpcConnection, size: int) -> None:
         await self._frame(size, "outbound")
 
@@ -364,6 +357,16 @@ class OpenTelemetry(RpcMiddleware):
         state = _current_serving()
         if self._metrics and not self._excluded.get() and state is not None:
             self._slow_consumers.add(1, _endpoint_attributes(state.scope))
+
+    async def _frame(self, size: int, direction: str) -> None:
+        state = _current_serving()
+        if self._metrics and not self._excluded.get() and state is not None:
+            attributes = {
+                **_endpoint_attributes(state.scope),
+                "rpckit.direction": direction,
+            }
+            self._frames.add(1, attributes)
+            self._bytes.add(size, attributes)
 
 
 def _endpoint_attributes(

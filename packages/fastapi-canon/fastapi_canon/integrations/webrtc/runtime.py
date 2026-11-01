@@ -278,7 +278,7 @@ class SessionRuntime:
                 if self.code is not None or channel.closed.is_set():
                     raise StopAsyncIteration
                 getter = asyncio.ensure_future(channel.queue.get())
-                stop = asyncio.ensure_future(self._first(self._done, channel.closed))
+                stop = asyncio.ensure_future(_first(self._done, channel.closed))
                 try:
                     await asyncio.wait(
                         {getter, stop}, return_when=asyncio.FIRST_COMPLETED
@@ -336,10 +336,6 @@ class SessionRuntime:
         elif handle.owned:
             self._release_track(handle.native)
 
-    def _release_track(self, native: Any) -> None:
-        if self._owned_tracks.pop(id(native), None) is not None:
-            _stop_native(native)
-
     async def stats(self) -> ConnectionStats:
         peer = self._require_peer()
         try:
@@ -348,6 +344,10 @@ class SessionRuntime:
             raise WebRtcError(ErrorCode.ENGINE_FAILURE) from error
 
     # --------------------------------------------------------------- startup
+
+    def _release_track(self, native: Any) -> None:
+        if self._owned_tracks.pop(id(native), None) is not None:
+            _stop_native(native)
 
     async def _accept(self) -> bool:
         offered = self._ws.scope.get("subprotocols") or []
@@ -1049,17 +1049,8 @@ class SessionRuntime:
     async def _until(self, *events: asyncio.Event) -> None:
         """Wait for any of ``events``; raise once the session terminates."""
         if not any(event.is_set() for event in events):
-            await self._first(self._done, *events)
+            await _first(self._done, *events)
         self._ensure_active()
-
-    @staticmethod
-    async def _first(*events: asyncio.Event) -> None:
-        waiters = [asyncio.ensure_future(event.wait()) for event in events]
-        try:
-            await asyncio.wait(waiters, return_when=asyncio.FIRST_COMPLETED)
-        finally:
-            for waiter in waiters:
-                waiter.cancel()
 
     def _ensure_active(self) -> None:
         if self.code is not None:
@@ -1295,3 +1286,12 @@ def _decode(spec: DataChannelSpec, data: str | bytes) -> Any:
         return adapter.validate_json(data)
     except ValidationError:
         raise WebRtcError(ErrorCode.INVALID_MESSAGE) from None
+
+
+async def _first(*events: asyncio.Event) -> None:
+    waiters = [asyncio.ensure_future(event.wait()) for event in events]
+    try:
+        await asyncio.wait(waiters, return_when=asyncio.FIRST_COMPLETED)
+    finally:
+        for waiter in waiters:
+            waiter.cancel()

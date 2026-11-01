@@ -161,6 +161,7 @@ def test_union_clients_pass_target_formatting_and_types(
             capture_output=True,
             text=True,
             check=False,
+            timeout=120,
         )
         assert result.returncode == 0, result.stdout + result.stderr
     npx = shutil.which("npx.cmd") or shutil.which("npx")
@@ -184,6 +185,7 @@ def test_union_clients_pass_target_formatting_and_types(
         capture_output=True,
         text=True,
         check=False,
+        timeout=120,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     result = subprocess.run(
@@ -209,5 +211,6 @@ def test_union_clients_pass_target_formatting_and_types(
         capture_output=True,
         text=True,
         check=False,
+        timeout=120,
     )
     assert result.returncode == 0, result.stdout + result.stderr

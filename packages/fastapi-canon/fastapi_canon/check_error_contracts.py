@@ -5,7 +5,7 @@ import json
 from collections.abc import Sequence
 from pathlib import Path
 
-from fastapi_canon._checks.contracts import _check_error_contracts
+from fastapi_canon.checks.contracts import _check_error_contracts
 
 
 def _main(arguments: Sequence[str] | None = None) -> int:

@@ -64,7 +64,8 @@ class DishkaResolver:
             yield DishkaResolver(request_container)
 
 
-def dishka_router(
+# Public Dishka integration factory consumed by application code.
+def dishka_router(  # smelt: ignore[SMT429] -- external API
     service: RpcService,
     *,
     context: object | Mapping[type[Any], object] | None = None,

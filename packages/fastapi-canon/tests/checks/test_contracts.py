@@ -4,10 +4,28 @@ from textwrap import dedent
 
 import pytest
 
-from fastapi_canon._checks.analysis import _Flow
-from fastapi_canon._checks.contracts import _check_error_contracts, _Checker, _Report
-from fastapi_canon._checks.source import _Definition, _Source
-from fastapi_canon.check_error_contracts import _main
+from fastapi_canon.check_error_contracts import (
+    # static-flow unit seam
+    _main,  # smelt: ignore[SMT420] -- unit seam
+)
+from fastapi_canon.checks.analysis import (
+    # static-flow unit seam
+    _Flow,  # smelt: ignore[SMT420] -- unit seam
+)
+from fastapi_canon.checks.contracts import (
+    # static-flow unit seam
+    _check_error_contracts,  # smelt: ignore[SMT420] -- unit seam
+    # static-flow unit seam
+    _Checker,  # smelt: ignore[SMT420] -- unit seam
+    # static-flow unit seam
+    _Report,  # smelt: ignore[SMT420] -- unit seam
+)
+from fastapi_canon.checks.source import (
+    # static-flow unit seam
+    _Definition,  # smelt: ignore[SMT420] -- unit seam
+    # static-flow unit seam
+    _Source,  # smelt: ignore[SMT420] -- unit seam
+)
 
 PRELUDE = """
 from fastapi_canon import CanonRouter, Error, ErrorRegistry
@@ -805,15 +823,19 @@ def first(): shared()
 def second(): shared()
 """,
     )
-    checker = _Checker(_Source.read([tmp_path]))
+    checker = _Checker(
+        # static-flow unit seam
+        _Source.read([tmp_path])  # smelt: ignore[SMT420] -- unit seam
+    )
     calls: list[str] = []
-    original = checker.analyzer._analyze_function
+    analyzer = checker._analyzer  # smelt: ignore[SMT420] -- flow-analysis unit seam
+    original = analyzer._analyze_function
 
     def counted(function: _Definition, stack: tuple[str, ...]) -> _Flow:
         calls.append(function.name)
         return original(function, stack)
 
-    monkeypatch.setattr(checker.analyzer, "_analyze_function", counted)
+    monkeypatch.setattr(analyzer, "_analyze_function", counted)
     report = checker.check()
     assert calls.count("api.shared") == 1
     assert codes(report) == ["CAN001"]

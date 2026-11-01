@@ -48,6 +48,10 @@ class ErrorConfigurationError(ValueError):
     """Raised when error definitions cannot form a safe, coherent contract."""
 
 
+class FeatureConfigurationError(ErrorConfigurationError):
+    """Raised when feature contributions cannot be installed coherently."""
+
+
 def http_problem_title(status: int) -> str:
     """Return the stable title used for a normalized HTTP exception."""
     try:

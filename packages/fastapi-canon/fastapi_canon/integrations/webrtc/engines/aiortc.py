@@ -108,14 +108,6 @@ class AiortcEngine:
         return AiortcPeer(connection, observer, self._codec_preferences)
 
 
-def _ice_server(server: IceServer) -> RTCIceServer:
-    return RTCIceServer(
-        urls=list(server.urls),
-        username=server.username,
-        credential=server.credential,
-    )
-
-
 class AiortcPeer:
     def __init__(
         self,
@@ -140,15 +132,6 @@ class AiortcPeer:
     def connection_state(self) -> ConnectionState:
         return ConnectionState(self.connection.connectionState)
 
-    def _state_changed(self) -> None:
-        self._observer.connection_state(self.connection_state)
-
-    def _track(self, track: MediaStreamTrack) -> None:
-        self._observer.track(AiortcTrack(track))
-
-    def _datachannel(self, channel: RTCDataChannel) -> None:
-        self._observer.data_channel(AiortcDataChannel(channel))
-
     async def set_remote_description(self, description: SessionDescription) -> None:
         await self.connection.setRemoteDescription(
             RTCSessionDescription(sdp=description.sdp, type=description.type)
@@ -168,35 +151,10 @@ class AiortcPeer:
                     transceiver._codecs, transceiver._headerExtensions = saved
         return await self._apply_local(offer)
 
-    def _negotiated_parameters(self) -> dict[str, tuple[list[Any], list[Any]]]:
-        # aiortc's createOffer resets every transceiver to its default payload
-        # types and header-extension IDs. Browsers reject re-offers that remap
-        # them on an established m-line, so re-offers keep the negotiated ones.
-        return {
-            transceiver.mid: (
-                list(transceiver._codecs),
-                list(transceiver._headerExtensions),
-            )
-            for transceiver in self.connection.getTransceivers()
-            if transceiver.mid is not None
-            and transceiver.currentDirection is not None
-            and transceiver._codecs
-        }
-
     async def create_answer(self) -> SessionDescription:
         self._apply_codec_preferences()
         answer = await self.connection.createAnswer()
         return await self._apply_local(answer)
-
-    async def _apply_local(
-        self, description: RTCSessionDescription
-    ) -> SessionDescription:
-        await self.connection.setLocalDescription(description)
-        self._dirty = False
-        local = self.connection.localDescription
-        # aiortc embeds every gathered candidate in the description.
-        self._observer.ice_candidate(None)
-        return SessionDescription(type=DescriptionType(local.type), sdp=local.sdp)
 
     async def add_ice_candidate(self, candidate: IceCandidate | None) -> None:
         if candidate is None:
@@ -257,27 +215,28 @@ class AiortcPeer:
         outbound: list[MediaStats] = []
         round_trip: float | None = None
         for item in report.values():
-            if isinstance(item, RTCInboundRtpStreamStats):
-                inbound.append(
-                    MediaStats(
-                        kind=MediaKind(item.kind),
-                        packets=item.packetsReceived,
-                        packets_lost=item.packetsLost,
-                        # aiortc reports RTP timestamp units, but exposes no
-                        # codec/clock-rate link for this stream in its stats.
-                        jitter_seconds=None,
+            match item:
+                case RTCInboundRtpStreamStats():
+                    inbound.append(
+                        MediaStats(
+                            kind=MediaKind(item.kind),
+                            packets=item.packetsReceived,
+                            packets_lost=item.packetsLost,
+                            # aiortc reports RTP timestamp units, but exposes no
+                            # codec/clock-rate link for this stream in its stats.
+                            jitter_seconds=None,
+                        )
                     )
-                )
-            elif isinstance(item, RTCOutboundRtpStreamStats):
-                outbound.append(
-                    MediaStats(
-                        kind=MediaKind(item.kind),
-                        packets=item.packetsSent,
-                        bytes=item.bytesSent,
+                case RTCOutboundRtpStreamStats():
+                    outbound.append(
+                        MediaStats(
+                            kind=MediaKind(item.kind),
+                            packets=item.packetsSent,
+                            bytes=item.bytesSent,
+                        )
                     )
-                )
-            elif isinstance(item, RTCRemoteInboundRtpStreamStats):
-                round_trip = item.roundTripTime
+                case RTCRemoteInboundRtpStreamStats():
+                    round_trip = item.roundTripTime
         return ConnectionStats(
             connection_state=self.connection_state,
             selected_candidate_pair=self._selected_pair(),
@@ -285,6 +244,54 @@ class AiortcPeer:
             inbound=tuple(inbound),
             outbound=tuple(outbound),
         )
+
+    async def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        closing = asyncio.ensure_future(self.connection.close())
+        try:
+            done, _ = await asyncio.wait({closing}, timeout=_CLOSE_GRACE_SECONDS)
+            if not done:
+                self._abort_closing_sockets()
+            await closing
+        except BaseException:
+            closing.cancel()
+            raise
+
+    def _state_changed(self) -> None:
+        self._observer.connection_state(self.connection_state)
+
+    def _track(self, track: MediaStreamTrack) -> None:
+        self._observer.track(AiortcTrack(track))
+
+    def _datachannel(self, channel: RTCDataChannel) -> None:
+        self._observer.data_channel(AiortcDataChannel(channel))
+
+    def _negotiated_parameters(self) -> dict[str, tuple[list[Any], list[Any]]]:
+        # aiortc's createOffer resets every transceiver to its default payload
+        # types and header-extension IDs. Browsers reject re-offers that remap
+        # them on an established m-line, so re-offers keep the negotiated ones.
+        return {
+            transceiver.mid: (
+                list(transceiver._codecs),
+                list(transceiver._headerExtensions),
+            )
+            for transceiver in self.connection.getTransceivers()
+            if transceiver.mid is not None
+            and transceiver.currentDirection is not None
+            and transceiver._codecs
+        }
+
+    async def _apply_local(
+        self, description: RTCSessionDescription
+    ) -> SessionDescription:
+        await self.connection.setLocalDescription(description)
+        self._dirty = False
+        local = self.connection.localDescription
+        # aiortc embeds every gathered candidate in the description.
+        self._observer.ice_candidate(None)
+        return SessionDescription(type=DescriptionType(local.type), sdp=local.sdp)
 
     def _selected_pair(self) -> CandidatePairStats | None:
         # aiortc has no public selected-pair API; read aioice best-effort.
@@ -305,20 +312,6 @@ class AiortcPeer:
                         protocol=local.transport,
                     )
         return None
-
-    async def close(self) -> None:
-        if self._closed:
-            return
-        self._closed = True
-        closing = asyncio.ensure_future(self.connection.close())
-        try:
-            done, _ = await asyncio.wait({closing}, timeout=_CLOSE_GRACE_SECONDS)
-            if not done:
-                self._abort_closing_sockets()
-            await closing
-        except BaseException:
-            closing.cancel()
-            raise
 
     def _abort_closing_sockets(self) -> None:
         # Windows' proactor loop never reports a closed datagram transport while
@@ -343,6 +336,14 @@ class AiortcPeer:
             preferred = self._codec_preferences.get(MediaKind(transceiver.kind))
             if preferred:
                 _prefer(transceiver, preferred)
+
+
+def _ice_server(server: IceServer) -> RTCIceServer:
+    return RTCIceServer(
+        urls=list(server.urls),
+        username=server.username,
+        credential=server.credential,
+    )
 
 
 def _keep_negotiated(

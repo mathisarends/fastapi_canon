@@ -81,6 +81,54 @@ def _notifier_client() -> httpx2.AsyncClient:
     )
 
 
+# Public demo application factory for standalone telemetry services.
+def create_tasks_app() -> FastAPI:  # smelt: ignore[SMT429] -- external API
+    options, lifecycle = _telemetry("tasks")
+
+    class TracedDatabaseProvider(DatabaseProvider):
+        @provide(scope=Scope.APP)
+        async def engine(
+            self, settings: DatabaseSettings
+        ) -> AsyncIterator[AsyncEngine]:
+            engine = create_async_engine(settings.url, pool_pre_ping=True)
+            instrumentation = SQLAlchemyInstrumentor()
+            instrumentation.instrument(
+                engine=engine.sync_engine, tracer_provider=options.tracer_provider
+            )
+            try:
+                yield engine
+            finally:
+                instrumentation.uninstrument(engine=engine.sync_engine)
+                await engine.dispose()
+
+    app = FastAPI(title="Canon telemetry: tasks", lifespan=lifecycle)
+    app.include_router(health_router)
+    Composition(
+        Feature(name="database", providers=(TracedDatabaseProvider,)),
+        *FEATURES[1:],
+        _notification_feature(options),
+        telemetry=options,
+        errors=ErrorOptions(type_base="https://api.example.test/problems"),
+        router_factory=lambda: CanonRouter(prefix="/api/v1"),
+    ).apply(app)
+    return app
+
+
+# Public demo application factory for standalone telemetry services.
+def create_notifier_app() -> FastAPI:  # smelt: ignore[SMT429] -- external API
+    options, lifecycle = _telemetry("notifier")
+    router = CanonRouter()
+
+    @router.post("/notifications")
+    async def notify() -> dict[str, str]:
+        return {"status": "received"}
+
+    return Composition(
+        Feature(name="notifications", routers=(router,)),
+        telemetry=options,
+    ).apply(FastAPI(title="Canon telemetry: notifier", lifespan=lifecycle))
+
+
 def _notification_feature(options: Telemetry) -> Feature:
     class NotifierProvider(Provider):
         @provide(scope=Scope.APP)
@@ -114,49 +162,3 @@ def _notification_feature(options: Telemetry) -> Feature:
     return Feature(
         name="notifications", routers=(router,), providers=(NotifierProvider,)
     )
-
-
-def create_tasks_app() -> FastAPI:
-    options, lifecycle = _telemetry("tasks")
-
-    class TracedDatabaseProvider(DatabaseProvider):
-        @provide(scope=Scope.APP)
-        async def engine(
-            self, settings: DatabaseSettings
-        ) -> AsyncIterator[AsyncEngine]:
-            engine = create_async_engine(settings.url, pool_pre_ping=True)
-            instrumentation = SQLAlchemyInstrumentor()
-            instrumentation.instrument(
-                engine=engine.sync_engine, tracer_provider=options.tracer_provider
-            )
-            try:
-                yield engine
-            finally:
-                instrumentation.uninstrument(engine=engine.sync_engine)
-                await engine.dispose()
-
-    app = FastAPI(title="Canon telemetry: tasks", lifespan=lifecycle)
-    app.include_router(health_router)
-    Composition(
-        Feature(name="database", providers=(TracedDatabaseProvider,)),
-        *FEATURES[1:],
-        _notification_feature(options),
-        telemetry=options,
-        errors=ErrorOptions(type_base="https://api.example.test/problems"),
-        router_factory=lambda: CanonRouter(prefix="/api/v1"),
-    ).apply(app)
-    return app
-
-
-def create_notifier_app() -> FastAPI:
-    options, lifecycle = _telemetry("notifier")
-    router = CanonRouter()
-
-    @router.post("/notifications")
-    async def notify() -> dict[str, str]:
-        return {"status": "received"}
-
-    return Composition(
-        Feature(name="notifications", routers=(router,)),
-        telemetry=options,
-    ).apply(FastAPI(title="Canon telemetry: notifier", lifespan=lifecycle))

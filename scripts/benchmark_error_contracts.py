@@ -12,8 +12,8 @@ import tempfile
 from pathlib import Path
 from time import perf_counter
 
-from fastapi_canon._checks.contracts import _Checker
-from fastapi_canon._checks.source import _Source
+from fastapi_canon.checks.contracts import _Checker
+from fastapi_canon.checks.source import _Source
 
 ROOT = Path(__file__).resolve().parents[1]
 

@@ -80,7 +80,8 @@ def test_validation_location_is_stable_and_private_input_is_omitted(
     kwargs: dict[str, Any],
     expected: dict[str, str],
 ) -> None:
-    response = TestClient(make_app()).request(method, path, **kwargs)
+    with TestClient(make_app()) as client:
+        response = client.request(method, path, **kwargs)
     error = response.json()["errors"][0]
 
     assert response.status_code == 422

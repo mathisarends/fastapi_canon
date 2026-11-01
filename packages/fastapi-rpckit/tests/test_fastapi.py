@@ -149,12 +149,8 @@ async def test_send_translates_websocket_disconnect() -> None:
     socket = FastApiSocket.__new__(FastApiSocket)
     socket._websocket = DisconnectedWebSocket()
 
-    try:
+    with pytest.raises(RpcDisconnect):
         await socket.send("message")
-    except RpcDisconnect:
-        pass
-    else:
-        raise AssertionError("RpcDisconnect was not raised")
 
 
 async def test_send_preserves_unexpected_runtime_errors() -> None:
@@ -358,7 +354,11 @@ except ModuleNotFoundError as error:
     print(error.name, error, sep="|")
 """
     result = subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, check=False
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
     )
 
     assert result.stdout.strip() == ("fastapi|blocked fastapi")
@@ -1020,61 +1020,64 @@ def test_custom_handlers_require_explicit_context_injection() -> None:
 
 
 async def test_custom_handlers_release_the_scope_on_cancellation() -> None:
-    calls: list[str] = []
-    started = asyncio.Event()
+    async with asyncio.timeout(10):
+        calls: list[str] = []
+        started = asyncio.Event()
 
-    class Resolver:
-        @asynccontextmanager
-        async def enter_connection(self, values) -> AsyncGenerator["Resolver", None]:
-            calls.append("enter")
+        class Resolver:
+            @asynccontextmanager
+            async def enter_connection(
+                self, values
+            ) -> AsyncGenerator["Resolver", None]:
+                calls.append("enter")
+                try:
+                    yield self
+                finally:
+                    calls.append("exit")
+
+            async def resolve(self, dependency: type) -> JobOutput:
+                return JobOutput([])
+
+        async def handler(websocket: WebSocket, job: Inject[JobSession]) -> None:
+            await websocket.accept()
+            started.set()
             try:
-                yield self
+                await asyncio.Event().wait()
             finally:
-                calls.append("exit")
+                calls.append("handler cleanup")
 
-        async def resolve(self, dependency: type) -> JobOutput:
-            return JobOutput([])
-
-    async def handler(websocket: WebSocket, job: Inject[JobSession]) -> None:
-        await websocket.accept()
-        started.set()
-        try:
-            await asyncio.Event().wait()
-        finally:
-            calls.append("handler cleanup")
-
-    router = APIRouter(prefix="/jobs")
-    RpcRoutes(router, context=open_job_session, resolver=Resolver()).mount(
-        create_job_service().endpoint("events"), handler=handler
-    )
-    app = FastAPI()
-    app.include_router(router)
-
-    async def receive():
-        return {"type": "websocket.connect"}
-
-    async def send(message):
-        pass
-
-    serving = asyncio.create_task(
-        app(
-            {
-                "type": "websocket",
-                "path": f"/jobs/{KNOWN_JOB}/events",
-                "query_string": b"",
-                "headers": [],
-            },
-            receive,
-            send,
+        router = APIRouter(prefix="/jobs")
+        RpcRoutes(router, context=open_job_session, resolver=Resolver()).mount(
+            create_job_service().endpoint("events"), handler=handler
         )
-    )
-    try:
-        await asyncio.wait_for(started.wait(), timeout=5)
-    finally:
-        serving.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await serving
-    assert calls == ["enter", "handler cleanup", "exit"]
+        app = FastAPI()
+        app.include_router(router)
+
+        async def receive():
+            return {"type": "websocket.connect"}
+
+        async def send(message):
+            pass
+
+        serving = asyncio.create_task(
+            app(
+                {
+                    "type": "websocket",
+                    "path": f"/jobs/{KNOWN_JOB}/events",
+                    "query_string": b"",
+                    "headers": [],
+                },
+                receive,
+                send,
+            )
+        )
+        try:
+            await asyncio.wait_for(started.wait(), timeout=5)
+        finally:
+            serving.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await serving
+        assert calls == ["enter", "handler cleanup", "exit"]
 
 
 def test_custom_handlers_without_context_preserve_internal_parameter_names() -> None:

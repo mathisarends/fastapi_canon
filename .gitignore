@@ -3,6 +3,7 @@ __pycache__/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
+.smelt_cache/
 .venv/
 *.db
 .uv-cache/

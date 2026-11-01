@@ -9,7 +9,7 @@ from opentelemetry import trace
 from opentelemetry.trace import Span, SpanContext, SpanKind, Status, StatusCode
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from fastapi_canon.feature import FeatureConfigurationError
+from fastapi_canon.error.types import FeatureConfigurationError
 from fastapi_canon.integrations.opentelemetry.declarations import Telemetry
 from fastapi_canon.integrations.opentelemetry.ports import excluded
 

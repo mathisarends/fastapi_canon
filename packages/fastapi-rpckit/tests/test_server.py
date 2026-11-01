@@ -36,135 +36,138 @@ def _server(handler: GreetingState) -> RpcServer:
 async def test_deadlines_include_semaphore_wait_and_method_none_disables_default(
     monkeypatch, encoded
 ):
-    clock = ControlledDeadlines(monkeypatch)
-    channel = RpcChannel("deadlines")
-    entered = asyncio.Event()
-    cancelled = asyncio.Event()
-    release = asyncio.Event()
-    queued_ran = False
+    async with asyncio.timeout(10):
+        clock = ControlledDeadlines(monkeypatch)
+        channel = RpcChannel("deadlines")
+        entered = asyncio.Event()
+        cancelled = asyncio.Event()
+        release = asyncio.Event()
+        queued_ran = False
 
-    @channel.method()
-    async def inherited() -> None:
-        entered.set()
+        @channel.method()
+        async def inherited() -> None:
+            entered.set()
+            try:
+                await asyncio.Future()
+            except asyncio.CancelledError:
+                cancelled.set()
+                raise
+
+        @channel.method(timeout=3)
+        async def queued() -> None:
+            nonlocal queued_ran
+            queued_ran = True
+
+        @channel.method(timeout=None)
+        async def unbounded() -> str:
+            await release.wait()
+            return "ok"
+
+        server = channel.create_server(
+            limits=RpcLimits(max_concurrency=1, request_timeout=10), strict_errors=True
+        )
+
+        async def call(method, request_id):
+            raw = {"jsonrpc": "2.0", "method": f"deadlines.{method}", "id": request_id}
+            if encoded:
+                return json.loads(await server.handle_json(json.dumps(raw)))
+            return (await server.handle(raw)).model_dump(mode="json")
+
+        running = asyncio.create_task(call("inherited", 1))
+        deadline, first = await clock.next()
+        assert 9 < deadline - asyncio.get_running_loop().time() <= 10
+        await entered.wait()
+        waiting = asyncio.create_task(call("queued", 2))
+        deadline, second = await clock.next()
+        assert 2 < deadline - asyncio.get_running_loop().time() <= 3
+        no_deadline = asyncio.create_task(call("unbounded", 3))
         try:
-            await asyncio.Future()
-        except asyncio.CancelledError:
-            cancelled.set()
-            raise
-
-    @channel.method(timeout=3)
-    async def queued() -> None:
-        nonlocal queued_ran
-        queued_ran = True
-
-    @channel.method(timeout=None)
-    async def unbounded() -> str:
-        await release.wait()
-        return "ok"
-
-    server = channel.create_server(
-        limits=RpcLimits(max_concurrency=1, request_timeout=10), strict_errors=True
-    )
-
-    async def call(method, request_id):
-        raw = {"jsonrpc": "2.0", "method": f"deadlines.{method}", "id": request_id}
-        if encoded:
-            return json.loads(await server.handle_json(json.dumps(raw)))
-        return (await server.handle(raw)).model_dump(mode="json")
-
-    running = asyncio.create_task(call("inherited", 1))
-    deadline, first = await clock.next()
-    assert 9 < deadline - asyncio.get_running_loop().time() <= 10
-    await entered.wait()
-    waiting = asyncio.create_task(call("queued", 2))
-    deadline, second = await clock.next()
-    assert 2 < deadline - asyncio.get_running_loop().time() <= 3
-    no_deadline = asyncio.create_task(call("unbounded", 3))
-    try:
-        clock.expire(second)
-        response = await asyncio.wait_for(waiting, 1)
-        assert response["error"]["data"]["code"] == "request_timeout"
-        assert response["error"]["code"] == RpcErrorCode.SERVER_ERROR
-        assert not queued_ran
-        clock.expire(first)
-        assert (await running)["error"]["data"]["code"] == "request_timeout"
-        assert cancelled.is_set()
-        assert clock.created.empty()
-        assert not no_deadline.done()
-        release.set()
-        assert (await no_deadline)["result"] == "ok"
-    finally:
-        for task in (running, waiting, no_deadline):
-            task.cancel()
-        await asyncio.gather(running, waiting, no_deadline, return_exceptions=True)
+            clock.expire(second)
+            response = await asyncio.wait_for(waiting, 1)
+            assert response["error"]["data"]["code"] == "request_timeout"
+            assert response["error"]["code"] == RpcErrorCode.SERVER_ERROR
+            assert not queued_ran
+            clock.expire(first)
+            assert (await running)["error"]["data"]["code"] == "request_timeout"
+            assert cancelled.is_set()
+            assert clock.created.empty()
+            assert not no_deadline.done()
+            release.set()
+            assert (await no_deadline)["result"] == "ok"
+        finally:
+            for task in (running, waiting, no_deadline):
+                task.cancel()
+            await asyncio.gather(running, waiting, no_deadline, return_exceptions=True)
 
 
 async def test_deadline_cancels_dependency_resolution_and_exits_its_scope(monkeypatch):
 
-    from fastapi_canon.integrations.websockets import Inject, RpcRequestTimeoutError
+    async with asyncio.timeout(10):
+        from fastapi_canon.integrations.websockets import Inject, RpcRequestTimeoutError
 
-    clock = ControlledDeadlines(monkeypatch)
-    resolving = asyncio.Event()
-    exited = asyncio.Event()
+        clock = ControlledDeadlines(monkeypatch)
+        resolving = asyncio.Event()
+        exited = asyncio.Event()
 
-    class Resolver:
-        @asynccontextmanager
-        async def enter_scope(self):
-            try:
-                yield self
-            finally:
-                exited.set()
+        class Resolver:
+            @asynccontextmanager
+            async def enter_scope(self):
+                try:
+                    yield self
+                finally:
+                    exited.set()
 
-        async def resolve(self, dependency):
-            resolving.set()
-            await asyncio.Future()
+            async def resolve(self, dependency):
+                resolving.set()
+                await asyncio.Future()
 
-    channel = RpcChannel("dependencies")
+        channel = RpcChannel("dependencies")
 
-    @channel.method(timeout=2)
-    async def work(value: Inject[str]) -> str:
-        pytest.fail("Dependency resolution must expire before the handler starts")
+        @channel.method(timeout=2)
+        async def work(value: Inject[str]) -> str:
+            pytest.fail("Dependency resolution must expire before the handler starts")
 
-    server = channel.create_server(resolver=Resolver())
-    task = asyncio.create_task(
-        server.handle({"jsonrpc": "2.0", "method": "dependencies.work", "id": 1})
-    )
-    _, waiting = await clock.next()
-    await resolving.wait()
-    clock.expire(waiting)
-    response = await asyncio.wait_for(task, 1)
-    assert response.error.data.code == RpcRequestTimeoutError.code
-    assert exited.is_set()
+        server = channel.create_server(resolver=Resolver())
+        task = asyncio.create_task(
+            server.handle({"jsonrpc": "2.0", "method": "dependencies.work", "id": 1})
+        )
+        _, waiting = await clock.next()
+        await resolving.wait()
+        clock.expire(waiting)
+        response = await asyncio.wait_for(task, 1)
+        assert response.error.data.code == RpcRequestTimeoutError.code
+        assert exited.is_set()
 
 
 async def test_cancelling_standalone_batch_preserves_outer_cancellation():
-    channel = RpcChannel("shutdown")
-    started = asyncio.Queue()
-    finished = []
+    async with asyncio.timeout(10):
+        channel = RpcChannel("shutdown")
+        started = asyncio.Queue()
+        finished = []
 
-    @channel.method()
-    async def work() -> None:
-        started.put_nowait(True)
-        try:
-            await asyncio.Future()
-        finally:
-            finished.append(True)
+        @channel.method()
+        async def work() -> None:
+            started.put_nowait(True)
+            try:
+                await asyncio.Future()
+            finally:
+                finished.append(True)
 
-    server = channel.create_server()
-    task = asyncio.create_task(
-        server.handle(
-            [
-                {"jsonrpc": "2.0", "method": "shutdown.work", "id": request_id}
-                for request_id in (1, 2)
-            ]
+        server = channel.create_server()
+        task = asyncio.create_task(
+            server.handle(
+                [
+                    {"jsonrpc": "2.0", "method": "shutdown.work", "id": request_id}
+                    for request_id in (1, 2)
+                ]
+            )
         )
-    )
-    await started.get()
-    await started.get()
-    task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await task
-    assert finished == [True, True]
+        await started.get()
+        await started.get()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert finished == [True, True]
 
 
 async def test_handle_json_maps_deep_nesting_to_parse_error(handler, caplog) -> None:

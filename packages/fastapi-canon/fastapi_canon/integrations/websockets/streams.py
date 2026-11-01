@@ -4,7 +4,7 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict
 
-from fastapi_canon.integrations.websockets._activity import _Activity, notify_activity
+from fastapi_canon.integrations.websockets.activity import _Activity, notify_activity
 from fastapi_canon.integrations.websockets.connection import (
     RpcConnection,
     RpcConnectionClose,
@@ -48,12 +48,14 @@ class RpcBinaryInput:
     def __init__(self) -> None:
         raise TypeError("RpcBinaryInput instances are created by Canon")
 
-    @classmethod
-    def _create(cls, max_queue_size: int) -> Self:
-        self = cls.__new__(cls)
-        self._queue = asyncio.Queue[object](max_queue_size)
-        self._ended = False
+    def __aiter__(self) -> Self:
         return self
+
+    async def __anext__(self) -> bytes:
+        try:
+            return await self.receive()
+        except RpcInputEnded:
+            raise StopAsyncIteration from None
 
     @property
     def ended(self) -> bool:
@@ -68,14 +70,12 @@ class RpcBinaryInput:
             raise RpcInputEnded("The client ended its binary input")
         return item  # type: ignore[return-value]
 
-    def __aiter__(self) -> Self:
+    @classmethod
+    def _create(cls, max_queue_size: int) -> Self:
+        self = cls.__new__(cls)
+        self._queue = asyncio.Queue[object](max_queue_size)
+        self._ended = False
         return self
-
-    async def __anext__(self) -> bytes:
-        try:
-            return await self.receive()
-        except RpcInputEnded:
-            raise StopAsyncIteration from None
 
     async def _put(self, frame: bytes) -> None:
         await self._queue.put(frame)

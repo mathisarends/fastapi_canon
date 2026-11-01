@@ -692,7 +692,8 @@ async def test_inactive_and_rejected_sections_are_accepted() -> None:
         await signal.describe(
             "offer", sdp("audio recvonly", "video inactive", "video rejected")
         )
-        await signal.expect("description")
+        description = await signal.expect("description")
+        assert description["description"]["type"] == "answer"
         await signal.close()
 
 
@@ -1179,6 +1180,7 @@ async def test_sending_on_a_closed_channel() -> None:
         peer = await establish(signal, rtc)
         peer.channels["out"].close()
         await until(lambda: outcomes == ["channel_closed"])
+        assert outcomes == ["channel_closed"]
         await signal.close()
 
 
@@ -1205,6 +1207,7 @@ async def test_engine_send_failures() -> None:
         peer.channels["out"].fail_send = True
         peer.connect()
         await until(lambda: outcomes == ["engine_failure"])
+        assert outcomes == ["engine_failure"]
         await signal.close()
 
 
@@ -1443,6 +1446,7 @@ async def test_unhandled_tracks_are_drained() -> None:
         for index in range(3):
             remote.frames.put_nowait(index)
         await until(lambda: remote.frames.empty())
+        assert remote.frames.empty()
         await signal.close()
 
 

@@ -30,7 +30,7 @@ _JSON = (
 )
 
 
-def render_type(type_: Type, prefix: str = "") -> str:
+def _render_type(type_: Type, prefix: str = "") -> str:
     match type_:
         case Scalar(name="JsonValue"):
             return prefix + "JsonValue"
@@ -49,28 +49,28 @@ def render_type(type_: Type, prefix: str = "") -> str:
         case Reference(name=name):
             return prefix + name
         case Array(item=item):
-            return f"Array<{render_type(item, prefix=prefix)}>"
+            return f"Array<{_render_type(item, prefix=prefix)}>"
         case Union(members=members):
             return " | ".join(
-                dict.fromkeys(render_type(part, prefix=prefix) for part in members)
+                dict.fromkeys(_render_type(part, prefix=prefix) for part in members)
             )
         case Intersection(members=members):
             return " & ".join(
-                f"({render_type(part, prefix=prefix)})"
+                f"({_render_type(part, prefix=prefix)})"
                 if isinstance(part, Union)
-                else render_type(part, prefix=prefix)
+                else _render_type(part, prefix=prefix)
                 for part in members
             )
         case Object(fields=fields, additional=additional):
             parts = [
                 f"{_property_name(field.name)}{'' if field.required else '?'}: "
-                f"{render_type(field.type, prefix=prefix)};"
+                f"{_render_type(field.type, prefix=prefix)};"
                 for field in fields
             ]
             if additional is not None:
-                values = {render_type(additional, prefix=prefix)}
+                values = {_render_type(additional, prefix=prefix)}
                 values.update(
-                    render_type(field.type, prefix=prefix) for field in fields
+                    _render_type(field.type, prefix=prefix) for field in fields
                 )
                 if any(not field.required for field in fields):
                     values.add("undefined")
@@ -126,7 +126,7 @@ def generate_typescript(contract: Contract) -> dict[str, str]:
 
     add_filters(
         env,
-        ts_type=render_type,
+        ts_type=_render_type,
         json=json.dumps,
         pascal=pascal,
         input_name=_input_name,
@@ -155,7 +155,7 @@ def generate_typescript(contract: Contract) -> dict[str, str]:
                 f"export type {name} = {type_.target};"
             )
         else:
-            declarations.append(f"export type {name} = {render_type(type_)};")
+            declarations.append(f"export type {name} = {_render_type(type_)};")
     output["types.ts"] = "\n".join([_HEADER, _JSON, "", *declarations]) + "\n"
     for template in ("sse.ts", "errors.ts"):
         output[f"transport/{template}"] = (
@@ -289,5 +289,7 @@ def _required(operation: Operation) -> bool:
 
 def _error_type(operation: Operation) -> str:
     return " | ".join(
-        sorted({render_type(error.type, prefix="Types.") for error in operation.errors})
+        sorted(
+            {_render_type(error.type, prefix="Types.") for error in operation.errors}
+        )
     )

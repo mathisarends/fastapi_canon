@@ -145,14 +145,17 @@ def _extra_python_files(
         files[path.name] = content
         for node in ast.parse(content, filename=str(path)).body:
             names: list[str] = []
-            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
-                names = [node.name]
-            elif isinstance(node, ast.Assign):
-                names = [
-                    target.id for target in node.targets if isinstance(target, ast.Name)
-                ]
-            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-                names = [node.target.id]
+            match node:
+                case ast.FunctionDef() | ast.AsyncFunctionDef() | ast.ClassDef():
+                    names = [node.name]
+                case ast.Assign():
+                    names = [
+                        target.id
+                        for target in node.targets
+                        if isinstance(target, ast.Name)
+                    ]
+                case ast.AnnAssign() if isinstance(node.target, ast.Name):
+                    names = [node.target.id]
             for name in names:
                 if name in owners:
                     owners[name] = ""

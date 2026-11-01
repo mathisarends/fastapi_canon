@@ -20,7 +20,10 @@ FEATURES: tuple[Feature, ...] = (
 )
 
 
-def create_app(*, telemetry: Telemetry | None = None) -> FastAPI:
+# Public ASGI application factory used by deployment and tests.
+def create_app(  # smelt: ignore[SMT429] -- external API
+    *, telemetry: Telemetry | None = None
+) -> FastAPI:
     app = FastAPI(title="FastAPI Canon reference service")
     app.include_router(health_router)
     composition = Composition(

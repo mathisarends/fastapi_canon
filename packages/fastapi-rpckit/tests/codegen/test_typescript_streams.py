@@ -278,6 +278,7 @@ def test_generated_typescript_input_streams_follow_the_wire_protocol(
         capture_output=True,
         text=True,
         check=False,
+        timeout=120,
     )
     assert type_check.returncode == 0, type_check.stdout + type_check.stderr
 
@@ -286,5 +287,6 @@ def test_generated_typescript_input_streams_follow_the_wire_protocol(
         capture_output=True,
         text=True,
         check=False,
+        timeout=120,
     )
     assert behavior.returncode == 0, behavior.stdout + behavior.stderr

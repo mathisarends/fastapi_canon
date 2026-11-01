@@ -63,6 +63,7 @@ def test_generated_typescript_subscription(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
         check=False,
+        timeout=120,
     )
     assert formatted.returncode == 0, formatted.stdout + formatted.stderr
     runner = tmp_path / "subscription.test.ts"
@@ -252,6 +253,7 @@ def test_generated_typescript_subscription(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
         check=False,
+        timeout=120,
     )
     assert checked.returncode == 0, checked.stdout + checked.stderr
     behavior = subprocess.run(
@@ -259,5 +261,6 @@ def test_generated_typescript_subscription(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
         check=False,
+        timeout=120,
     )
     assert behavior.returncode == 0, behavior.stdout + behavior.stderr

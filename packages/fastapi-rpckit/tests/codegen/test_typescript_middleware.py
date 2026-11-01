@@ -65,6 +65,7 @@ def test_middleware_public_types_are_strictly_checked(cancellation_sdk):
         ],
         capture_output=True,
         text=True,
+        timeout=120,
     )
     assert checked.returncode == 0, checked.stdout + checked.stderr
 

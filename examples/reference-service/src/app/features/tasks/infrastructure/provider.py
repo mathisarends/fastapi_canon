@@ -2,8 +2,7 @@ from dishka import Provider, Scope, provide
 from fastapi_canon.integrations.opentelemetry import observe
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.features.tasks.application import TaskService
-from app.features.tasks.application.service import TaskNotFound
+from app.features.tasks.application import TaskNotFound, TaskService
 from app.features.tasks.domain import TaskRepository
 from app.features.tasks.infrastructure.repository import SqlTaskRepository
 
