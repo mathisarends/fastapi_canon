@@ -1,0 +1,11 @@
+{
+  "include": [
+    "../fastapi_canon/integrations/sse",
+    "../examples/sse",
+    "../tests/fixtures/sse/generated_python"
+  ],
+  "venvPath": "..",
+  "venv": ".venv",
+  "typeCheckingMode": "strict",
+  "pythonVersion": "3.12"
+}

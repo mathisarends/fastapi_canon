@@ -1,0 +1,28 @@
+[tool.mypy]
+python_version = "3.12"
+strict = true
+explicit_package_bases = true
+files = [
+    "fastapi_canon/integrations/webrtc",
+    "tests/unit/integrations/webrtc",
+    "tests/integration/integrations/webrtc/engine",
+    "tests/contract/integrations/webrtc",
+    "examples/webrtc",
+]
+exclude = ["node_modules"]
+pretty = true
+show_error_codes = true
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = ["av", "av.*"]
+ignore_missing_imports = true
+
+
+[tool.coverage.run]
+branch = true
+source = ["fastapi_canon.integrations.webrtc"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 85

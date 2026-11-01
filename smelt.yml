@@ -1,24 +1,37 @@
 # yaml-language-server: $schema=.smelt.schema.json
-# Canon workspace guardrails; rationale: docs/architecture-guardrails.md.
+# Canon package guardrails; rationale: docs/architecture-guardrails.md.
 # Run: uv run --locked smelt check --fail-on warning
 version: 1
 project:
-  root_packages: [fastapi_canon, app]
-  source_roots: [packages/fastapi-canon, examples/reference-service/src]
-  test_roots: [packages/fastapi-canon/tests, packages/fastapi-streams/tests, packages/fastapi-rpckit/tests,
-    packages/fastapi-webrtc/tests, examples/reference-service/tests, tests]
+  root_packages: [fastapi_canon, app, scripts, examples]
+  source_roots: [., examples/reference-service/src]
+  test_roots: [tests/unit, tests/integration, tests/contract, tests/fixtures,
+    tests/browser, examples/reference-service/tests]
   coverage: strict
   exclude:
+  - path: tests/__init__.py
+    reason: Empty pytest package marker; test modules and fixtures are checked through their declared test roots.
   - path: '**/codegen/templates/**'
     reason: Generated SDK runtime assets; checked by generator drift, consumer and client-runtime
       suites.
-  - path: packages/fastapi-canon/examples/**
-    reason: Runnable integration demos and generated SDKs; exercised by consumer and distribution
-      checks.
+  - path: examples/canonical_errors/**
+    reason: Runnable demos and generated SDKs; checked by lint, consumer and installed-artifact suites.
+  - path: examples/showcase/**
+    reason: Runnable demos and generated SDKs; checked by lint, consumer and installed-artifact suites.
+  - path: examples/streams/**
+    reason: Runnable demos and generated SDKs; checked by lint, consumer and installed-artifact suites.
+  - path: examples/sse/**
+    reason: Runnable demos and generated SDKs; checked by lint, consumer and installed-artifact suites.
+  - path: examples/websockets/**
+    reason: Runnable demos and generated SDKs; checked by lint, consumer and installed-artifact suites.
+  - path: examples/webrtc/**
+    reason: Runnable demos and generated SDKs; checked by lint, consumer and installed-artifact suites.
   - path: '**/dist/**'
     reason: Build outputs and disposable validation environments.
 architecture:
   modules:
+    scripts: tooling
+    examples: showcase
     fastapi_canon.error: adapters
     fastapi_canon.error.types: values
     fastapi_canon.error.error: values
@@ -53,6 +66,18 @@ architecture:
     fastapi_canon.integrations.webrtc.codegen: generation
     fastapi_canon.integrations.websockets.adapters.opentelemetry: telemetry
   layers:
+    tooling:
+      path: scripts
+      may_depend_on: [values, responses, adapters, routing, composition, transport, sse, rpc, rtc, telemetry, generation, analysis, testing]
+      third_party:
+        default: deny
+        allow: [packaging, fastapi, pydantic, pydantic_core, typing_extensions, starlette, dishka, httpx, httpx2, jsonschema, jinja2, pytest, uvicorn, anyio, aiortc, av, opentelemetry]
+    showcase:
+      path: examples
+      may_depend_on: [values, responses, adapters, routing, composition, transport, sse, rpc, rtc, telemetry, generation, analysis, testing, application]
+      third_party:
+        default: deny
+        allow: [fastapi, pydantic, pydantic_core, typing_extensions, starlette, dishka, opentelemetry, httpx, httpx2, sqlmodel, sqlalchemy, pydantic_settings, uvicorn]
     values:
       path: values
       third_party:
@@ -216,12 +241,14 @@ tests:
   layout: mirror
   mirror: '{path}/test_{module}.py'
   mirror_suffixes: true
-  forbid_mocks_in: [packages/fastapi-canon/tests/error/**]
+  forbid_mocks_in: [tests/integration/**, tests/contract/**, tests/unit/error/**]
   max_patches_per_test: 1
-  unmirrored: [packages/fastapi-canon/tests/integrations/**, packages/fastapi-canon/tests/test_opentelemetry.py,
-    packages/fastapi-canon/tests/test_optional_streams.py, packages/fastapi-streams/tests/**,
-    packages/fastapi-rpckit/tests/**, packages/fastapi-webrtc/tests/**, examples/reference-service/tests/**,
-    tests/**]
+  # Retain focused protocol/scenario suites while core tests mirror their modules.
+  unmirrored: [tests/unit/integrations/**, tests/integration/integrations/**,
+    tests/contract/integrations/**, tests/integration/test_opentelemetry.py,
+    tests/integration/test_optional_streams.py, tests/integration/codegen/**,
+    tests/integration/test_stack.py, tests/unit/test_release.py,
+    examples/reference-service/tests/**]
 rules:
   import-cycle: error
   unclassified-module: error
@@ -256,8 +283,11 @@ ignore:
   modules: [app.**]
   reason: The reference application uses its own feature topology, not the library layer directory
     names; architecture.modules still classifies its complete source inventory.
+- rule: unknown-layer
+  modules: [examples.**]
+  reason: Runnable examples use application and transport names, not library layer directories; architecture.modules classifies their checked source.
 - rule: no-private-modules
-  paths: [packages/fastapi-canon/fastapi_canon/_version.py]
+  paths: [fastapi_canon/_version.py]
   reason: The version literal is the documented input to release.toml and the build/release
     tooling, not a hidden implementation module.
 - rule: prefer-package-import

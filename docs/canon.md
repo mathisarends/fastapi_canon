@@ -2,7 +2,7 @@
 
 The [canonicalization record](../CANONICALIZATION_DECISIONS.md) distinguishes the
 agreed target design from implemented capabilities. Canon includes
-[shared problem contracts](../packages/fastapi-canon/docs/problems.md).
+[shared problem contracts](problems.md).
 RPC problem envelopes, terminal SSE control events, and the combined client
 facade are included in this source.
 
@@ -38,12 +38,12 @@ dependencies, telemetry runtimes or media engines.
 | `otel` | Native FastAPI telemetry, observed Dishka ports and WebSocket middleware |
 | `codegen` | Template, schema-validation and model dependencies for generators |
 
-The old `packages/fastapi-streams`, `packages/fastapi-rpckit` and
-`packages/fastapi-webrtc` directories retain tests, examples and guides. Their
-`pyproject.toml` files contain tool settings, not separate library build metadata.
-The workspace and release configuration select only Canon as a library.
+The root `pyproject.toml` builds `fastapi_canon/` directly. Tests, examples, guides
+and development tooling are organized by purpose, without retained package
+projects. See [repository architecture](architecture.md) for the folder map.
+The release configuration selects only the root Canon library.
 
-Dependency ranges live in `packages/fastapi-canon/pyproject.toml`;
+Dependency ranges live in the root `pyproject.toml`;
 [compatibility](compatibility.md) records the tested scope. The generated SDK's
 HTTP or WebSocket client dependencies belong to its consumer. Application
 providers and exporters remain application-owned.
@@ -57,13 +57,13 @@ represent another PyPI distribution.
 
 | Responsibility | Public imports | Guide |
 | --- | --- | --- |
-| Application composition and Dishka lifecycle | `fastapi_canon.Composition`, `Feature` | [Composition](../packages/fastapi-canon/README.md#feature-composition) |
-| HTTP routes and contracts | `fastapi_canon.CanonRouter`, `RouterPolicy`, `Error`, `ErrorRegistry`, `CanonResponse` | [HTTP contracts](../packages/fastapi-canon/README.md#error-contracts) |
-| SSE with Canon HTTP contracts | `fastapi_canon.integrations.sse.CanonStreamRouter` | [SSE contracts](../packages/fastapi-canon/docs/streams.md) |
-| WebSocket RPC, messages and binary streams | `fastapi_canon.integrations.websockets.RpcChannel`, `RpcService`, `RpcRoutes`, `RpcSocket` | [WebSockets](../packages/fastapi-rpckit/docs/README.md) |
-| WebRTC with Canon admission errors | `fastapi_canon.integrations.webrtc.CanonWebRtcRouter`, `Session` | [WebRTC admission](../packages/fastapi-canon/docs/webrtc.md) |
-| Telemetry declarations | `fastapi_canon.integrations.opentelemetry.Telemetry`, `instrument` | [Telemetry](../packages/fastapi-canon/docs/telemetry.md) |
-| Isolated trace assertions | `fastapi_canon.testing.telemetry.SpanCapture` | [Telemetry testing](../packages/fastapi-canon/docs/telemetry.md) |
+| Application composition and Dishka lifecycle | `fastapi_canon.Composition`, `Feature` | [Composition](composition.md#feature-composition) |
+| HTTP routes and contracts | `fastapi_canon.CanonRouter`, `RouterPolicy`, `Error`, `ErrorRegistry`, `CanonResponse` | [HTTP contracts](composition.md#error-contracts) |
+| SSE with Canon HTTP contracts | `fastapi_canon.integrations.sse.CanonStreamRouter` | [SSE contracts](streams.md) |
+| WebSocket RPC, messages and binary streams | `fastapi_canon.integrations.websockets.RpcChannel`, `RpcService`, `RpcRoutes`, `RpcSocket` | [WebSockets](integrations/websockets/index.md) |
+| WebRTC with Canon admission errors | `fastapi_canon.integrations.webrtc.CanonWebRtcRouter`, `Session` | [WebRTC admission](webrtc.md) |
+| Telemetry declarations | `fastapi_canon.integrations.opentelemetry.Telemetry`, `instrument` | [Telemetry](telemetry.md) |
+| Isolated trace assertions | `fastapi_canon.testing.telemetry.SpanCapture` | [Telemetry testing](telemetry.md) |
 
 Typical application imports are explicit:
 
@@ -130,13 +130,13 @@ are changed through generators/templates and checked for drift.
 | --- | --- |
 | This document | Package boundaries, public namespaces and runtime ownership |
 | Package and feature guides | Implemented signatures, options and runnable examples |
-| [Migration guide](../packages/fastapi-canon/docs/package-migration.md) | Installation and import changes for existing consumers |
+| [Migration guide](package-migration.md) | Installation and import changes for existing consumers |
 | [Codegen guide](unified-canon-concept.md) | Implemented common generation workflow and support limits |
 | [Contributing](contributing.md) | Development commands and quality gates |
 | [Compatibility](compatibility.md) | Tested dependencies and consumer limits |
 | [Releases](releases.md) | Prepared versions, publication gates and historical evidence |
 
-The former transport package directories retain feature guides, examples and
-separate test/tool configurations. They are not installable workspace members.
-Historical changelogs and verified publication records keep their original names.
-Future releases use one Canon changelog, version, tag and artifact set.
+Transport guides live in `docs/integrations/`, examples in `examples/` and suites
+in the shared test roots. Historical changelogs and licenses live in `docs/history/`
+with their original distribution names. Releases use one Canon changelog, version,
+tag and artifact set.

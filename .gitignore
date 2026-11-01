@@ -15,3 +15,8 @@ node_modules/
 coverage*.xml
 coverage*.lcov
 htmlcov/
+
+build/
+.wheel-venv/
+tests/browser/webrtc/results/
+tests/browser/webrtc/report/

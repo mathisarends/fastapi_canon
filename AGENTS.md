@@ -1,74 +1,89 @@
-# Canon workspace
+# Working on fastapi-canon
 
-Read `CANONICALIZATION_DECISIONS.md` for the agreed target architecture and
-implementation scope. Canonical error registration, SSE/RPC bindings, and generated-client handling
-are documented in `packages/fastapi-canon/docs/problems.md`. The common `fastapi-canon generate` workflow, domain facade and shared model/error
-runtime are implemented; see `docs/unified-canon-concept.md`. Verify implemented behavior against the source.
+Read `smelt.yml` and `docs/architecture.md` before changing package boundaries or
+test structure. They describe this checkout's implemented library. The separate
+`CANONICALIZATION_DECISIONS.md` records broader design decisions; verify an API
+exists in this checkout before using it. Write repository Markdown in English.
 
-Use `README.md` for the package inventory, `docs/contributing.md` for development
-commands and `docs/compatibility.md` for the tested dependency scope. Package
-guides document implemented APIs. `docs/canon.md` defines the canonical package
-and public namespace boundaries; `docs/unified-canon-concept.md` documents the
-implemented version-1 codegen configuration and its explicit limits.
-Write all repository Markdown documentation in English, including changelogs,
-guides, and agent instructions.
-The canonical development and future release repository is
-`mathisarends/fastapi_canon`. Follow `docs/repository-migration.md` for the cutover;
-preserve historical release evidence in `mathisarends/canon`.
+Use `README.md` for the library overview, `docs/canon.md` for public namespaces,
+`docs/contributing.md` for commands and `docs/compatibility.md` for tested scope.
+Shared errors and common generation are documented in `docs/problems.md` and
+`docs/unified-canon-concept.md`. The canonical repository is
+`mathisarends/fastapi_canon`; preserve historical release evidence in
+`mathisarends/canon` as described in `docs/repository-migration.md`.
 
-## Boundaries
+## Layout and boundaries
 
-- `packages/fastapi-canon`: the only active release target, including composition,
-  Dishka lifecycle, HTTP contracts, `sse`, `websockets`, `webrtc` and their generators.
-  Core and CLI help must run without optional codegen, telemetry or engines.
-- Keep all optional integrations under `fastapi_canon.integrations`: `sse`,
-  `websockets`, `webrtc` and `opentelemetry`. Core HTTP/composition stays at the
-  package root. WebSocket framework adapters live in `.websockets.adapters`.
-- `packages/fastapi-streams` and `packages/fastapi-rpckit`: retained SSE and
-  WebSocket test/example/tooling directories. Preserve wire behavior and clients.
-- `packages/fastapi-webrtc`: retained WebRTC tests, examples and tooling for
-  signaling protocol `fastapi-webrtc.v1`. Browser tests
-  run with `uv run --locked python scripts/check.py browser` after
-  `pnpm exec playwright install chromium` in that package.
+- This is one root package: `pyproject.toml` builds `fastapi_canon/`. Do not add a
+  coordination project, `packages/` directory or Python/pnpm package workspace.
+  Keep one root `uv.lock`, `package.json` and `pnpm-lock.yaml` for development.
+- Core composition and HTTP contracts stay in `fastapi_canon`. Optional SSE,
+  WebSockets, WebRTC and telemetry stay under `fastapi_canon.integrations`.
+  WebSocket framework adapters live in `.websockets.adapters`. Core imports and
+  CLI help must work without codegen, telemetry runtimes or media engines.
+- Keep value objects, metadata and rendering independent of FastAPI, Starlette
+  and Dishka. HTTP/OpenAPI adapters consume the read-only `ErrorCatalog` protocol,
+  without importing the concrete registry. Routing depends on adapters;
+  composition owns routing, Dishka and lifecycle integration.
 - Transport modules must not import each other or load optional engines eagerly.
-- Use one Canon version. Add shared abstractions only for concrete reuse.
-- Application code follows `guides/architecture.md`: feature slices, inward
-  dependencies, framework-free domain, Dishka for application dependencies.
+  Use one Canon version. Add shared abstractions only for concrete reuse.
+- Consumer imports use `fastapi_canon`, `fastapi_canon.error` or the documented
+  integration/testing facades. Inside the library use absolute imports and the
+  existing facade when it does not reverse dependency direction. Package facades
+  retain their relative re-exports, following `guides/imports-and-reexports.md`.
+- Use descriptive module names. Keep private helpers inside those modules, with
+  public definitions before private implementation details. Preserve Python 3.12.
+- Tests mirror source under `tests/unit`, `tests/integration` and `tests/contract`.
+  Topic suffixes are supported; package tests use `test_<package>.py`. Protocol
+  scenario exceptions are explicit in Smelt. Shared snapshots belong under
+  `tests/fixtures`; TypeScript and real browser checks have their own test roots.
+- Integration and contract tests use real collaborators; mocks are forbidden.
+  Unit tests may use at most one object-targeted patch. Test observable outcomes
+  with finite local deadlines; do not access private production members to pass.
+- Put source/style policies in Smelt or Ruff, not AST-based pytest tests. Do not
+  weaken rules, add broad exclusions or record a debt baseline to pass checks.
+  Necessary inline exceptions need a concrete reason; unused suppressions fail.
+- Runnable demos live in `examples/`, transport guides in `docs/integrations/`,
+  development scripts in `scripts/` and scoped analyzer settings in `tooling/`.
+  The reference service is an editable example dependency, not a release target.
+  Application code follows `guides/architecture.md`: feature slices, inward
+  dependencies, framework-free domain and Dishka for application dependencies.
 
-## Workflow
+## Workflow and verification
 
-Use the root Python environment, `uv.lock`, and the shared `pnpm-lock.yaml`.
-The root `package.json` pins pnpm; see `docs/contributing.md` for setup:
+Run from the root:
 
 ```console
-uv sync --locked --all-packages --all-groups
+uv sync --frozen --all-groups
 pnpm install --frozen-lockfile --ignore-scripts
-uv run --locked python scripts/check.py all
-uv run --locked python scripts/check_distributions.py
+uv run --frozen smelt context <module-or-path>
 ```
 
-`check.py` also accepts `architecture`, `lint`, `types`, `test`, `clients`, and
-`browser`. It runs each
-package with its own configuration and working directory. Do not combine all
-package suites into one pytest process: their `tests`/`examples` modules collide.
-For a focused feature suite, run `uv run --locked --project ../.. python -m pytest ...`
-from its retained test directory.
+After editing, run:
 
-The root `smelt.yml` defines strict architecture, source and test policies; see
-`docs/architecture-guardrails.md`. Before editing, run
-`uv run --locked smelt context <module-or-path>`. After editing, run
-`uv run --locked smelt check --config smelt.yml --changed --fail-on warning` and
-fix findings. `scripts/check.py architecture` and `scripts/check.py all` run the
-full check, as does the root pre-commit hook. Warnings fail the gate. Use
-`smelt explain <rule-or-code>` when unsure; do not introduce a debt baseline or
-weaken rules merely to pass. Keep any deliberate exception narrowly located and
-give its concrete reason; unused suppressions fail.
+```console
+uv run --frozen smelt check --config smelt.yml --changed --fail-on warning --format json
+uv run --frozen ruff check .
+uv run --frozen ruff format --check .
+uv run --frozen mypy
+uv run --frozen pytest
+uv run --frozen pre-commit run --config .pre-commit-config.yml --all-files
+uv run --frozen smelt check --config smelt.yml --fail-on warning
+```
 
-Keep one root `uv.lock`. Preserve package-specific type/lint settings. Generated
-clients are changed through generators/templates, then checked for drift.
-Build/install checks must use actual artifacts in fresh environments, independent
-of workspace source overrides. Do not publish or archive repositories as part of
-routine development. Only root workflows under `.github/workflows/` define CI and releases.
+`uv run --frozen python scripts/check.py all` also runs the scoped transport type,
+client drift and TypeScript runtime/coverage checks. Gates are `architecture`,
+`lint`, `types`, `test`, `clients` and `browser`. All library Python tests share one
+root pytest invocation; use qualified test/example imports. The reference service
+also has a separate installed-application test invocation. Do not restore the old
+colliding package-local `tests` and `examples` namespaces.
+
+Use `smelt explain <rule-or-code>` for findings. CI and pre-commit enforce the full
+policy and fail on warnings. Inspect hook fixes and rerun affected checks.
+Generated clients are updated through generators/templates, then checked for
+exact drift. Build/install checks use actual artifacts in fresh environments,
+without source overrides. Only root `.github/workflows/` defines CI/releases.
+Do not publish or archive repositories as part of routine development.
 
 ## Release preparation
 
@@ -107,7 +122,7 @@ finalize the changelog date and pass CI for the final source. Only dispatch with
 On failure, follow the documented resume procedure with the original run's
 verified artifacts; do not replace published contents or move existing tags.
 After verified publication, update the README's current-release table and the
-release/compatibility records. All workspace package releases belong in this
+release/compatibility records. All Canon releases belong in this
 repository's central GitHub Releases list, under the `fastapi-canon-v` tag prefix.
 Always create the matching GitHub Release for every package publication, including
 changelog notes, the verified wheel/sdist and the release manifest. A publication

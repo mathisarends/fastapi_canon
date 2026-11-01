@@ -22,7 +22,7 @@ The generated API follows your domain: `client.projects.get()`,
 - [Documentation](#documentation)
 - [Repository](#repository)
 - [Current releases](#current-releases)
-- [Workspace](#workspace)
+- [Repository layout](#repository-layout)
 
 ## Core features
 
@@ -53,7 +53,7 @@ uv run fastapi-canon --help
 The base includes FastAPI, Pydantic and Dishka. All integrations live in the same
 `fastapi-canon` distribution; extras select their dependencies. Add `webrtc`
 for media sessions, `aiortc` for the reference media engine, or `otel` for
-telemetry. See [installation and migration](packages/fastapi-canon/docs/package-migration.md).
+telemetry. See [installation and migration](docs/package-migration.md).
 Python 3.12–3.14 is supported; see [compatibility](docs/compatibility.md).
 
 ## Core API: routes, errors and composition
@@ -121,9 +121,9 @@ typed result and validates the server's returned data.
 A feature can also contribute Dishka `providers=`, a `lifespan=` and optional
 `instrumentation=`. Composition owns installation and cleanup. Shared
 `RouterPolicy` declarations reduce repeated authentication, dependencies and
-error contracts. See the [core API guide](packages/fastapi-canon/README.md),
-[router policies](packages/fastapi-canon/README.md#router-policies) and
-[shared problem contracts](packages/fastapi-canon/docs/problems.md).
+error contracts. See the [core API guide](docs/composition.md),
+[router policies](docs/composition.md#router-policies) and
+[shared problem contracts](docs/problems.md).
 
 ## Streams: typed events from server to SDK
 
@@ -167,9 +167,9 @@ Unexpected EOF raises `TransportError`; malformed control frames raise
 completion from a broken connection. No application-specific SSE parser or
 second error mapping is needed.
 
-See [Canon stream contracts](packages/fastapi-canon/docs/streams.md),
-[stream clients](packages/fastapi-streams/docs/clients.md) and
-[terminal problem behavior](packages/fastapi-canon/docs/problems.md#what-goes-over-the-wire).
+See [Canon stream contracts](docs/streams.md),
+[stream clients](docs/integrations/sse/clients.md) and
+[terminal problem behavior](docs/problems.md#what-goes-over-the-wire).
 
 ## WebSockets: RPC calls as domain methods
 
@@ -222,9 +222,9 @@ errors; the consumer calls `client.projects.cancel(...)`. HTTP, SSE and RPC
 share the SDK's public model/error runtime. Protocol bindings stay internal.
 
 WebSockets also support notifications, subscriptions, typed sockets and binary
-streams, with explicit session lifecycles. See [services and channels](packages/fastapi-rpckit/docs/services.md),
-[generated clients](packages/fastapi-rpckit/docs/clients.md) and
-[socket contracts](packages/fastapi-rpckit/docs/sockets.md).
+streams, with explicit session lifecycles. See [services and channels](docs/integrations/websockets/services.md),
+[generated clients](docs/integrations/websockets/clients.md) and
+[socket contracts](docs/integrations/websockets/sockets.md).
 
 ## Generate and use the SDK
 
@@ -313,7 +313,7 @@ The [codegen guide](docs/unified-canon-concept.md) covers naming, model identity
 connection/auth options, operation selection and output ownership. It also
 documents limits: unified HTTP generation supports JSON and declared SSE;
 unsupported multipart/file operations must be explicitly excluded. WebRTC
-generation targets TypeScript. The [runnable canonical-errors example](packages/fastapi-canon/examples/canonical_errors/app.py)
+generation targets TypeScript. The [runnable canonical-errors example](examples/canonical_errors/app.py)
 includes a complete multi-transport configuration.
 
 ## Check that errors are mapped and declared
@@ -345,24 +345,24 @@ This checks supported explicit source paths, not every possible runtime failure.
 Abstract Dishka ports and dynamic code can leave analysis incomplete. The checker
 currently covers direct `CanonRouter` operations, not SSE/RPC/WebRTC handlers.
 Keep runtime contract validation and behavioral tests. See
-[error checking](packages/fastapi-canon/docs/error-checking.md) for boundaries and
+[error checking](docs/error-checking.md) for boundaries and
 CI options.
 
 ## Documentation
 
 | Goal | Start here |
 | --- | --- |
-| Build a feature with routes, providers and lifespans | [Core API and composition](packages/fastapi-canon/README.md) |
+| Build a feature with routes, providers and lifespans | [Core API and composition](docs/composition.md) |
 | Choose canonical imports and ownership boundaries | [Public API](docs/canon.md) |
 | Design an application humans and agents can extend | [Architecture](guides/architecture.md), [guide index](guides/README.md) |
-| Map domain errors across HTTP, SSE and RPC | [Shared problems](packages/fastapi-canon/docs/problems.md) |
-| Check mapping/declaration coverage | [Error checking](packages/fastapi-canon/docs/error-checking.md) |
+| Map domain errors across HTTP, SSE and RPC | [Shared problems](docs/problems.md) |
+| Check mapping/declaration coverage | [Error checking](docs/error-checking.md) |
 | Generate Python and TypeScript domain SDKs | [Codegen workflow](docs/unified-canon-concept.md) |
-| Build typed SSE streams | [Stream contracts](packages/fastapi-canon/docs/streams.md), [SSE guide index](packages/fastapi-streams/docs/README.md) |
-| Build WebSocket RPC, subscriptions or sockets | [WebSocket guide index](packages/fastapi-rpckit/docs/README.md) |
-| Add WebRTC sessions | [WebRTC contracts](packages/fastapi-canon/docs/webrtc.md) |
-| Add tracing and metrics | [Telemetry](packages/fastapi-canon/docs/telemetry.md) |
-| Upgrade an existing application | [Package migration](packages/fastapi-canon/docs/package-migration.md), [RPC migration](packages/fastapi-rpckit/docs/migration.md) |
+| Build typed SSE streams | [Stream contracts](docs/streams.md), [SSE guide index](docs/integrations/sse/index.md) |
+| Build WebSocket RPC, subscriptions or sockets | [WebSocket guide index](docs/integrations/websockets/index.md) |
+| Add WebRTC sessions | [WebRTC contracts](docs/webrtc.md) |
+| Add tracing and metrics | [Telemetry](docs/telemetry.md) |
+| Upgrade an existing application | [Package migration](docs/package-migration.md), [RPC migration](docs/integrations/websockets/migration.md) |
 | Run a complete application | [Reference service](examples/reference-service/README.md), [HTTP/SSE/RPC example](examples/stack_service.py) |
 | Contribute or prepare a release | [Contributing](docs/contributing.md), [guardrails](docs/architecture-guardrails.md), [compatibility](docs/compatibility.md), [releases](docs/releases.md) |
 | Understand broader design decisions | [Canonicalization record](CANONICALIZATION_DECISIONS.md) |
@@ -381,7 +381,7 @@ sequence, publisher setup and historical release locations.
 
 Canon 0.10.0 is the current published unified distribution. The source on `main`
 prepares **0.11.0 (unreleased)**; its breaking telemetry migration is recorded in
-the [changelog](packages/fastapi-canon/CHANGELOG.md#0110---unreleased).
+the [changelog](CHANGELOG.md#0110---unreleased).
 The other names below are historical releases from the earlier four-distribution
 layout; use Canon's feature extras for current development.
 
@@ -398,32 +398,26 @@ version, tag, changelog and artifact set. Historical release URLs and assets sta
 in the former [`canon` release list](https://github.com/mathisarends/canon/releases)
 and their original repositories.
 
-## Workspace
+## Repository layout
 
-| Component | Location | Distribution / import |
-| --- | --- | --- |
-| Composition, Dishka, HTTP contracts | [`packages/fastapi-canon`](packages/fastapi-canon) | `fastapi-canon` / `fastapi_canon` |
-| Typed SSE and generated clients | [`SSE module`](packages/fastapi-canon/fastapi_canon/integrations/sse), [`tests and guides`](packages/fastapi-streams) | `fastapi-canon[sse]` / `fastapi_canon.integrations.sse` |
-| WebSocket RPC and generated clients | [`WebSockets module`](packages/fastapi-canon/fastapi_canon/integrations/websockets), [`tests and guides`](packages/fastapi-rpckit) | `fastapi-canon[websockets]` / `fastapi_canon.integrations.websockets` |
-| WebRTC sessions and generated browser clients | [`WebRTC module`](packages/fastapi-canon/fastapi_canon/integrations/webrtc), [`tests and guides`](packages/fastapi-webrtc) | `fastapi-canon[webrtc]` / `fastapi_canon.integrations.webrtc` |
-| Architecture conventions | [`guides`](guides) | feature slices, inward dependencies, Dishka |
-| Runnable architecture example | [`examples/reference-service`](examples/reference-service) | development-only workspace member |
+This repository builds one distribution, `fastapi-canon`, directly from its root
+`pyproject.toml`. The source package is `fastapi_canon/`; all optional integrations
+ship in that same wheel. Development uses one root Python environment and one
+Node toolchain, without a package workspace.
 
-`fastapi-rpckit` is the FastAPI-first successor to `pyrpckit`, with its existing
-WebSocket engine and protocol retained. See the [RPC migration guide](packages/fastapi-rpckit/docs/migration.md).
-Its initial release is 0.1.0. The existing source repositories remain available;
-current development and future Canon releases live here.
+| Location | Contents |
+| --- | --- |
+| [`fastapi_canon/`](fastapi_canon) | Composition, HTTP contracts, optional integrations and generators |
+| [`tests/`](tests) | Separate unit, integration and contract roots; fixtures, TypeScript and browser suites |
+| [`examples/`](examples) | Runnable applications and their generated clients, including the reference service |
+| [`docs/`](docs) | Library, transport and contributor documentation; predecessor history |
+| [`guides/`](guides) | Architecture conventions for consuming applications |
+| [`scripts/`](scripts), [`tooling/`](tooling) | Development/release entrypoints and scoped analyzer configurations |
 
-Start with [architecture](guides/architecture.md) when building an application.
-Use the [canonical namespace map](docs/canon.md#public-namespaces) to choose public
-imports and the feature guides for their implemented options. The
-[stack example](examples/stack_service.py) combines HTTP, SSE and RPC using one
-Dishka application container.
-
-Development uses a `uv` workspace with one root lockfile and separate
-test processes for each member. See [contributing](docs/contributing.md) for
-commands, [compatibility](docs/compatibility.md) for the tested scope, and
-[releases](docs/releases.md) for publication checks and historical releases.
+See [repository architecture](docs/architecture.md) for ownership and dependency
+rules, [contributing](docs/contributing.md) for root commands,
+[compatibility](docs/compatibility.md) for tested scope and
+[releases](docs/releases.md) for artifact verification and publication.
 
 The imported repositories remain available in Git history. Current development
 and future releases use `mathisarends/fastapi_canon`; historical releases and

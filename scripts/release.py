@@ -23,11 +23,20 @@ from typing import Any
 from packaging.requirements import Requirement
 from packaging.version import Version
 
+__all__ = [
+    "Package",
+    "packages",
+    "validate_release",
+    "artifact_hashes",
+    "publication_state",
+    "verify_published",
+]
+
 ROOT = Path(__file__).resolve().parents[1]
-ALLOWED = frozenset({"fastapi-canon"})
-NUMBER = r"(?:0|[1-9][0-9]*)"
-VERSION = re.compile(rf"{NUMBER}\.{NUMBER}\.{NUMBER}(?:(?:a|b|rc){NUMBER})?")
-REPORT = Path("dist/release-report/release.json")
+_ALLOWED = frozenset({"fastapi-canon"})
+_NUMBER = r"(?:0|[1-9][0-9]*)"
+_VERSION = re.compile(rf"{_NUMBER}\.{_NUMBER}\.{_NUMBER}(?:(?:a|b|rc){_NUMBER})?")
+_REPORT = Path("dist/release-report/release.json")
 
 
 @dataclass(frozen=True)
@@ -41,12 +50,10 @@ class Package:
 def packages(root: Path = ROOT) -> dict[str, Package]:
     configuration = _toml(root / "release.toml")
     selected = {entry["name"]: Package(**entry) for entry in configuration["package"]}
-    if set(selected) != ALLOWED or len(configuration["package"]) != len(ALLOWED):
-        raise ValueError(
-            "Only the workspace library distributions may be release targets"
-        )
+    if set(selected) != _ALLOWED or len(configuration["package"]) != len(_ALLOWED):
+        raise ValueError("Only the Canon library distribution may be release targets")
     for name, package in selected.items():
-        if package.directory != f"packages/{name}":
+        if package.directory != ".":
             raise ValueError(f"Invalid package directory for {name}")
         if package.module != name.replace("-", "_"):
             raise ValueError(f"Invalid import module for {name}")
@@ -91,7 +98,7 @@ def validate_release(
         if locked != [expected]:
             raise ValueError(f"uv.lock does not match {key}; run uv lock")
         _check_constant(root / item.directory / item.module / "_version.py", expected)
-    root_dependencies = _toml(root / "pyproject.toml")["project"]["dependencies"]
+    root_dependencies = _toml(root / "pyproject.toml")["dependency-groups"]["dev"]
     for key in projects:
         _check_pin(root_dependencies, key, projects[key]["version"])
     reference = _toml(root / "examples/reference-service/pyproject.toml")
@@ -272,17 +279,17 @@ def verify_published(report: dict[str, Any], root: Path = ROOT) -> None:
             )
 
 
-def main() -> None:
+def _main() -> None:
     parser = argparse.ArgumentParser(description="Prepare and verify Canon releases")
     parser.add_argument(
         "command", choices=("validate", "artifacts", "state", "verify-pypi", "finish")
     )
-    parser.add_argument("--package", required=True, choices=sorted(ALLOWED))
+    parser.add_argument("--package", required=True, choices=sorted(_ALLOWED))
     parser.add_argument("--version", required=True)
     parser.add_argument("--github", action="store_true")
     parser.add_argument("--publish", action="store_true")
     parser.add_argument("--directory", type=Path, default=ROOT / "dist/release")
-    parser.add_argument("--report", type=Path, default=ROOT / REPORT)
+    parser.add_argument("--report", type=Path, default=ROOT / _REPORT)
     args = parser.parse_args()
     try:
         _selection(args.package, args.version, ROOT)
@@ -356,9 +363,9 @@ def main() -> None:
 
 
 def _selection(name: str, version: str, root: Path) -> Package:
-    if name not in ALLOWED:
-        raise ValueError("Only the workspace library distributions may be released")
-    if VERSION.fullmatch(version) is None:
+    if name not in _ALLOWED:
+        raise ValueError("Only the Canon library distribution may be released")
+    if _VERSION.fullmatch(version) is None:
         raise ValueError("Use X.Y.Z or a canonical prerelease such as X.Y.Zrc1")
     return packages(root)[name]
 
@@ -401,7 +408,7 @@ def _release_notes(root: Path, package: Package, version: str, commit: str) -> s
     path = root / package.directory / "CHANGELOG.md"
     section = _changelog(path, version)
     headings = re.findall(
-        rf"^## ({VERSION.pattern})([^\n]*)$", path.read_text("utf-8"), re.MULTILINE
+        rf"^## ({_VERSION.pattern})([^\n]*)$", path.read_text("utf-8"), re.MULTILINE
     )
     versions = [value for value, _ in headings]
     unpublished = []
@@ -418,7 +425,7 @@ def _release_notes(root: Path, package: Package, version: str, commit: str) -> s
     repository = _toml(root / "release.toml")["repository"]
     base = (
         f"https://github.com/{repository}/blob/{commit}/"
-        f"{package.directory}/CHANGELOG.md"
+        f"{(Path(package.directory) / 'CHANGELOG.md').as_posix()}"
     )
     # Changelog links use inline Markdown destinations. Retain titles, fragments
     # and absolute URLs; resolve relative paths from the original document.
@@ -438,7 +445,7 @@ def _check_breaking_version(path: Path, version: str, section: str) -> None:
     ):
         return
     headings = re.findall(
-        rf"^## ({VERSION.pattern})(?:\s[^\n]*)?$",
+        rf"^## ({_VERSION.pattern})(?:\s[^\n]*)?$",
         path.read_text("utf-8"),
         re.MULTILINE,
     )
@@ -464,7 +471,7 @@ def _check_artifact_metadata(content: bytes, name: str, version: str) -> None:
     if metadata["Name"] != name or metadata["Version"] != version:
         raise ValueError("Artifact metadata does not match the release target")
     if name != "fastapi-canon":
-        forbidden = ALLOWED - {name}
+        forbidden = _ALLOWED - {name}
         if any(
             Requirement(value).name in forbidden
             for value in metadata.get_all("Requires-Dist", [])
@@ -553,4 +560,4 @@ def _run(command: list[str], *, cwd: Path = ROOT) -> None:
 
 
 if __name__ == "__main__":
-    main()
+    _main()

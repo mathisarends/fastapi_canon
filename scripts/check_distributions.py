@@ -10,14 +10,14 @@ from pathlib import Path
 from packaging.requirements import Requirement
 from packaging.version import Version
 
-ROOT = Path(__file__).resolve().parents[1]
-PACKAGES = {
-    item["name"]: (Path(item["directory"]).name, item["module"])
-    for item in tomllib.loads((ROOT / "release.toml").read_text("utf-8"))["package"]
+_ROOT = Path(__file__).resolve().parents[1]
+_PACKAGES = {
+    item["name"]: (item["directory"], item["module"])
+    for item in tomllib.loads((_ROOT / "release.toml").read_text("utf-8"))["package"]
 }
 
 
-def main() -> None:
+def _main() -> None:
     parser = argparse.ArgumentParser(
         description="Verify independently installed wheels"
     )
@@ -30,10 +30,10 @@ def main() -> None:
     wheels = {}
     projects = {}
     results = []
-    for name, (directory, module) in PACKAGES.items():
-        output = ROOT / "dist" / name
+    for name, (directory, module) in _PACKAGES.items():
+        output = _ROOT / "dist" / name
         project = tomllib.loads(
-            (ROOT / "packages" / directory / "pyproject.toml").read_text("utf-8")
+            (_ROOT / directory / "pyproject.toml").read_text("utf-8")
         )["project"]
         projects[name] = project
         if args.artifacts and list(
@@ -99,7 +99,7 @@ def main() -> None:
             _run(
                 str(python),
                 "-I",
-                str(ROOT / "scripts/smoke_installed.py"),
+                str(_ROOT / "scripts/smoke_installed.py"),
                 *names,
                 *(
                     ["--otel"]
@@ -122,7 +122,7 @@ def main() -> None:
             )
     if args.dependencies == "latest":
         _check_reference(wheels["fastapi-canon"], args.python)
-    report = ROOT / "dist" / f"compatibility-{args.dependencies}.json"
+    report = _ROOT / "dist" / f"compatibility-{args.dependencies}.json"
     report.write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
     print(f"Compatibility results: {report}", flush=True)
 
@@ -138,7 +138,7 @@ def _minimum_dependencies(requirements: tuple[str, ...], projects: dict) -> list
             dependencies.extend(project["optional-dependencies"][extra])
     parsed = [Requirement(dependency) for dependency in dependencies]
     for dependency in parsed:
-        if dependency.name in PACKAGES:
+        if dependency.name in _PACKAGES:
             continue  # Local wheels are already explicit install requirements.
         if dependency.marker is not None:
             raise ValueError(
@@ -164,12 +164,12 @@ def _minimum_dependencies(requirements: tuple[str, ...], projects: dict) -> list
 
 
 def _check_reference(canon_wheel: str, python_version: str) -> None:
-    reference = ROOT / "examples/reference-service"
+    reference = _ROOT / "examples/reference-service"
     project = tomllib.loads((reference / "pyproject.toml").read_text("utf-8"))[
         "project"
     ]
-    output = ROOT / "dist/reference-service"
-    _run("uv", "build", "--package", project["name"], "--out-dir", str(output))
+    output = _ROOT / "dist/reference-service"
+    _run("uv", "build", str(reference), "--out-dir", str(output))
     (wheel,) = output.glob(f"fastapi_canon_reference-{project['version']}-*.whl")
     with tempfile.TemporaryDirectory(prefix="canon-reference-") as temporary:
         environment = Path(temporary) / "venv"
@@ -241,10 +241,10 @@ def _check_reference(canon_wheel: str, python_version: str) -> None:
         )
 
 
-def _run(*command: str, cwd: Path = ROOT, timeout: float | None = None) -> None:
+def _run(*command: str, cwd: Path = _ROOT, timeout: float | None = None) -> None:
     print(" ".join(command), flush=True)
     subprocess.run(command, cwd=cwd, check=True, timeout=timeout)
 
 
 if __name__ == "__main__":
-    main()
+    _main()

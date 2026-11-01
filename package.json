@@ -1,13 +1,27 @@
 {
-  "name": "canon-workspace",
+  "name": "fastapi-canon-tooling",
   "private": true,
   "packageManager": "pnpm@12.14.0",
   "engines": {
     "node": ">=24 <25"
   },
   "scripts": {
-    "typecheck": "pnpm -r --if-present run typecheck",
-    "test": "pnpm -r --if-present run test",
-    "test:coverage": "pnpm -r --if-present run test:coverage"
+    "typecheck": "pnpm run typecheck:sse && pnpm run typecheck:webrtc",
+    "typecheck:sse": "tsc -p tests/typescript/sse/tsconfig.json --noEmit",
+    "typecheck:webrtc": "tsc -p tests/typescript/webrtc/tsconfig.json --noEmit && tsc -p tests/browser/webrtc/tsconfig.json --noEmit",
+    "test": "pnpm run test:sse && pnpm run test:webrtc",
+    "test:sse": "tsc -p tests/typescript/sse/tsconfig.json && node --test tests/typescript/sse/dist/tests/typescript/sse/*.test.js",
+    "test:webrtc": "tsc -p tests/typescript/webrtc/tsconfig.json && node --test tests/typescript/webrtc/dist/tests/typescript/webrtc/*.test.js",
+    "test:coverage": "pnpm run test:coverage:sse && pnpm run test:coverage:webrtc",
+    "test:coverage:sse": "tsc -p tests/typescript/sse/tsconfig.json && node --test --experimental-test-coverage --test-coverage-include=**/examples/sse/agent_runs/generated/transport/*.js --test-coverage-lines=95 --test-coverage-branches=90 --test-coverage-functions=90 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage-typescript.lcov tests/typescript/sse/dist/tests/typescript/sse/*.test.js",
+    "test:coverage:webrtc": "tsc -p tests/typescript/webrtc/tsconfig.json && node --test --experimental-test-coverage --test-coverage-include=**/examples/webrtc/practice/client/*.js --test-coverage-lines=90 --test-coverage-branches=80 --test-coverage-functions=90 --test-reporter=spec --test-reporter-destination=stdout tests/typescript/webrtc/dist/tests/typescript/webrtc/*.test.js",
+    "test:browser": "tsc -p tests/browser/webrtc/tsconfig.json && playwright test -c tests/browser/webrtc/playwright.config.ts"
+  },
+  "type": "module",
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0",
+    "prettier": "^3.6.2",
+    "@playwright/test": "^1.56.0"
   }
 }

@@ -11,15 +11,15 @@
 
 Published versions and assets are linked in the [README](../README.md#current-releases).
 Canon 0.10.0 was published on 2026-11-01. It includes the unpublished 0.9.0
-consolidation; follow the [package migration guide](../packages/fastapi-canon/docs/package-migration.md)
+consolidation; follow the [package migration guide](package-migration.md)
 and regenerate clients using the 0.10.0 changelog notes.
 Streams 0.5.0, Canon 0.8.1 and RPCKit 0.4.1 were published on 2026-10-25; Canon
 0.8.0 earlier that day; WebRTC 0.3.0 on 2026-10-24. Follow the
-[Streams 0.5.0 notes](../packages/fastapi-streams/CHANGELOG.md#050---2026-10-25)
+[Streams 0.5.0 notes](history/fastapi-streams.md#050---2026-10-25)
 when regenerating Python stream clients, the
-[Canon router-policy migration notes](../packages/fastapi-canon/CHANGELOG.md#080---2026-10-25)
+[Canon router-policy migration notes](../CHANGELOG.md#080---2026-10-25)
 when updating constructor wrappers and the
-[WebRTC migration notes](../packages/fastapi-webrtc/CHANGELOG.md#030---2026-10-24)
+[WebRTC migration notes](history/fastapi-webrtc.md#030---2026-10-24)
 before upgrading custom engines. The [release record](releases.md#current-versions)
 links the verified source and publication workflows.
 Package metadata defines dependency ranges; the root `uv.lock` selects development
@@ -29,7 +29,7 @@ in one wheel. Feature extras select third-party dependencies; no extra requires 
 earlier distribution. Base composition retains its lower dependency bounds.
 
 Canon 0.10.0 adds the [canonical error bindings and generated-client
-handling](../packages/fastapi-canon/docs/problems.md). The expanded implementation
+handling](../docs/problems.md). The expanded implementation
 passed the current-dependency wheel matrix on Python 3.14 and the minimum matrix
 on Python 3.12 on 2026-10-31: eleven independent installations per matrix, with
 core Pydantic 2.9 support retained. The final release artifacts passed those
@@ -49,7 +49,7 @@ HTTP/SSE/RPC/WebRTC routing and generated RPC SDK execution and compilation.
 ## Verification scope
 
 The published 0.10.0 source passed exact-commit CI on Linux/Python 3.12–3.14 and
-Windows/Python 3.14, including the workspace lint, type, test and generated-client
+Windows/Python 3.14, including the repository lint, type, test and generated-client
 gates. Linux/Python 3.14 also passed Chromium/aiortc browser checks. The release
 wheel passed all eleven feature/tool combinations with current dependencies on
 Python 3.14 and minimum direct dependencies on Python 3.12.
@@ -76,7 +76,7 @@ versions have their own OpenTelemetry API dependency. The installed-wheel matrix
 covers API-only `fastapi-canon[otel]` and the reference trace tests with an application
 SDK. Runtime telemetry is exercised with the versions selected in `uv.lock`;
 minimum dependencies are checked separately. See the
-[telemetry guide](../packages/fastapi-canon/docs/telemetry.md) for native FastAPI
+[telemetry guide](telemetry.md) for native FastAPI
 bridging, instrumentation ownership, and operation-span limits.
 
 CI runs package-specific lint/type checks, separate Python suites and generated
@@ -100,7 +100,7 @@ The installed-wheel matrix covers:
 | `[sse,websockets,codegen]` | Shared application state and Dishka cleanup |
 | All feature/tool extras | Combined routing and client generation |
 
-Run `scripts/check_distributions.py` through the locked workspace environment for
+Run `scripts/check_distributions.py` through the locked root environment for
 current compatible dependencies. Add `--python 3.12 --dependencies minimum` for
 the lowest jointly satisfiable direct runtime/extra bounds; transitive dependencies
 resolve normally. Both modes build and install real artifacts in fresh environments

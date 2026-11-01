@@ -26,16 +26,16 @@ Merge the migration PR using a **merge commit** so all imported commits remain
 reachable from `main`. Do not squash or rebase this migration. Only the migration
 branch is pushed; existing branches and release tags are not replaced.
 
-The layout remains unchanged: `packages/fastapi-canon` is the only library build
+The layout remains unchanged: `.` is the only library build
 target; other feature directories retain tests, examples and tooling; architecture
-guides and the development-only reference service remain in the workspace. Use
+guides and the development-only reference service remain in the repository. Use
 the root lockfile and [contributing commands](contributing.md). A fresh clone
 avoids retaining the former standalone checkout's environment and file layout:
 
 ```console
 git clone https://github.com/mathisarends/fastapi_canon.git
 cd fastapi_canon
-uv sync --locked --all-packages --all-groups
+uv sync --locked --all-groups
 ```
 
 ## Release evidence

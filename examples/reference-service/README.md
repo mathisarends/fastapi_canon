@@ -6,19 +6,24 @@ providers, `CanonRouter` declarations, and typed error registries. `Composition`
 owns the Dishka container and its shutdown; the application has no local Feature
 implementation or second container/lifespan manager.
 
-The example defaults to SQLite for convenient local use. Persistent schemas should use Alembic; `create_schema.py` exists only to bootstrap this disposable example. See [Database migrations](../../guides/migrations.md) for the preferred layout.
+The example defaults to SQLite for convenient local use. Persistent schemas should use Alembic; `app.schema` exists only to bootstrap this disposable example. See [Database migrations](../../guides/migrations.md) for the preferred layout.
+
+From the repository root, install the shared environment, then run the example
+from its own directory while explicitly selecting the root project:
 
 ```console
-uv sync --locked --all-packages --all-groups
-uv run python create_schema.py
-uv run uvicorn app.main:app --reload
+uv sync --frozen --all-groups
+cd examples/reference-service
+uv run --frozen --project ../.. python -m app.schema
+uv run --frozen --project ../.. uvicorn app.main:app --reload
 ```
 
 The task API is available under `/api/v1/tasks`; interactive documentation is at `/docs`. Task routes require `Authorization: Bearer local-development-token`. This token is a local example default only; deployed services inject real authentication configuration and a production `TokenVerifier` adapter.
 
-Run the commands above from `examples/reference-service`. From the repository
-root, use `uv run --locked --directory examples/reference-service pytest -q` for
-the HTTP/authentication/contract regressions.
+From the repository root, use
+`uv run --frozen --directory examples/reference-service --project ../.. python -m pytest -q`
+for the HTTP/authentication/contract regressions. The example uses the root
+`uv.lock`; it has no separate locked development environment.
 
 Errors now use Canon's RFC 9457 `application/problem+json` contracts. The stable
 codes are `authentication_required`, `task_not_found`, and
@@ -34,21 +39,21 @@ The normal application remains exporter-free. Its tasks feature declares
 in `Feature.instrumentation`. Composition adds their Dishka decorators only when
 telemetry is enabled; TaskProvider remains usable in direct Dishka containers.
 `create_app(telemetry=Telemetry(...))` accepts application-owned
-providers. See the [developer API](../../packages/fastapi-canon/docs/telemetry.md).
+providers. See the [developer API](../../docs/telemetry.md).
 
 For the opt-in demo, run from the repository root:
 
 ```console
-uv sync --locked --all-packages --all-groups --all-extras
+uv sync --locked --all-groups --all-extras
 docker compose -f examples/reference-service/compose.telemetry.yaml up -d
-uv run --locked --directory examples/reference-service python create_schema.py
+uv run --frozen --directory examples/reference-service --project ../.. python -m app.schema
 ```
 
 Start these commands in two terminals:
 
 ```console
-uv run --locked --directory examples/reference-service --extra otel uvicorn app.telemetry_demo:create_tasks_app --factory --port 8000
-uv run --locked --directory examples/reference-service --extra otel uvicorn app.telemetry_demo:create_notifier_app --factory --port 8001
+uv run --frozen --directory examples/reference-service --project ../.. --extra otel uvicorn app.telemetry_demo:create_tasks_app --factory --port 8000
+uv run --frozen --directory examples/reference-service --project ../.. --extra otel uvicorn app.telemetry_demo:create_notifier_app --factory --port 8001
 ```
 
 `POST http://localhost:8000/api/v1/demo/notify` produces a trace containing a

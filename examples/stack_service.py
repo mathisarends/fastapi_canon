@@ -4,11 +4,14 @@ from typing import Literal
 from dishka import FromDishka, Provider, Scope, provide
 from dishka.integrations.fastapi import inject
 from fastapi import FastAPI
+from pydantic import BaseModel
+
 from fastapi_canon import CanonRouter, Composition, Feature
 from fastapi_canon.integrations.sse import CanonStreamRouter
 from fastapi_canon.integrations.websockets import Inject, RpcChannel, RpcService
 from fastapi_canon.integrations.websockets.adapters.dishka import dishka_router
-from pydantic import BaseModel
+
+__all__ = ["app", "create_app"]
 
 
 class Counter:

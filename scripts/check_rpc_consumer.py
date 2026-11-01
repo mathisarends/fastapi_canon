@@ -14,10 +14,10 @@ from fastapi_canon.integrations.websockets.codegen import (
     generate_typescript_client,
 )
 
-ROOT = Path(__file__).resolve().parents[1]
+_ROOT = Path(__file__).resolve().parents[1]
 
 
-def main() -> None:
+def _main() -> None:
     parser = argparse.ArgumentParser(
         description="Check both SDKs for a consumer contract"
     )
@@ -55,15 +55,15 @@ def main() -> None:
         subprocess.run(
             [ruff, "check", str(python)],
             check=True,
-            cwd=ROOT,
+            cwd=_ROOT,
         )
         subprocess.run(
             [ruff, "format", "--check", str(python)],
             check=True,
-            cwd=ROOT,
+            cwd=_ROOT,
         )
         node = shutil.which("node")
-        compiler = ROOT / "packages/fastapi-streams/node_modules/typescript/bin/tsc"
+        compiler = _ROOT / "node_modules/typescript/bin/tsc"
         assert node and compiler.is_file(), (
             "Run pnpm install --frozen-lockfile --ignore-scripts first"
         )
@@ -95,4 +95,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    _main()

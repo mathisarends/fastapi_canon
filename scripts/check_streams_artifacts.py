@@ -5,19 +5,17 @@ import tempfile
 import tomllib
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-PACKAGE = ROOT / "packages/fastapi-streams"
-CANON = ROOT / "packages/fastapi-canon"
+_ROOT = Path(__file__).resolve().parents[1]
 
 
-def main() -> None:
+def _main() -> None:
     parser = argparse.ArgumentParser(description="Check installed Streams CLI/backends")
     parser.add_argument("--artifacts", type=Path)
     args = parser.parse_args()
-    version = tomllib.loads((CANON / "pyproject.toml").read_text("utf-8"))["project"][
+    version = tomllib.loads((_ROOT / "pyproject.toml").read_text("utf-8"))["project"][
         "version"
     ]
-    directory = ROOT / "dist/fastapi-canon"
+    directory = _ROOT / "dist/fastapi-canon"
     if args.artifacts and list(args.artifacts.glob(f"fastapi_canon-{version}-*.whl")):
         directory = args.artifacts.resolve()
     else:
@@ -39,7 +37,7 @@ def main() -> None:
             _run(
                 str(python),
                 "-I",
-                str(PACKAGE / "scripts/smoke_package.py"),
+                str(_ROOT / "scripts/sse/smoke_package.py"),
                 "--expected-version",
                 version,
                 *flags,
@@ -47,8 +45,8 @@ def main() -> None:
 
 
 def _run(*command: str) -> None:
-    subprocess.run(command, cwd=ROOT, check=True)
+    subprocess.run(command, cwd=_ROOT, check=True)
 
 
 if __name__ == "__main__":
-    main()
+    _main()

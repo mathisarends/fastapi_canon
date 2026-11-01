@@ -14,12 +14,10 @@ import tempfile
 import tomllib
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-PACKAGE = ROOT / "packages/fastapi-webrtc"
-CANON = ROOT / "packages/fastapi-canon"
-EXAMPLE = PACKAGE / "examples/practice"
-TSC = PACKAGE / "node_modules/typescript/bin/tsc"
-TSCONFIG = {
+_ROOT = Path(__file__).resolve().parents[1]
+_EXAMPLE = _ROOT / "examples/webrtc/practice"
+_TSC = _ROOT / "node_modules/typescript/bin/tsc"
+_TSCONFIG = {
     "compilerOptions": {
         "target": "ES2022",
         "module": "NodeNext",
@@ -37,22 +35,22 @@ TSCONFIG = {
 }
 
 
-def main() -> None:
+def _main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--artifacts", type=Path)
     args = parser.parse_args()
-    version = tomllib.loads((CANON / "pyproject.toml").read_text("utf-8"))["project"][
+    version = tomllib.loads((_ROOT / "pyproject.toml").read_text("utf-8"))["project"][
         "version"
     ]
     pattern = f"fastapi_canon-{version}-*.whl"
-    directory = ROOT / "dist/fastapi-canon"
+    directory = _ROOT / "dist/fastapi-canon"
     if args.artifacts and list(args.artifacts.glob(pattern)):
         directory = args.artifacts.resolve()
     else:
         _run("uv", "build", "--package", "fastapi-canon", "--out-dir", str(directory))
     (wheel,) = directory.glob(pattern)
     node = shutil.which("node")
-    if node is None or not TSC.is_file():
+    if node is None or not _TSC.is_file():
         raise SystemExit(
             "Install TypeScript first: pnpm install --frozen-lockfile --ignore-scripts"
         )
@@ -67,9 +65,9 @@ def main() -> None:
         )
         _run("uv", "pip", "install", "--python", str(python), f"{wheel}[webrtc,aiortc]")
         # A copied module keeps the workspace source out of the import path.
-        shutil.copyfile(EXAMPLE / "app.py", working / "practice_app.py")
-        shutil.copytree(EXAMPLE / "client", working / "client")
-        shutil.copyfile(EXAMPLE / "contract.json", working / "contract.json")
+        shutil.copyfile(_EXAMPLE / "app.py", working / "practice_app.py")
+        shutil.copytree(_EXAMPLE / "client", working / "client")
+        shutil.copyfile(_EXAMPLE / "contract.json", working / "contract.json")
         app = ("--app", "practice_app:app")
         _run(
             str(cli),
@@ -95,14 +93,14 @@ def main() -> None:
             cwd=working,
         )
         (working / "package.json").write_text('{"type": "module"}\n', "utf-8")
-        (working / "tsconfig.json").write_text(json.dumps(TSCONFIG), "utf-8")
-        _run(node, str(TSC), "-p", str(working / "tsconfig.json"), cwd=working)
+        (working / "tsconfig.json").write_text(json.dumps(_TSCONFIG), "utf-8")
+        _run(node, str(_TSC), "-p", str(working / "tsconfig.json"), cwd=working)
     print(f"Installed WebRTC CLI and generated client checks passed: {wheel.name}")
 
 
-def _run(*command: str, cwd: Path = ROOT) -> None:
+def _run(*command: str, cwd: Path = _ROOT) -> None:
     subprocess.run(command, cwd=cwd, check=True)
 
 
 if __name__ == "__main__":
-    main()
+    _main()
