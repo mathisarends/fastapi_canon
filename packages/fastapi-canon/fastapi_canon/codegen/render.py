@@ -65,6 +65,15 @@ def render(plan: Plan, target: TargetConfig) -> dict[str, str]:
             declarations.append(
                 Declaration(_alias(operation, "Result"), types.parse(result_schema))
             )
+            if target.language == "python" and operation.binding.protocol == "http":
+                metadata = operation.binding.metadata
+                declarations.extend(
+                    Declaration(
+                        _alias(operation, "Response" + status), types.parse(schema)
+                    )
+                    for status, schema in metadata["responses"].items()
+                    if status not in metadata["bodyless"]
+                )
     declarations = [*types.declarations(), *declarations]
     if len({declaration.name for declaration in declarations}) != len(declarations):
         raise GenerationError(
@@ -422,6 +431,7 @@ def _typescript_client(plan: Plan, target: TargetConfig) -> dict[str, str]:
                         "name": camel(param.name),
                         "wire": param.wire_name,
                         "location": param.location,
+                        "required": param.required,
                     }
                     for param in operation.parameters
                 ],
@@ -661,14 +671,28 @@ def _python_method(operation: Operation) -> list[str]:
             "path": binding.path,
             "method": binding.method,
             "statuses": list(binding.metadata["responses"]),
+            "bodyless": binding.metadata["bodyless"],
             "parameters": [
-                {"wire": param.wire_name, "location": param.location}
+                {
+                    "wire": param.wire_name,
+                    "location": param.location,
+                    "required": param.required,
+                }
                 for param in operation.parameters
             ],
         }
+        response_types = (
+            "{"
+            + ", ".join(
+                f"{status!r}: Models.{_alias(operation, 'Response' + status)}"
+                for status in binding.metadata["responses"]
+                if status not in binding.metadata["bodyless"]
+            )
+            + "}"
+        )
         return [
             f"    async def {snake(operation.name[-1])}(self{args}) -> {result}:",
-            f"        return await self._runtime.request({spec!r}, {params}, {result}, options, {{"
+            f"        return await self._runtime.request({spec!r}, {params}, {response_types}, options, {{"
             + ", ".join(
                 f"{param.wire_name!r}: Models.{_alias(operation, param.name)}"
                 for param in operation.parameters
@@ -705,7 +729,11 @@ def _python_method(operation: Operation) -> list[str]:
                 "method": binding.method,
                 "canon_stream": binding.metadata["profile"],
                 "parameters": [
-                    {"wire": param.wire_name, "location": param.location}
+                    {
+                        "wire": param.wire_name,
+                        "location": param.location,
+                        "required": param.required,
+                    }
                     for param in operation.parameters
                 ],
             }

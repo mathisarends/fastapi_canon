@@ -187,9 +187,13 @@ class Runtime:
             name = parameter["wire"]
             value = values[name]
             if value is UNSET:
+                if parameter["required"]:
+                    raise ValueError(f"Missing required HTTP parameter {name!r}")
                 continue
             value = TypeAdapter(parameter_types[name]).validate_python(value)
             location = parameter["location"]
+            if value is None and location != "body" and parameter["required"]:
+                raise ValueError(f"Required HTTP parameter {name!r} cannot be null")
             if location == "body":
                 body = TypeAdapter(type(value)).dump_python(
                     value, mode="json", by_alias=True, exclude_unset=True
@@ -264,7 +268,7 @@ class Runtime:
         self,
         spec: dict[str, Any],
         values: dict[str, Any],
-        result: Any,
+        response_types: dict[str, Any],
         options: RequestOptions | None,
         parameter_types: dict[str, Any],
     ) -> Any:
@@ -308,16 +312,18 @@ class Runtime:
                 raise HttpError(response.status_code)
             if not 200 <= response.status_code < 300:
                 raise ProtocolError("Unexpected HTTP response status")
-            if (
-                str(response.status_code) not in spec["statuses"]
-                and "2XX" not in spec["statuses"]
-            ):
+            status = str(response.status_code)
+            if status not in spec["statuses"]:
+                status = "2XX"
+            if status not in spec["statuses"]:
                 raise ProtocolError("Undocumented HTTP response status")
+            if status in spec["bodyless"]:
+                if response.content:
+                    raise ProtocolError("Unexpected body for bodyless HTTP response")
+                return None
             try:
-                return (
-                    TypeAdapter(result).validate_json(response.content)
-                    if response.content
-                    else TypeAdapter(result).validate_python(None)
+                return TypeAdapter(response_types[status]).validate_json(
+                    response.content
                 )
             except ValidationError as exc:
                 raise ProtocolError("Invalid HTTP response") from exc

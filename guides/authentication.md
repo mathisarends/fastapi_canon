@@ -15,6 +15,7 @@ async def authenticated_user_id(
 ) -> UUID:
     return verifier.verify(token=token).user_id
 
+
 AuthenticatedUserId = Annotated[UUID, Depends(authenticated_user_id)]
 ```
 

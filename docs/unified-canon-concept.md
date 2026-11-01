@@ -191,7 +191,9 @@ explicitly so HTTP and RPC export the same shape, for example:
 ```python
 class Project(BaseModel):
     model_config = ConfigDict(
-        extra="forbid", alias_generator=to_camel, populate_by_name=True,
+        extra="forbid",
+        alias_generator=to_camel,
+        populate_by_name=True,
         json_schema_extra={"x-canon-model-id": "urn:example:project-output:v1"},
     )
     project_id: int
@@ -252,7 +254,17 @@ decimal-string schemas exported by earlier Pydantic versions. Constraints stay
 active in model fields, nested arrays and standalone type aliases; invalid
 patterns fail generation. Decimal wire values stay strings, preserving precision.
 
+HTTP clients omit optional query/header parameters whose value is null. Required
+query/header parameters need a non-null value; a nullable JSON body still sends
+JSON `null`.
+Python validates each response against the schema for its actual status. An
+exact status declaration takes precedence over `2XX` in both language targets.
+
 TypeScript HTTP methods distinguish bodyless responses (`void`/`undefined`) from
 JSON `null` (`null`). Operations supporting both JSON and bodyless success
 statuses return the JSON type or `void`. Empty or malformed JSON and unexpected
 bodies for bodyless contracts raise `ProtocolError`.
+Python also rejects empty JSON and unexpected bodies for bodyless contracts.
+HTTP connection failures, including interrupted response bodies and problem
+responses, raise `TransportError`. TypeScript retains native abort errors for
+explicit cancellation and request timeouts.

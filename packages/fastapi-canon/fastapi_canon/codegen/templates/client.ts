@@ -24,7 +24,7 @@ interface RequestSpec {
   method: string;
   statuses: readonly string[];
   bodyless: readonly string[];
-  parameters: readonly { name: string; wire: string; location: string }[];
+  parameters: readonly { name: string; wire: string; location: string; required: boolean }[];
 }
 export class HttpError extends TransportError {
   constructor(readonly status: number) { super(`HTTP ${status}`); }
@@ -124,7 +124,11 @@ export class Runtime {
     let body: string | undefined;
     for (const parameter of spec.parameters) {
       const value = (values as Record<string, unknown>)[parameter.name];
-      if (value === undefined) continue;
+      if (value === undefined) {
+        if (parameter.required) throw new TypeError(`Missing required HTTP parameter ${parameter.wire}`);
+        continue;
+      }
+      if (value === null && parameter.location !== "body" && !parameter.required) continue;
       if (parameter.location === "body") {
         body = JSON.stringify(value); headers.set("content-type", "application/json");
       } else if (parameter.location === "path") {
@@ -150,7 +154,8 @@ export class Runtime {
       if (response.status >= 400) {
         if (response.headers.get("content-type")?.split(";")[0]?.trim() === "application/problem+json") {
           let value: unknown;
-          try { value = await response.json(); } catch (cause) { throw new ProtocolError("Invalid HTTP problem", { cause }); }
+          const text = await this.readText(response, controller.signal);
+          try { value = JSON.parse(text); } catch (cause) { throw new ProtocolError("Invalid HTTP problem", { cause }); }
           const problem = parseProblem(value);
           if (problem.status !== undefined && problem.status !== response.status) throw new ProtocolError("Problem status does not match HTTP response");
           throw new ProblemError(problem);
@@ -158,9 +163,10 @@ export class Runtime {
         throw new HttpError(response.status);
       }
       if (response.status < 200 || response.status >= 300) throw new ProtocolError("Unexpected HTTP response status");
-      if (!spec.statuses.includes(String(response.status)) && !spec.statuses.includes("2XX")) throw new ProtocolError("Undocumented HTTP response status");
-      const text = await response.text();
-      if (spec.bodyless.includes(String(response.status)) || spec.bodyless.includes("2XX")) {
+      const status = spec.statuses.includes(String(response.status)) ? String(response.status) : "2XX";
+      if (!spec.statuses.includes(status)) throw new ProtocolError("Undocumented HTTP response status");
+      const text = await this.readText(response, controller.signal);
+      if (spec.bodyless.includes(status)) {
         if (text) throw new ProtocolError("Unexpected body for bodyless HTTP response");
         return undefined as T;
       }
@@ -169,6 +175,13 @@ export class Runtime {
       await response?.body?.cancel().catch(() => undefined);
       if (timeout !== undefined) clearTimeout(timeout);
       options.signal?.removeEventListener("abort", abort);
+    }
+  }
+  private async readText(response: Response, signal: AbortSignal): Promise<string> {
+    try { return await response.text(); }
+    catch (cause) {
+      if (signal.aborted || this.lifetime.signal.aborted) throw cause;
+      throw new TransportError("HTTP response body failed", { cause });
     }
   }
   private async fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
