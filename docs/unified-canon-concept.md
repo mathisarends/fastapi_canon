@@ -1,10 +1,51 @@
 # Generate one domain SDK
 
-Prepared Canon 0.10.0 introduces `fastapi-canon generate`. OpenAPI, OpenRPC and WebRTC
-contracts contribute operations to a common plan, model graph and error runtime.
+`fastapi-canon generate` combines operations from OpenAPI, OpenRPC and WebRTC
+contracts in a common plan, model graph and error runtime.
 The generated public API follows domain names; protocol clients live under
 `internal/`. See the [decision record](../CANONICALIZATION_DECISIONS.md) and
 [server problem guide](../packages/fastapi-canon/docs/problems.md).
+
+## Contents
+
+- [From server declarations to domain methods](#from-server-declarations-to-domain-methods)
+- [Configuration](#configuration)
+- [Commands and ownership](#commands-and-ownership)
+- [Consumer API](#consumer-api)
+- [Names and shared models](#names-and-shared-models)
+- [Connections and supported scope](#connections-and-supported-scope)
+
+## From server declarations to domain methods
+
+The [README walkthrough](../README.md#core-api-routes-errors-and-composition)
+builds an HTTP operation, an SSE stream and a WebSocket RPC method in one app,
+then generates Python and TypeScript consumers from them.
+
+| Server declaration | Contract source | Generated domain API | Boilerplate handled by the binding |
+| --- | --- | --- | --- |
+| `CanonRouter.get(..., operation_id="projects.get")` | OpenAPI | `client.projects.get(...)` | HTTP request encoding, response decoding and problem handling. |
+| `CanonStreamRouter.stream(..., operation_id="projects.events")` | The same OpenAPI source | Async iteration over `client.projects.events(...)` | SSE framing, event decoding, completion and terminal problem handling. |
+| `RpcChannel("projects").method()` decorating `cancel` | OpenRPC | `client.projects.cancel(...)` | WebSocket connection, request IDs, response correlation and declared errors. |
+
+An SSE endpoint's return annotation supplies the event schema; it does not need
+a second handwritten client model. `raises=` describes HTTP admission errors,
+while `stream_raises=` describes terminal failures after the stream starts. The
+generated iterator yields business events, consumes `canon.complete`, and raises
+`ProblemError` for `canon.problem`. EOF without completion is a `TransportError`.
+See [stream contracts](../packages/fastapi-canon/docs/streams.md).
+
+RPC exports parameter/result models, errors and session metadata from the service
+contract. Its generated methods preserve the declared call, notification,
+subscription or session shape. A domain method can use HTTP while its neighboring
+method uses RPC; neither needs a transport prefix in the public SDK. Connection,
+cancellation and socket/media lifecycles remain explicit where their behavior
+matters. See [RPC clients](../packages/fastapi-rpckit/docs/clients.md).
+
+One target plans all selected sources together. Model identities and resolved
+problem type URIs let HTTP, SSE and RPC share public DTOs and one error runtime.
+Use `--check --diff` in CI to detect contract or generated-file drift. The
+[source error checker](../packages/fastapi-canon/docs/error-checking.md) separately
+checks supported HTTP error mappings and declarations before export.
 
 ## Configuration
 
