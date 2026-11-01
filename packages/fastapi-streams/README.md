@@ -193,13 +193,13 @@ under `[tool.fastapi-streams]` in `pyproject.toml` and run
 ## Run the complete example
 
 The package is developed in the [Canon workspace](https://github.com/mathisarends/fastapi_canon),
-which shares one lockfile across its packages:
+which shares one pnpm lockfile for its TypeScript tooling:
 
 ```sh
 git clone https://github.com/mathisarends/fastapi_canon.git
 cd fastapi_canon
 uv sync --locked --all-packages --all-groups
-npm ci --ignore-scripts --prefix packages/fastapi-streams
+pnpm install --frozen-lockfile --ignore-scripts
 cd packages/fastapi-streams
 uv run --locked uvicorn examples.agent_runs:app --reload
 ```
@@ -208,7 +208,7 @@ In another terminal:
 
 ```sh
 # TypeScript
-npx tsc -p tests/typescript/tsconfig.json
+pnpm exec tsc -p tests/typescript/tsconfig.json
 node tests/typescript/dist/examples/agent_runs/consume.js
 
 # Python

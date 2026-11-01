@@ -193,7 +193,9 @@ async def benchmark(args, directory):
         node = shutil.which("node")
         tsc = ROOT / "node_modules/typescript/bin/tsc"
         if node is None or not tsc.is_file():
-            raise SystemExit("Install Node and run npm ci --ignore-scripts first")
+            raise SystemExit(
+                "Run pnpm install --frozen-lockfile --ignore-scripts first"
+            )
         subprocess.run(
             [
                 node,

@@ -8,7 +8,7 @@
 git clone https://github.com/mathisarends/fastapi_canon.git
 cd fastapi_canon
 uv sync --locked --all-packages --all-groups
-npm ci --ignore-scripts --prefix packages/fastapi-streams
+pnpm install --frozen-lockfile --ignore-scripts
 cd packages/fastapi-streams
 uv run --locked --project ../.. python scripts/codegen.py
 uv run --locked --project ../.. uvicorn examples.agent_runs:app --reload
@@ -18,7 +18,7 @@ In another terminal:
 
 ```sh
 # TypeScript
-npx tsc -p tests/typescript/tsconfig.json
+pnpm exec tsc -p tests/typescript/tsconfig.json
 node tests/typescript/dist/examples/agent_runs/consume.js
 
 # Python

@@ -54,8 +54,7 @@ def main() -> None:
     node = shutil.which("node")
     if node is None or not TSC.is_file():
         raise SystemExit(
-            "Install TypeScript first: "
-            "npm ci --ignore-scripts --prefix packages/fastapi-webrtc"
+            "Install TypeScript first: pnpm install --frozen-lockfile --ignore-scripts"
         )
     with tempfile.TemporaryDirectory(prefix="canon-webrtc-") as temporary:
         working = Path(temporary)

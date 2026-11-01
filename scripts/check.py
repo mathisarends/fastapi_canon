@@ -154,18 +154,20 @@ def main() -> None:
             )
             for member in (MEMBERS[1], WEBRTC):
                 for task in ("typecheck", "test:coverage"):
-                    _run(member, _npm(), "run", task, python=False)
+                    _run(member, _pnpm(), "run", task, python=False)
         elif gate == "browser":
             # Real Chromium sessions against the aiortc engine.
             environment = {**os.environ, "FASTAPI_WEBRTC_PYTHON": sys.executable}
-            _run(WEBRTC, _npm(), "run", "test:browser", python=False, env=environment)
+            _run(WEBRTC, _pnpm(), "run", "test:browser", python=False, env=environment)
 
 
-def _npm() -> str:
-    npm = shutil.which("npm.cmd" if os.name == "nt" else "npm")
-    if npm is None:
-        raise SystemExit("npm is required for TypeScript client checks")
-    return npm
+def _pnpm() -> str:
+    pnpm = shutil.which("pnpm.cmd") or shutil.which("pnpm")
+    if pnpm is None:
+        raise SystemExit(
+            "pnpm is required for TypeScript client checks; see docs/contributing.md"
+        )
+    return pnpm
 
 
 def _run(

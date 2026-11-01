@@ -7,7 +7,7 @@ from .test_typescript_cancellation import cancellation_sdk as cancellation_sdk
 
 def test_middleware_public_types_are_strictly_checked(cancellation_sdk):
     root, _ = cancellation_sdk
-    npx = shutil.which("npx.cmd") or shutil.which("npx")
+    pnpm = shutil.which("pnpm.cmd") or shutil.which("pnpm")
     consumer = root / "middleware_types.ts"
     consumer.write_text(
         dedent("""
@@ -45,10 +45,8 @@ def test_middleware_public_types_are_strictly_checked(cancellation_sdk):
     )
     checked = subprocess.run(
         [
-            npx,
-            "--yes",
-            "--package",
-            "typescript",
+            pnpm,
+            "exec",
             "tsc",
             "--strict",
             "--target",

@@ -16,10 +16,10 @@ def test_generated_client_connect_behavior_in_node(
     document: dict[str, Any],
     tmp_path: Path,
 ) -> None:
-    npx = shutil.which("npx.cmd") or shutil.which("npx")
+    pnpm = shutil.which("pnpm.cmd") or shutil.which("pnpm")
     node = shutil.which("node.exe") or shutil.which("node")
-    if npx is None or node is None:
-        pytest.skip("Node.js and npx are required")
+    if pnpm is None or node is None:
+        pytest.skip("Node.js and pnpm are required")
 
     deployed = deepcopy(document)
     deployed["methods"] = [deployed["methods"][0]]
@@ -292,10 +292,8 @@ def test_generated_client_connect_behavior_in_node(
     compiled = tmp_path / "compiled"
     type_check = subprocess.run(
         [
-            npx,
-            "--yes",
-            "--package",
-            "typescript",
+            pnpm,
+            "exec",
             "tsc",
             "--strict",
             "--target",

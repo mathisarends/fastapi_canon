@@ -95,20 +95,18 @@ async def test_the_python_binding_speaks_calc_over_a_real_socket(
 async def test_the_typescript_binding_speaks_calc_over_a_real_socket(
     host: str, tmp_path: Path
 ) -> None:
-    npx = shutil.which("npx.cmd") or shutil.which("npx")
+    pnpm = shutil.which("pnpm.cmd") or shutil.which("pnpm")
     node = shutil.which("node.exe") or shutil.which("node")
-    if npx is None or node is None:
-        pytest.skip("Node.js and npx are required")
+    if pnpm is None or node is None:
+        pytest.skip("Node.js and pnpm are required")
     shutil.copytree(EXAMPLE / "typescript", tmp_path / "generated")
     runner = tmp_path / "calc.test.ts"
     runner.write_text(_RUNNER.replace("__HOST__", host), encoding="utf-8", newline="\n")
     compiled = tmp_path / "compiled"
     type_check = subprocess.run(
         [
-            npx,
-            "--yes",
-            "--package",
-            "typescript",
+            pnpm,
+            "exec",
             "tsc",
             "--strict",
             "--target",

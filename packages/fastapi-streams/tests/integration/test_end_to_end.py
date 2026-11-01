@@ -74,7 +74,7 @@ def test_generated_typescript_client_over_real_http(server):
     node = shutil.which("node")
     compiler = ROOT / "node_modules/typescript/bin/tsc"
     if not node or not compiler.exists():
-        pytest.skip("Run npm ci to enable the TypeScript end-to-end acceptance test")
+        pytest.skip("Run pnpm install --frozen-lockfile --ignore-scripts first")
     subprocess.run(
         [node, str(compiler), "-p", "tests/typescript/tsconfig.json"],
         cwd=ROOT,

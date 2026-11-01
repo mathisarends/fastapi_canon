@@ -1,14 +1,16 @@
 # Contributing
 
-Use Python 3.12–3.14, uv 0.9.2 or newer and Node.js 24. Run commands from the
-repository root; the workspace has one environment and one `uv.lock`.
+Use Python 3.12–3.14, uv 0.9.2 or newer, Node.js 24 and pnpm 12.14.0.
+Install pnpm following its [installation guide](https://pnpm.io/installation);
+`packageManager` in the root `package.json` pins the version used locally and in CI.
+Run commands from the repository root; the workspace has one Python environment
+and `uv.lock`, plus one `pnpm-lock.yaml` for all TypeScript tooling.
 
 ```console
 git clone https://github.com/mathisarends/fastapi_canon.git
 cd fastapi_canon
 uv sync --locked --all-packages --all-groups
-npm ci --ignore-scripts --prefix packages/fastapi-streams
-npm ci --ignore-scripts --prefix packages/fastapi-webrtc
+pnpm install --frozen-lockfile --ignore-scripts
 uv run --locked python scripts/check.py all
 uv run --locked python scripts/check_distributions.py
 uv run --locked python scripts/check_distributions.py --python 3.12 --dependencies minimum
@@ -27,10 +29,14 @@ suite. For the retained feature directories, run
 `uv run --locked pytest -q` runs only the root integration/release suite.
 
 The `browser` gate is separate from `all`. Install Chromium once from
-`packages/fastapi-webrtc` with `npx playwright install chromium`, then run
+`packages/fastapi-webrtc` with `pnpm exec playwright install chromium`, then run
 `uv run --locked python scripts/check.py browser` at the root. It exercises real
-Chromium peers against aiortc. RPC TypeScript tests use npx; Streams and WebRTC
-have npm lockfiles. Regenerate clients through their package generators before
+Chromium peers against aiortc. Streams, RPC and WebRTC share the root pnpm
+workspace. RPC tests execute its locked TypeScript and Prettier dependencies
+with `pnpm exec`; they do not download tools during tests. Use `pnpm typecheck`
+and `pnpm test:coverage` at the root for the TypeScript gates, or
+`pnpm --dir packages/fastapi-streams run typecheck` for a focused package check.
+Regenerate clients through their package generators before
 checking drift; never edit generated clients directly.
 
 `check_distributions.py` builds wheels/sdists and tests eleven feature/tool

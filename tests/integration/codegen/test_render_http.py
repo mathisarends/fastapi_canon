@@ -64,7 +64,7 @@ def browser_http_sdk(generated_http_sdk: Path) -> tuple[str, Path]:
     node = shutil.which("node")
     compiler = ROOT / "packages/fastapi-streams/node_modules/typescript/bin/tsc"
     if node is None or not compiler.is_file():
-        pytest.skip("Run npm ci --ignore-scripts --prefix packages/fastapi-streams")
+        pytest.skip("Run pnpm install --frozen-lockfile --ignore-scripts")
     usage = generated_http_sdk / "usage.ts"
     usage.write_text(
         'import { ApiClient } from "./browser/index.js";\n'

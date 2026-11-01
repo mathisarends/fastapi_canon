@@ -227,7 +227,9 @@ asyncio.run(main())
             Path(__file__).resolve().parents[1] / "node_modules/typescript/bin/tsc"
         )
         node = shutil.which("node")
-        assert node and compiler.is_file(), "Run npm ci before package smoke tests"
+        assert node and compiler.is_file(), (
+            "Run pnpm install --frozen-lockfile --ignore-scripts first"
+        )
         subprocess.run(
             [
                 node,

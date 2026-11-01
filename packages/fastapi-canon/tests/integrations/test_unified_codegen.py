@@ -128,7 +128,7 @@ def test_unified_typescript_compiles_and_executes_all_bindings(tmp_path: Path) -
         / "packages/fastapi-streams/node_modules/typescript/bin/tsc"
     )
     if node is None or not compiler.exists():
-        pytest.skip("Run npm ci --ignore-scripts --prefix packages/fastapi-streams")
+        pytest.skip("Run pnpm install --frozen-lockfile --ignore-scripts")
     inputs = _inputs()
     rpc = copy.deepcopy(inputs[1][1])
     rpc["x-rpckit-sockets"] = [

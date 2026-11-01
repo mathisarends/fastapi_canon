@@ -368,12 +368,12 @@ def test_generated_typescript_is_prettier_formatted(
         "w", encoding="utf-8", newline="\n"
     ) as handle:
         handle.write(websocket_media)
-    prettier = shutil.which("npx.cmd") or shutil.which("npx")
-    if prettier is None:
-        pytest.skip("npx is not installed")
+    pnpm = shutil.which("pnpm.cmd") or shutil.which("pnpm")
+    if pnpm is None:
+        pytest.skip("pnpm is not installed")
 
     formatting = subprocess.run(
-        [prettier, "prettier", "--check", str(output)],
+        [pnpm, "exec", "prettier", "--check", str(output)],
         capture_output=True,
         text=True,
         check=False,
@@ -387,9 +387,9 @@ def test_generated_typescript_passes_strict_type_checking(
     document: dict[str, Any],
     tmp_path: Path,
 ) -> None:
-    npx = shutil.which("npx.cmd") or shutil.which("npx")
-    if npx is None:
-        pytest.skip("npx is not installed")
+    pnpm = shutil.which("pnpm.cmd") or shutil.which("pnpm")
+    if pnpm is None:
+        pytest.skip("pnpm is not installed")
 
     output = tmp_path / "generated"
     deployed = deepcopy(document)
@@ -467,10 +467,8 @@ def test_generated_typescript_passes_strict_type_checking(
 
     type_check = subprocess.run(
         [
-            npx,
-            "--yes",
-            "--package",
-            "typescript",
+            pnpm,
+            "exec",
             "tsc",
             "--noEmit",
             "--strict",
@@ -514,9 +512,9 @@ def test_contracts_without_models_do_not_export_a_models_module() -> None:
 def test_sdk_error_types_do_not_require_upgrading_the_consumers_lib_target(
     document: dict[str, Any], tmp_path: Path
 ) -> None:
-    npx = shutil.which("npx.cmd") or shutil.which("npx")
-    if npx is None:
-        pytest.skip("npx is required")
+    pnpm = shutil.which("pnpm.cmd") or shutil.which("pnpm")
+    if pnpm is None:
+        pytest.skip("pnpm is required")
     deployed = deepcopy(document)
     deployed["servers"] = [
         {
@@ -548,10 +546,8 @@ def test_sdk_error_types_do_not_require_upgrading_the_consumers_lib_target(
     )
     result = subprocess.run(
         [
-            npx,
-            "--yes",
-            "--package",
-            "typescript",
+            pnpm,
+            "exec",
             "tsc",
             "--noEmit",
             "--strict",

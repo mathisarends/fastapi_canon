@@ -155,20 +155,18 @@ async def consume(client: TypedSocketClient) -> None:
 
 
 async def test_typescript_typed_socket_round_trip(host: str, tmp_path: Path) -> None:
-    npx = shutil.which("npx.cmd") or shutil.which("npx")
+    pnpm = shutil.which("pnpm.cmd") or shutil.which("pnpm")
     node = shutil.which("node")
-    if npx is None or node is None:
-        pytest.skip("Node.js and npx are required")
+    if pnpm is None or node is None:
+        pytest.skip("Node.js and pnpm are required")
     shutil.copytree(EXAMPLE / "typescript", tmp_path / "generated")
     runner = tmp_path / "runner.ts"
     runner.write_text(RUNNER.replace("__HOST__", host), encoding="utf-8")
     compiled = tmp_path / "compiled"
     result = subprocess.run(
         [
-            npx,
-            "--yes",
-            "--package",
-            "typescript",
+            pnpm,
+            "exec",
             "tsc",
             "--strict",
             "--target",

@@ -570,7 +570,9 @@ def _rpc_codegen(rpc) -> None:
             Path(__file__).resolve().parents[1]
             / "packages/fastapi-streams/node_modules/typescript/bin/tsc"
         )
-        assert node and compiler.is_file(), "Run npm ci for the Streams member first"
+        assert node and compiler.is_file(), (
+            "Run pnpm install --frozen-lockfile --ignore-scripts first"
+        )
         subprocess.run(
             [
                 node,

@@ -16,10 +16,10 @@ from fastapi_canon.integrations.websockets.testing import InMemorySocketFactory
 
 @pytest.fixture(scope="module")
 def cancellation_sdk(document, tmp_path_factory):
-    npx = shutil.which("npx.cmd") or shutil.which("npx")
+    pnpm = shutil.which("pnpm.cmd") or shutil.which("pnpm")
     node = shutil.which("node.exe") or shutil.which("node")
-    if npx is None or node is None:
-        pytest.skip("Node.js and npx are required")
+    if pnpm is None or node is None:
+        pytest.skip("Node.js and pnpm are required")
     root = tmp_path_factory.mktemp("typescript_cancellation")
     deployed = deepcopy(document)
     deployed["servers"] = [
@@ -68,10 +68,8 @@ def cancellation_sdk(document, tmp_path_factory):
     )
     checked = subprocess.run(
         [
-            npx,
-            "--yes",
-            "--package",
-            "typescript",
+            pnpm,
+            "exec",
             "tsc",
             "--strict",
             "--target",

@@ -522,17 +522,17 @@ void main();
 
 
 def _tools() -> tuple[str, str]:
-    npx = shutil.which("npx.cmd") or shutil.which("npx")
+    pnpm = shutil.which("pnpm.cmd") or shutil.which("pnpm")
     node = shutil.which("node.exe") or shutil.which("node")
-    if npx is None or node is None:
-        pytest.skip("Node.js and npx are required")
-    return npx, node
+    if pnpm is None or node is None:
+        pytest.skip("Node.js and pnpm are required")
+    return pnpm, node
 
 
 def test_bound_typescript_sockets_return_the_binding_session(
     document: dict[str, Any], tmp_path: Path
 ) -> None:
-    npx, node = _tools()
+    pnpm, node = _tools()
     output = tmp_path / "generated"
     deployed = {
         **document,
@@ -571,7 +571,7 @@ def test_bound_typescript_sockets_return_the_binding_session(
         ),
     )
     formatting = subprocess.run(
-        [npx, "prettier", "--check", str(output)],
+        [pnpm, "exec", "prettier", "--check", str(output)],
         capture_output=True,
         text=True,
         check=False,
@@ -587,10 +587,8 @@ def test_bound_typescript_sockets_return_the_binding_session(
     compiled = tmp_path / "compiled"
     type_check = subprocess.run(
         [
-            npx,
-            "--yes",
-            "--package",
-            "typescript",
+            pnpm,
+            "exec",
             "tsc",
             "--strict",
             "--target",

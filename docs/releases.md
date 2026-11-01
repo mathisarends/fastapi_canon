@@ -30,7 +30,7 @@ command created the matching
 [tag and GitHub Release](https://github.com/mathisarends/fastapi_canon/releases/tag/fastapi-canon-v0.10.0).
 Downloaded GitHub assets, PyPI file hashes and the original manifest agree, and
 the tag points to the verified source. The publish job now installs Node.js and
-the Streams npm dependencies before public-install verification.
+the shared pnpm TypeScript tooling before public-install verification.
 
 Streams 0.5.0, Canon 0.8.1 and RPCKit 0.4.1 were published on 2026-10-25 from
 [verified source `ebd725b`](https://github.com/mathisarends/canon/commit/ebd725b14610f4017614281d9ad074920cf6f002),

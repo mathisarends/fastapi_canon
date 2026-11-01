@@ -3,7 +3,8 @@
 [Documentation](README.md) · [Project](../README.md)
 
 Use the [workspace contributor commands](../../../docs/contributing.md) from the
-repository root. They use one lockfile and run each package in its own process.
+repository root. They use shared Python and pnpm lockfiles and run each package
+in its own process.
 Only the root CI and pre-commit configurations are active.
 
 For focused Streams work:
@@ -11,13 +12,13 @@ For focused Streams work:
 ```console
 uv run --locked --project ../.. --directory packages/fastapi-streams python -m pytest -q
 uv run --locked --project ../.. --directory packages/fastapi-streams python scripts/codegen.py --check
-npm run typecheck --prefix packages/fastapi-streams
-npm run test:coverage --prefix packages/fastapi-streams
+pnpm --dir packages/fastapi-streams run typecheck
+pnpm --dir packages/fastapi-streams run test:coverage
 ```
 
 Drop `--check` to regenerate committed examples and fixtures through their
-generator. Install npm dependencies before pytest to enable TypeScript acceptance
-tests. Coverage includes real FastAPI-to-Node/Python requests, strict narrowing,
+generator. Run `pnpm install --frozen-lockfile --ignore-scripts` at the workspace
+root before pytest to enable TypeScript acceptance tests. Coverage includes real FastAPI-to-Node/Python requests, strict narrowing,
 recursive models, authentication, disconnect cleanup, cancellation and drift.
 
 Dependency and installed CLI checks use the root
