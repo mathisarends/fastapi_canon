@@ -2,7 +2,7 @@
 
 All notable changes to `fastapi-canon` are documented in this file.
 
-## 0.10.0 - unreleased
+## 0.10.0 - 2026-11-01
 
 ### Breaking changes
 
@@ -38,8 +38,8 @@ All notable changes to `fastapi-canon` are documented in this file.
 - `Problem.as_dict()` preserves explicitly null extension values while omitting
   absent `status`, `detail`, and `instance`. HTTP schemas describe optional
   `detail` and `instance` as strings; omit absent values instead of emitting null.
-- Prepare one Canon 0.10.0 version across the workspace and generated artifact
-  metadata. This source version is not a publication.
+- Use one Canon 0.10.0 version across the workspace and generated artifact
+  metadata.
 
 - Canon streams now send terminal `canon.problem` or `canon.complete` events.
   Declare processing errors with `stream_raises=` and update manual consumers to

@@ -43,13 +43,12 @@ outside the library's intended architecture.
 
 ## Quick start
 
-The prepared 0.10.0 source includes SSE, WebSockets and WebRTC in the same wheel.
+Canon 0.10.0 includes SSE, WebSockets and WebRTC in the same wheel.
 Install feature dependencies with `fastapi-canon[sse,websockets,webrtc]` and
 generation tooling with `fastapi-canon[codegen]`. Use `fastapi-canon generate` for one
 domain SDK with shared models and errors; see the [codegen guide](../../docs/unified-canon-concept.md).
 Specialized `fastapi-canon sse`, `fastapi-canon websockets` and `fastapi-canon webrtc` commands remain available.
-See the [migration guide](docs/package-migration.md); this version is not yet
-published.
+See the [migration guide](docs/package-migration.md) when upgrading.
 
 ```python
 from fastapi import FastAPI
