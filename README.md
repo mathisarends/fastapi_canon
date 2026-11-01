@@ -43,6 +43,11 @@ Canon 0.10.0 is the current unified distribution. The other names below are
 historical releases from the earlier four-distribution layout; use Canon's
 feature extras for current development.
 
+The source tree prepares **0.11.0 (unreleased)**. It replaces `observe()` with
+feature-owned `instrument()` declarations and fixes generated Python RPC clients.
+See the [migration notes](packages/fastapi-canon/CHANGELOG.md#0110---unreleased)
+and [release preparation](docs/releases.md#current-versions).
+
 | Package | Version | GitHub | PyPI |
 | --- | --- | --- | --- |
 | `fastapi-canon` | 0.10.0 | [Release notes and artifacts](https://github.com/mathisarends/fastapi_canon/releases/tag/fastapi-canon-v0.10.0) | [Install](https://pypi.org/project/fastapi-canon/0.10.0/) |

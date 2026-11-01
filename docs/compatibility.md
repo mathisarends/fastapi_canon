@@ -9,6 +9,15 @@
 | `fastapi-rpckit` | 0.4.1 |
 | `fastapi-webrtc` | 0.3.0 |
 
+The source tree prepares **Canon 0.11.0 (unreleased)** with the same Python and
+runtime dependency ranges as 0.10.0. Its telemetry API requires migration from
+provider-level `observe()` to `Feature(instrumentation=[instrument(...)])`.
+Regenerate Python RPC clients to receive the private dispatch-table fix; their
+error exports and wire behavior are unchanged. See the
+[0.11.0 migration notes](../packages/fastapi-canon/CHANGELOG.md#0110---unreleased)
+and [release preparation](releases.md#current-versions). Source versions do not
+establish publication or CI results for the prepared release.
+
 Published versions and assets are linked in the [README](../README.md#current-releases).
 Canon 0.10.0 was published on 2026-11-01. It includes the unpublished 0.9.0
 consolidation; follow the [package migration guide](../packages/fastapi-canon/docs/package-migration.md)

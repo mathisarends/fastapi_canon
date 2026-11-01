@@ -11,9 +11,22 @@ historical runs, tags and assets linked below remain in their original repositor
 
 ## Current versions
 
-The source tree prepares Canon 0.11.0 (unreleased) for the breaking telemetry
-declaration migration. See the [0.11.0 changelog](../packages/fastapi-canon/CHANGELOG.md#0110---unreleased).
-The published release below remains unchanged.
+The source tree prepares Canon **0.11.0 (unreleased)**. This is the next minor
+release after 0.10.0 because `observe()` is removed in favor of feature-owned
+`instrument()` declarations. It also includes the generated Python RPC client
+boundary fix, shared pnpm tooling and the publisher verification setup fix.
+See the [0.11.0 changelog](../packages/fastapi-canon/CHANGELOG.md#0110---unreleased)
+for migration steps, including client regeneration. Package metadata, the shared
+version constant, root pin, reference-service range and generated manifests use
+0.11.0. Validate the prepared source with:
+
+```console
+uv run --locked python scripts/release.py validate --package fastapi-canon --version 0.11.0
+```
+
+Before publication, finalize the changelog date, merge the prepared source to
+`main`, pass exact-source CI and dispatch the 0.11.0 dry run as described below.
+The published release below remains unchanged until publication is verified.
 
 Canon 0.10.0 was published on 2026-11-01 from
 [verified source `4d9ce18`](https://github.com/mathisarends/fastapi_canon/commit/4d9ce1842b350a9bf867d512cc89aafc4b44d53b),
