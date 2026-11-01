@@ -1,5 +1,5 @@
-"""Optional OpenTelemetry integration for Canon compositions and Dishka providers."""
+"""Optional OpenTelemetry integration declared on Canon features."""
 
-from .declarations import Telemetry, observe
+from .declarations import Instrumentation, Telemetry, instrument
 
-__all__ = ["Telemetry", "observe"]
+__all__ = ["Instrumentation", "Telemetry", "instrument"]

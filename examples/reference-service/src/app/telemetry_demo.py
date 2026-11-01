@@ -10,7 +10,7 @@ from dishka import FromDishka, Provider, Scope, provide
 from dishka.integrations.fastapi import inject
 from fastapi import FastAPI
 from fastapi_canon import CanonRouter, Composition, ErrorOptions, Feature
-from fastapi_canon.integrations.opentelemetry import Telemetry, observe
+from fastapi_canon.integrations.opentelemetry import Telemetry, instrument
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.httpx import HTTPX2ClientInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
@@ -149,7 +149,6 @@ def _notification_feature(options: Telemetry) -> Feature:
         gateway = provide(
             HttpNotificationGateway, provides=NotificationGateway, scope=Scope.REQUEST
         )
-        gateway_telemetry = observe(NotificationGateway)
 
     router = CanonRouter()
 
@@ -160,5 +159,8 @@ def _notification_feature(options: Telemetry) -> Feature:
         return {"status": "sent"}
 
     return Feature(
-        name="notifications", routers=(router,), providers=(NotifierProvider,)
+        name="notifications",
+        routers=(router,),
+        providers=(NotifierProvider,),
+        instrumentation=(instrument(NotificationGateway),),
     )

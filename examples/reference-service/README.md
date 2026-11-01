@@ -29,10 +29,11 @@ at the composition root.
 
 ## Local telemetry demo
 
-The normal application remains exporter-free. Its Dishka TaskProvider declares
-`observe(TaskRepository)` and `observe(TaskService, expected=(TaskNotFound,))`;
-these decorators return the original instances unless composition enables
-telemetry. `create_app(telemetry=Telemetry(...))` accepts application-owned
+The normal application remains exporter-free. Its tasks feature declares
+`instrument(TaskRepository)` and `instrument(TaskService, expected=(TaskNotFound,))`
+in `Feature.instrumentation`. Composition adds their Dishka decorators only when
+telemetry is enabled; TaskProvider remains usable in direct Dishka containers.
+`create_app(telemetry=Telemetry(...))` accepts application-owned
 providers. See the [developer API](../../packages/fastapi-canon/docs/telemetry.md).
 
 For the opt-in demo, run from the repository root:

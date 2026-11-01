@@ -72,15 +72,23 @@ app = Composition(project_feature).apply(FastAPI())
 Every contribution is optional:
 
 ```python
+from fastapi_canon.integrations.opentelemetry import instrument
+
 feature = Feature(
     name="projects",
     routers=[router],
     providers=[provider],
+    instrumentation=[instrument(ProjectRepository)],
     errors=feature_errors,
     exception_handlers=[handler_spec],
     lifespan=feature_lifespan,
 )
 ```
+
+`instrumentation=` declares ports and asynchronous `__call__` use cases at the
+feature boundary. Composition adds their Dishka decorators only when telemetry
+is enabled; the original providers remain usable directly. See the
+[telemetry guide](docs/telemetry.md) for configuration and migration from `observe()`.
 
 When `errors=` is omitted, a feature collects the registries referenced by its
 direct `CanonRouter` contributions. Supplying `errors=` remains available when

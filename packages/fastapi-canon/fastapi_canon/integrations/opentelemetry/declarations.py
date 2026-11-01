@@ -5,15 +5,14 @@ from __future__ import annotations
 import inspect
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Any
 
-from dishka import FromComponent, Provider, Scope, decorate
-from dishka.dependency_source import CompositeDependencySource
 from starlette.types import Scope as ASGIScope
 
 from fastapi_canon.error.types import FeatureConfigurationError
 
 if TYPE_CHECKING:
+    from dishka import Provider
     from fastapi import FastAPI
     from opentelemetry._logs import LoggerProvider
     from opentelemetry.metrics import MeterProvider
@@ -23,91 +22,58 @@ if TYPE_CHECKING:
         OpenTelemetry,
     )
 
-__all__ = ["Telemetry", "observe"]
+__all__ = ["Instrumentation", "Telemetry", "instrument"]
 
 
-@dataclass(frozen=True, slots=True, eq=False)
-class _Observation:
+@dataclass(frozen=True, slots=True, init=False)
+class Instrumentation:
+    """An immutable feature declaration returned by :func:`instrument`."""
+
     port: type[Any]
     expected: tuple[type[Exception], ...]
+    component: str
+
+    def __init__(
+        self,
+        *,
+        port: type[Any],
+        expected: Sequence[type[Exception]] = (),
+        component: str = "",
+    ) -> None:
+        if not isinstance(port, type):
+            raise FeatureConfigurationError("instrument port must be a class")
+        if not _instrumented_methods(port):
+            raise FeatureConfigurationError(
+                f"{port.__name__}: instrument requires public async methods or async __call__"
+            )
+        failures = tuple(expected)
+        if any(
+            not isinstance(cls, type) or not issubclass(cls, Exception)
+            for cls in failures
+        ):
+            raise FeatureConfigurationError(
+                "expected must contain Exception subclasses"
+            )
+        if not isinstance(component, str):
+            raise FeatureConfigurationError("component must be a string")
+        object.__setattr__(self, "port", port)
+        object.__setattr__(self, "expected", failures)
+        object.__setattr__(self, "component", component)
 
 
-def observe(
+def instrument(
     port: type[Any],
     *,
     expected: Sequence[type[Exception]] = (),
-) -> CompositeDependencySource:
-    """Declare a Dishka decorator on a Provider for all public async methods.
+    component: str = "",
+) -> Instrumentation:
+    """Declare instrumentation for a feature's port or async callable use case.
 
-    No OpenTelemetry import or argument capture happens here. Without a
-    Composition telemetry option, the decorator returns the original instance.
-    Dishka owns the decorated dependency's scope, caching, and finalization.
+    Pass the result to ``Feature(instrumentation=[...])``. No OpenTelemetry
+    import or Dishka decorator is created until composition enables telemetry.
+    The component selects the Dishka binding; the default is the empty component.
     """
-    if not isinstance(port, type):
-        raise FeatureConfigurationError("observe port must be a class")
-    if not any(
-        not name.startswith("_") and inspect.iscoroutinefunction(method)
-        for name, method in inspect.getmembers(port)
-    ):
-        raise FeatureConfigurationError(
-            f"{port.__name__}: observe requires public async methods"
-        )
-    failures = tuple(expected)
-    if any(
-        not isinstance(cls, type) or not issubclass(cls, Exception) for cls in failures
-    ):
-        raise FeatureConfigurationError("expected must contain Exception subclasses")
-    spec = _Observation(port, failures)
-
-    def wrap(self: Provider, instance: Any, observer: _PortObserver) -> Any:
-        return observer.wrap(spec, self.component, instance)
-
-    wrap.__annotations__ = {
-        "instance": port,
-        "observer": Annotated[_PortObserver, FromComponent("")],
-        "return": port,
-    }
-    wrap._canon_observation = spec  # type: ignore[attr-defined]
-    return decorate(wrap, provides=port)
-
-
-class _PortObserver:
-    """No-op implementation for compositions without telemetry."""
-
-    def wrap(self, spec: _Observation, component: str, instance: Any) -> Any:
-        return instance
-
-
-def _observer_provider(
-    contributions: tuple[tuple[str, Provider], ...],
-    options: Telemetry | None,
-) -> Provider | None:
-    observations: dict[tuple[_Observation, str], str] = {}
-    seen: set[tuple[str, type[Any]]] = set()
-    for feature, provider in contributions:
-        for decorator in provider.decorators:
-            source = decorator.factory.source
-            source = getattr(source, "__func__", source)
-            spec = getattr(source, "_canon_observation", None)
-            if not isinstance(spec, _Observation):
-                continue
-            key = (provider.component, spec.port)
-            if key in seen:
-                raise FeatureConfigurationError(
-                    f"port {spec.port.__name__} is observed more than once in component {provider.component!r}"
-                )
-            seen.add(key)
-            observations[spec, provider.component] = feature
-    if not observations:
-        return None
-    observer = _PortObserver()
-    if options is not None:
-        from fastapi_canon.integrations.opentelemetry.ports import _Observer
-
-        observer = _Observer(observations, options)
-    provider = Provider()
-    provider.provide(lambda: observer, provides=_PortObserver, scope=Scope.APP)
-    return provider
+    return Instrumentation(port=port, expected=expected, component=component)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -182,3 +148,33 @@ class Telemetry:
             ) from exc
 
         validate_app(app)
+
+
+def _instrumentation_providers(
+    registrations: tuple[tuple[str, Instrumentation], ...],
+    options: Telemetry | None,
+) -> tuple[Provider, ...]:
+    seen: dict[tuple[str, type[Any]], str] = {}
+    for feature, spec in registrations:
+        key = (spec.component, spec.port)
+        if key in seen:
+            raise FeatureConfigurationError(
+                f"port {spec.port.__name__} is instrumented more than once in "
+                f"component {spec.component!r} by features {seen[key]!r} and {feature!r}"
+            )
+        seen[key] = feature
+    if options is None or not registrations:
+        return ()
+    from fastapi_canon.integrations.opentelemetry.ports import _providers
+
+    return _providers(registrations, options)
+
+
+def _instrumented_methods(
+    port: type[Any],
+) -> tuple[tuple[str, Callable[..., Any]], ...]:
+    return tuple(
+        (name, method)
+        for name, method in inspect.getmembers(port, inspect.iscoroutinefunction)
+        if name == "__call__" or not name.startswith("_")
+    )

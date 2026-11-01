@@ -11,7 +11,7 @@
   ],
   "generation": {
     "generator": "fastapi-canon",
-    "generator_version": "0.10.0",
+    "generator_version": "0.11.0",
     "python_http_client": null,
     "schema_hash_encoding": "canonical-json-v1",
     "schema_sha256": "b12c8dd481b9c592222dc45a26586aecc8899702e42ccc0deed834d91a7cfe41",

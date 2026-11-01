@@ -199,7 +199,7 @@ def _observation_check(*, enabled: bool) -> None:
     from dishka import FromDishka, Provider, Scope, provide
     from dishka.integrations.fastapi import inject
     from fastapi_canon import CanonRouter, Composition, Feature
-    from fastapi_canon.integrations.opentelemetry import Telemetry, observe
+    from fastapi_canon.integrations.opentelemetry import Telemetry, instrument
 
     global_provider = None
     if enabled:
@@ -214,7 +214,6 @@ def _observation_check(*, enabled: bool) -> None:
 
     class Dependencies(Provider):
         port = provide(Port, scope=Scope.REQUEST)
-        port_telemetry = observe(Port)
 
     router = CanonRouter()
 
@@ -224,7 +223,12 @@ def _observation_check(*, enabled: bool) -> None:
         return await port.ping()
 
     app = Composition(
-        Feature(name="observed", providers=[Dependencies], routers=[router]),
+        Feature(
+            name="observed",
+            providers=[Dependencies],
+            routers=[router],
+            instrumentation=[instrument(Port)],
+        ),
         telemetry=Telemetry() if enabled else None,
     ).apply(FastAPI())
     with TestClient(app) as client:

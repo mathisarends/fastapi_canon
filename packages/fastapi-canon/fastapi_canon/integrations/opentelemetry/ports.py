@@ -1,12 +1,13 @@
 """Port instrumentation loaded only by an enabled telemetry composition."""
 
-import inspect
 from collections.abc import Callable
 from contextlib import nullcontext
 from contextvars import ContextVar
 from functools import wraps
 from time import perf_counter
 from typing import Any
+
+from dishka import Provider
 
 try:
     from opentelemetry import metrics, trace
@@ -18,15 +19,15 @@ except ModuleNotFoundError as exc:
     ) from exc
 
 from fastapi_canon.integrations.opentelemetry.declarations import (
+    Instrumentation,
     Telemetry,
-    _Observation,
-    _PortObserver,
+    _instrumented_methods,
 )
 
 excluded: ContextVar[bool] = ContextVar("canon.telemetry.excluded", default=False)
 
 
-class _ObservedProxy:
+class _InstrumentedProxy:
     def __init__(self, instance: Any) -> None:
         self._instance = instance
 
@@ -34,9 +35,9 @@ class _ObservedProxy:
         return getattr(self._instance, name)
 
 
-class _Observer(_PortObserver):
+class _Observer:
     def __init__(
-        self, observations: dict[tuple[_Observation, str], str], options: Telemetry
+        self, registrations: tuple[tuple[str, Instrumentation], ...], options: Telemetry
     ) -> None:
         self.tracer = trace.get_tracer(
             "fastapi_canon", tracer_provider=options.tracer_provider
@@ -50,28 +51,25 @@ class _Observer(_PortObserver):
         )
         self.spans = options.tracing and options.port_spans
         self.proxies = {
-            (spec, component): type(
-                f"Observed{spec.port.__name__}",
-                (_ObservedProxy,),
+            spec: type(
+                f"Instrumented{spec.port.__name__}",
+                (_InstrumentedProxy,),
                 {
                     name: self._wrapper(spec, feature, name, method)
-                    for name, method in inspect.getmembers(
-                        spec.port, inspect.iscoroutinefunction
-                    )
-                    if not name.startswith("_")
+                    for name, method in _instrumented_methods(spec.port)
                 },
             )
-            for (spec, component), feature in observations.items()
+            for feature, spec in registrations
         }
 
-    def wrap(self, spec: _Observation, component: str, instance: Any) -> Any:
+    def wrap(self, spec: Instrumentation, instance: Any) -> Any:
         if not self.spans and self.histogram is None:
             return instance
-        return self.proxies[spec, component](instance)
+        return self.proxies[spec](instance)
 
     def _wrapper(
         self,
-        spec: _Observation,
+        spec: Instrumentation,
         feature: str,
         name: str,
         method: Callable[..., Any],
@@ -83,7 +81,7 @@ class _Observer(_PortObserver):
         }
 
         @wraps(method)
-        async def call(proxy: _ObservedProxy, *args: Any, **kwargs: Any) -> Any:
+        async def call(proxy: _InstrumentedProxy, *args: Any, **kwargs: Any) -> Any:
             target = getattr(proxy._instance, name)
             if excluded.get():
                 return await target(*args, **kwargs)
@@ -125,3 +123,20 @@ class _Observer(_PortObserver):
                         self.histogram.record(perf_counter() - started, outcome)
 
         return call
+
+
+def _providers(
+    registrations: tuple[tuple[str, Instrumentation], ...], options: Telemetry
+) -> tuple[Provider, ...]:
+    observer = _Observer(registrations, options)
+    return tuple(_provider(spec, observer) for _, spec in registrations)
+
+
+def _provider(spec: Instrumentation, observer: _Observer) -> Provider:
+    def wrap(instance: Any) -> Any:
+        return observer.wrap(spec, instance)
+
+    wrap.__annotations__ = {"instance": spec.port, "return": spec.port}
+    provider = Provider(component=spec.component)
+    provider.decorate(wrap, provides=spec.port)
+    return provider

@@ -25,7 +25,7 @@ from fastapi_canon.policy import RouterPolicy
 from fastapi_canon.router import CanonRouter
 
 if TYPE_CHECKING:
-    from fastapi_canon.integrations.opentelemetry import Telemetry
+    from fastapi_canon.integrations.opentelemetry import Instrumentation, Telemetry
 
 
 type FeatureLifespan = Lifespan[FastAPI]
@@ -65,6 +65,7 @@ class Feature:
     name: str
     routers: tuple[APIRouter, ...]
     providers: tuple[ProviderSource, ...]
+    instrumentation: tuple[Instrumentation, ...]
     errors: ErrorRegistry | None
     exception_handlers: tuple[ExceptionHandlerSpec, ...]
     lifespan: FeatureLifespan | None
@@ -75,6 +76,7 @@ class Feature:
         name: str,
         routers: Sequence[APIRouter] = (),
         providers: Sequence[ProviderSource] = (),
+        instrumentation: Sequence[Instrumentation] = (),
         errors: ErrorRegistry | None = None,
         exception_handlers: Sequence[ExceptionHandlerSpec] = (),
         lifespan: FeatureLifespan | None = None,
@@ -86,6 +88,15 @@ class Feature:
         normalized_providers = _unique_provider_sources(
             providers, feature_name=normalized_name
         )
+        normalized_instrumentation = tuple(instrumentation)
+        if normalized_instrumentation:
+            from fastapi_canon.integrations.opentelemetry import Instrumentation
+
+            normalized_instrumentation = _unique_instances(
+                normalized_instrumentation,
+                Instrumentation,
+                f"feature {normalized_name!r} instrumentation",
+            )
         normalized_handlers = _unique_instances(
             exception_handlers,
             ExceptionHandlerSpec,
@@ -110,6 +121,7 @@ class Feature:
         object.__setattr__(self, "name", normalized_name)
         object.__setattr__(self, "routers", normalized_routers)
         object.__setattr__(self, "providers", normalized_providers)
+        object.__setattr__(self, "instrumentation", normalized_instrumentation)
         object.__setattr__(self, "errors", resolved_errors)
         object.__setattr__(self, "exception_handlers", normalized_handlers)
         object.__setattr__(self, "lifespan", lifespan)
@@ -298,19 +310,20 @@ def _apply_composition(app: FastAPI, composition: Composition) -> None:
         type_base=composition.errors.type_base,
     )
     providers = tuple(contribution.provider for contribution in materialized_providers)
-    if providers:
+    instrumentation = tuple(
+        (feature.name, spec)
+        for feature in composition.features
+        for spec in feature.instrumentation
+    )
+    if instrumentation:
         from fastapi_canon.integrations.opentelemetry.declarations import (
-            _observer_provider,
+            _instrumentation_providers,
         )
 
-        observer_provider = _observer_provider(
-            tuple(
-                (item.feature_name, item.provider) for item in materialized_providers
-            ),
-            telemetry,
+        providers = (
+            *providers,
+            *_instrumentation_providers(instrumentation, telemetry),
         )
-        if observer_provider is not None:
-            providers = (*providers, observer_provider)
     container = _make_container(providers)
     policy_operations = _validate_error_installation(
         app,

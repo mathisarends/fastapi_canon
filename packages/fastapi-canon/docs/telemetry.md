@@ -10,13 +10,13 @@ Recent FastAPI versions themselves depend on the OpenTelemetry API.
 
 ## Developer-facing API
 
-Register instrumentation beside the Dishka binding it decorates:
+Declare instrumentation on the feature that owns the application boundary:
 
 ```python
 from dishka import Provider, Scope, provide
 from fastapi import FastAPI
 from fastapi_canon import Composition, Feature
-from fastapi_canon.integrations.opentelemetry import Telemetry, observe
+from fastapi_canon.integrations.opentelemetry import Telemetry, instrument
 
 
 class TaskProvider(Provider):
@@ -27,11 +27,16 @@ class TaskProvider(Provider):
     )
     service = provide(TaskService, scope=Scope.REQUEST)
 
-    repository_telemetry = observe(TaskRepository)
-    service_telemetry = observe(TaskService, expected=(TaskNotFound,))
 
-
-tasks = Feature(name="tasks", routers=(router,), providers=(TaskProvider,))
+tasks = Feature(
+    name="tasks",
+    routers=(router,),
+    providers=(TaskProvider,),
+    instrumentation=(
+        instrument(TaskRepository),
+        instrument(TaskService, expected=(TaskNotFound,)),
+    ),
+)
 app = Composition(
     tasks,
     telemetry=Telemetry(
@@ -41,16 +46,21 @@ app = Composition(
 ).apply(FastAPI())
 ```
 
-`observe(Port)` returns a Dishka decorator declaration for a Provider class.
-Existing `@provide` factory methods work too. The declaration can remain in the
-provider unconditionally: without `Composition(telemetry=...)`, it returns the
-original instance and imports no Canon OpenTelemetry runtime. `Feature` needs
-no additional metadata. Use the decorator inside a Canon composition, which
-supplies its observer dependency.
+`instrument(Port)` returns immutable `Instrumentation` metadata. Put it in
+`Feature.instrumentation`, leaving Dishka providers focused on their normal
+bindings. Existing `@provide` factory methods work too. Composition generates
+separate decorator providers only when `telemetry=Telemetry(...)` is supplied.
+With `telemetry=None`, the declarations add no DI dependencies or decorators and
+import no Canon OpenTelemetry runtime. Direct Dishka containers can use the same
+original providers without Canon. Features and provider instances can be reused
+across applications; their instrumentation runtime belongs to each composition.
 
-Every public coroutine method declared on the port, including inherited methods,
-gets an `INTERNAL` span. Synchronous methods, private methods and async generators
-are passed through. At least one public coroutine method is required. There are
+Every public coroutine method and asynchronous `__call__` declared on the port,
+including inherited methods, gets an `INTERNAL` span. For example,
+`instrument(GetActiveUser)` observes `await get_active_user(user_id)` with a
+`GetActiveUser.__call__` span. Synchronous methods, private methods and async
+generators are passed through. At least one public coroutine method or async
+`__call__` is required. There are
 no method-name strings, parameter mappings, or implicit argument capture. For
 custom attributes, use an explicit application-owned adapter and ordinary
 OpenTelemetry calls.
@@ -59,9 +69,19 @@ Dishka still owns scope, caching and finalization of the original dependency.
 The integration caches a proxy class and method wrappers per registration and
 composition, then creates one proxy per dependency resolution. It forwards method
 calls and public attribute reads; it is not a general replacement for object
-identity, concrete-type checks, attribute mutation, or Python special methods.
-Register a port only once per Dishka component. Existing named components are
-supported; the observer dependency lives in the default component.
+identity, concrete-type checks, attribute mutation, or other Python special
+methods. Register a port only once per Dishka component, including across
+features. Use `instrument(Port, component="billing")` for a named binding; the
+default is Dishka's empty component. Spans belong to the feature declaring the
+instrumentation, even when another feature contributes the binding.
+
+### Migration from 0.10
+
+`observe()` has been removed, without an alias. Move its declarations out of
+Provider classes into `Feature(instrumentation=[instrument(Port), ...])`. Remove
+separate telemetry-only providers/features. Keep `expected=(...)` on the new
+declaration, and supply `component=` explicitly for named Dishka bindings.
+SDK configuration and ownership remain unchanged.
 
 ## Configuration and ownership
 
@@ -72,7 +92,7 @@ supported; the observer dependency lives in the default component.
 | `tracer_provider`, `meter_provider`, `logger_provider` | `None` | Use the current global provider; explicit providers are local to this application |
 | `tracing`, `metrics`, `logs` | `True` | Enable FastAPI's native signals; `tracing` also gates port spans |
 | `operation_spans` | `True` | FastAPI dependencies, endpoint, serialization and background-task spans |
-| `port_spans` | `True` | Instrument observed coroutine methods |
+| `port_spans` | `True` | Instrument declared coroutine methods and async `__call__` |
 | `port_metrics` | `False` | Record `canon.port.duration` in seconds, independently of port spans |
 | `problem_details` | `True` | Enrich the native HTTP server span with handled Problem Details outcomes |
 | `exclude` | `None` | ASGI scope predicate; suppress native telemetry and port instrumentation for that request/connection |
@@ -83,6 +103,9 @@ exporters, sets global providers, or flushes/shuts down application providers.
 The application may install global providers in its lifespan before requests
 start; both FastAPI and the port tracer resolve them lazily. Explicit providers
 should be created before composition and shut down by an application lifespan.
+Without a Canon telemetry option, FastAPI keeps its own constructor/environment
+configuration; `telemetry=None` does not disable an independently configured
+FastAPI pipeline.
 
 FastAPI currently accepts telemetry configuration only in its constructor.
 Canon bridges that boundary by updating the existing `_telemetry` dictionary,
@@ -90,12 +113,22 @@ guarded by a FastAPI >=0.143 check and integration tests. When problem enrichmen
 is enabled, a local, non-owning tracer-provider adapter preserves problem codes
 when FastAPI finalizes a 5xx span. It does not replace the global provider.
 
+### Planned follow-up: managed Console SDK preset
+
+An explicitly selected `Telemetry.console(...)` preset is planned, but is not
+implemented in this API. It should own application-local SDK providers, exporters
+and cleanup, including partial initialization and startup failures. SDK shutdown
+must follow feature and DI cleanup. Disabled presets must allocate no SDK
+resources; externally supplied providers remain borrowed. Configuration must be
+reusable across applications, with separate owned resources per application and
+no changes to global providers. Custom SDK configuration remains supported.
+
 ## Span and error contracts
 
 Port spans use `{Port}.{method}`, such as `TaskRepository.get_by_id`, with:
 
 - `code.function.name`: the same port/method name;
-- `canon.feature`: the feature contributing the provider;
+- `canon.feature`: the feature declaring the instrumentation;
 - `canon.port`: the port class name;
 - `canon.adapter`: the resolved implementation class name.
 
@@ -104,12 +137,12 @@ An unexpected exception is re-raised, adds an `exception` event containing only
 `ERROR`. Exception messages, stack traces, arguments, return values, payloads,
 headers, and SQL parameters are not captured by the port wrapper.
 
-`observe(Port, expected=(TaskNotFound,))` instead records a
+`instrument(Port, expected=(TaskNotFound,))` instead records a
 `canon.port.expected_exception` event with `exception.type`, leaves span status
 unset, and omits `error.type`. Subclasses match too. This is an application
 classification, not a universal OpenTelemetry rule. Cancellation propagates
 without an error event/status. These settings apply to that port only; configure
-other observed ports independently when the same exception crosses them.
+other instrumented ports independently when the same exception crosses them.
 
 The optional histogram uses only `canon.feature`, `canon.port`,
 `code.function.name`, and, for unexpected failures, `error.type`. Argument values
