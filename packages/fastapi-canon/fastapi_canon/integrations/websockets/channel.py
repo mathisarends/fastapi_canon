@@ -639,6 +639,10 @@ def normalize_namespace(value: object) -> str:
     return namespace
 
 
+def request_name(wire_name: str) -> str:
+    return "".join(part.capitalize() for part in wire_name.split(".")) + "Request"
+
+
 def _name(value: object, kind: str) -> str:
     """Validate a name relative to a namespace; dots separate its segments."""
     if not isinstance(value, str) or any(
@@ -656,7 +660,3 @@ def _is_free_function(function: FunctionType) -> bool:
 def _docstring_summary(function: Any) -> str | None:
     doc = inspect.getdoc(function)
     return None if not doc else doc.splitlines()[0].strip() or None
-
-
-def request_name(wire_name: str) -> str:
-    return "".join(part.capitalize() for part in wire_name.split(".")) + "Request"

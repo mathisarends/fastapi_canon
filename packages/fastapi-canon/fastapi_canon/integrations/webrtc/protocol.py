@@ -90,11 +90,11 @@ class CandidateMessage(_Message):
     candidate: CandidatePayload | None
 
 
-type ClientMessage = Annotated[
+type _ClientMessage = Annotated[
     DescriptionMessage | CandidateMessage, Field(discriminator="type")
 ]
 client_message_adapter: TypeAdapter[DescriptionMessage | CandidateMessage] = (
-    TypeAdapter(ClientMessage)
+    TypeAdapter(_ClientMessage)
 )
 
 

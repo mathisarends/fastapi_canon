@@ -13,7 +13,7 @@ from fastapi_canon.codegen.config import Configuration
 from fastapi_canon.codegen.ir import GenerationError
 from fastapi_canon.codegen.planner import build_plan
 
-MANIFEST = ".canon-codegen.json"
+_MANIFEST = ".canon-codegen.json"
 
 
 def generate(
@@ -87,7 +87,7 @@ def generate(
             "files": sorted(files),
         }
         old: list[str] = []
-        manifest_path = target.output / MANIFEST
+        manifest_path = target.output / _MANIFEST
         if manifest_path.exists():
             try:
                 previous = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -201,7 +201,7 @@ def _safe(name: str) -> bool:
         and "\\" not in name
         and not path.is_absolute()
         and not any(part in {"..", "."} or ":" in part for part in path.parts)
-        and name != MANIFEST
+        and name != _MANIFEST
     )
 
 

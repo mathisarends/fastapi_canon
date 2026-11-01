@@ -17,7 +17,7 @@ from typing import Any
 
 from fastapi_canon.integrations.webrtc.protocol import PROTOCOL_VERSION, SUBPROTOCOL
 
-CONTRACT_VERSION = 1
+_CONTRACT_VERSION = 1
 DEFAULT_CLIENT_NAME = "RtcClient"
 
 _IDENTIFIER = re.compile(r"^[A-Za-z_$][A-Za-z0-9_$]*$")
@@ -86,7 +86,7 @@ _RESERVED_WORDS = frozenset(
     ]
 )
 # Option names consumed by the runtime; parameters cannot reuse them.
-RESERVED_OPTIONS = frozenset(
+_RESERVED_OPTIONS = frozenset(
     {
         "tracks",
         "signal",
@@ -178,10 +178,10 @@ def generate_typescript(
 def _check_contract(contract: Mapping[str, Any]) -> None:
     if not isinstance(contract, Mapping):
         raise ContractError("The contract must be a JSON object")
-    if contract.get("contract_version") != CONTRACT_VERSION:
+    if contract.get("contract_version") != _CONTRACT_VERSION:
         raise ContractError(
             f"Unsupported contract version {contract.get('contract_version')!r}; "
-            f"this generator reads version {CONTRACT_VERSION}"
+            f"this generator reads version {_CONTRACT_VERSION}"
         )
     if (
         contract.get("protocol") != PROTOCOL_VERSION
@@ -544,7 +544,7 @@ def _parameters(
         if parameter.get("in") not in ("path", "query"):
             raise ContractError(f"Unsupported parameter location {parameter!r}")
         key = _camel(parameter["name"])
-        if key in RESERVED_OPTIONS:
+        if key in _RESERVED_OPTIONS:
             raise ContractError(
                 f"Parameter {parameter['name']!r} of session {session['name']!r} "
                 f"collides with the connect option {key!r}; give it an alias"
