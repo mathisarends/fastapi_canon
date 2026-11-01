@@ -15,7 +15,7 @@ The source tree prepares Canon **0.11.0 (unreleased)**. This is the next minor
 release after 0.10.0 because `observe()` is removed in favor of feature-owned
 `instrument()` declarations. It also includes the generated Python RPC client
 boundary fix, shared pnpm tooling and the publisher verification setup fix.
-See the [0.11.0 changelog](../packages/fastapi-canon/CHANGELOG.md#0110---unreleased)
+See the [0.11.0 changelog](../packages/fastapi-canon/CHANGELOG.md#0110---2026-11-01)
 for migration steps, including client regeneration. Package metadata, the shared
 version constant, root pin, reference-service range and generated manifests use
 0.11.0. Validate the prepared source with:

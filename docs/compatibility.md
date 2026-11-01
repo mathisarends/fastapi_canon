@@ -14,7 +14,7 @@ runtime dependency ranges as 0.10.0. Its telemetry API requires migration from
 provider-level `observe()` to `Feature(instrumentation=[instrument(...)])`.
 Regenerate Python RPC clients to receive the private dispatch-table fix; their
 error exports and wire behavior are unchanged. See the
-[0.11.0 migration notes](../packages/fastapi-canon/CHANGELOG.md#0110---unreleased)
+[0.11.0 migration notes](../packages/fastapi-canon/CHANGELOG.md#0110---2026-11-01)
 and [release preparation](releases.md#current-versions). Source versions do not
 establish publication or CI results for the prepared release.
 

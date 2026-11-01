@@ -2,7 +2,7 @@
 
 All notable changes to `fastapi-canon` are documented in this file.
 
-## 0.11.0 - Unreleased
+## 0.11.0 - 2026-11-01
 
 This release replaces provider-level telemetry declarations with feature-owned
 instrumentation and includes the generated Python RPC client fix below.
@@ -29,6 +29,8 @@ instrumentation and includes the generated Python RPC client fix below.
 
 ### Changed
 
+- Expand the README and guides with core HTTP contracts, generated domain SDKs,
+  shared problem handling and source error-contract checking examples.
 - Workspace TypeScript tooling uses the root-pinned pnpm version and one shared
   `pnpm-lock.yaml`. For source development, use Node.js 24 and run
   `pnpm install --frozen-lockfile --ignore-scripts` at the workspace root; replace
