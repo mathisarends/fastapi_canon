@@ -11,6 +11,12 @@ composable `raises=` and `response=` contracts to FastAPI's familiar route
 decorators. Ordinary `APIRouter` declarations and the lower-level response
 compilers remain supported for generated code and incremental migration.
 
+Use the [root README walkthrough](../../README.md#core-api-routes-errors-and-composition)
+for the server-to-SDK path: HTTP, typed SSE and WebSocket RPC declarations become
+one Python/TypeScript domain API. This guide covers the core composition and HTTP
+options in detail; the [codegen guide](../../docs/unified-canon-concept.md)
+explains shared models, errors and generated bindings.
+
 Dishka is a deliberate part of this canon, not an optional integration.
 `fastapi-canon` defines one dependency-injection approach: features contribute
 Dishka providers, and the composition builds and owns one shared Dishka
@@ -34,6 +40,7 @@ outside the library's intended architecture.
   - [Server-sent events](#server-sent-events)
   - [Binary and PDF streams](#binary-and-pdf-streams)
   - [Streaming boundary](#streaming-boundary)
+- [Generated domain SDK](#generated-domain-sdk)
 - [Low-level FastAPI compatibility](#low-level-fastapi-compatibility)
 - [Installation guarantees](#installation-guarantees)
 - [Optional OpenTelemetry integration](docs/telemetry.md)
@@ -231,9 +238,17 @@ composition-owned and not close it independently.
 ## Error contracts
 
 The optional [source checker](docs/error-checking.md) finds explicit application
-exceptions missing from route `raises=` declarations, without importing your
-application. Run `python -m fastapi_canon.check_error_contracts src`; unresolved calls and abstract
-ports are reported as incomplete analysis. CI failure modes are opt-in.
+exceptions with missing registry mappings or route `raises=` declarations,
+without importing your application:
+
+```console
+fastapi-canon check errors src --strict --require-complete
+```
+
+`--strict` fails on mapping/declaration gaps. `--require-complete` also fails on
+incomplete analysis or no supported operations; unresolved calls and abstract
+ports remain visible as incomplete. This checks supported direct `CanonRouter`
+operations; SSE/RPC/WebRTC handlers are outside its current scope.
 
 Error contracts are implemented directly by `fastapi-canon`; no separate error
 library is required. Each feature may expose one `ErrorRegistry`. Registries are
@@ -458,8 +473,10 @@ both Streams client generators. Core imports do not load the SSE runtime; select
 
 Run HTTP preconditions in dependencies: even generator code before the first
 `yield` runs after the response starts. `raises=` documents HTTP problems;
-business errors during a stream need an explicit error event, and connection
-failures remain transport errors.
+`stream_raises=` declares terminal domain problems during stream processing.
+Generated iterators yield business events, consume completion frames and raise
+`ProblemError` for declared terminal problems. Connection failures remain
+transport errors. See [shared problem bindings](docs/problems.md).
 
 See the [integration API](docs/streams.md) for installation, router options,
 composition, client generation, and the streaming boundary. The
@@ -635,6 +652,20 @@ before returning `StreamingResponse`. Once response headers have been sent, an
 exception inside the iterator cannot be converted into another HTTP response.
 SSE protocols can define an application-specific failure event; a failed binary
 iterator produces an incomplete download.
+
+## Generated domain SDK
+
+Use `fastapi-canon generate` to export HTTP/SSE and OpenRPC contracts and generate
+one domain API with shared public models and errors. Consumers call
+`client.projects.get(...)`, iterate `client.projects.events(...)`, or await
+`client.projects.cancel(...)`; protocol bindings handle their wire behavior.
+
+The [README examples](../../README.md#generate-and-use-the-sdk) show the complete
+configuration and Python/TypeScript calls. The
+[codegen guide](../../docs/unified-canon-concept.md) documents naming, dependency
+requirements, operation selection and supported schemas. Run
+`fastapi-canon generate --check --diff` in CI to detect drift without rewriting
+files. Generated runtimes do not import Canon.
 
 ## Low-level FastAPI compatibility
 

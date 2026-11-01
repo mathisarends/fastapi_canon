@@ -1,13 +1,14 @@
 # Canon package and public API
 
 The [canonicalization record](../CANONICALIZATION_DECISIONS.md) distinguishes the
-agreed target design from implemented capabilities. The prepared 0.10.0 source
-adds [shared problem contracts](../packages/fastapi-canon/docs/problems.md).
+agreed target design from implemented capabilities. Canon includes
+[shared problem contracts](../packages/fastapi-canon/docs/problems.md).
 RPC problem envelopes, terminal SSE control events, and the combined client
 facade are included in this source.
 
 This document records the implemented package boundaries and public entry points
-in the prepared, unpublished Canon 0.10.0 source. The
+in this checkout. Published and prepared versions are tracked in
+[releases](releases.md). The
 [codegen guide](unified-canon-concept.md) describes the implemented common
 configuration, domain facade and explicit support limits.
 
@@ -106,7 +107,7 @@ exporters or own application SDK providers.
 
 ## Commands and generated artifacts
 
-There is one installed command, `canon`, also available as
+There is one installed command, `fastapi-canon`, also available as
 `python -m fastapi_canon`. The implemented command families are:
 
 | Command | Responsibility |

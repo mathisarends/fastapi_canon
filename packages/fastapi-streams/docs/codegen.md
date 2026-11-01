@@ -2,6 +2,14 @@
 
 [Documentation](README.md) · [Project](../README.md)
 
+For a domain SDK that combines HTTP, typed SSE and WebSocket RPC, start with
+[`fastapi-canon generate`](../../../docs/unified-canon-concept.md). HTTP and SSE
+share one OpenAPI source; generated stream methods expose typed async iteration
+and handle framing, completion and terminal problems. The
+[README walkthrough](../../../README.md#streams-typed-events-from-server-to-sdk)
+shows server declarations and Python/TypeScript consumer code together.
+The specialized workflow below generates a separate SSE SDK.
+
 ## Export and generate
 
 ```sh

@@ -12,7 +12,7 @@ Import the router explicitly:
 from fastapi_canon.integrations.sse import CanonStreamRouter
 ```
 
-The prepared Canon 0.10.0 release includes the SSE implementation in the same
+Canon includes the SSE implementation in the same
 wheel. The `sse` extra selects FastAPI >=0.143.3 and Pydantic >=2.11.2;
 base composition keeps its existing lower bounds. No separate Streams package
 is installed. See the [migration guide](package-migration.md).
@@ -215,6 +215,18 @@ also configure Dishka's container, middleware, and lifespan yourself.
 
 ## Export and client generation
 
+Use [`fastapi-canon generate`](../../../docs/unified-canon-concept.md) for a
+domain SDK that combines HTTP, SSE and WebSocket RPC with shared public models
+and errors. SSE uses the same OpenAPI source as HTTP; annotate the event type
+and choose an explicit name such as `operation_id="projects.events"` to generate
+`client.projects.events(...)`. Python and TypeScript consumers use async
+iteration. The binding handles framing, decoding, terminal problems and
+completion. The [README walkthrough](../../../README.md#streams-typed-events-from-server-to-sdk)
+shows the server declaration, configuration and both client languages.
+
+The specialized commands below generate a separate SSE client from the same
+typed stream schema.
+
 Canon preserves Streams' complete native `itemSchema` and JSON `contentSchema`,
 including referenced models and event discriminators. The exported contract
 also contains the declared `application/problem+json` responses. From this repo:
@@ -236,12 +248,17 @@ Both clients consume the same OpenAPI 3.2 contract.
   in dependencies can raise domain exceptions. Canon returns RFC 9457 HTTP
   problems, including normalized HTTP and request validation errors.
 - **During streaming:** every generator statement, even before its first
-  `yield`, executes after response start. Business errors need an explicit
-  application error event in the event model/union.
+  `yield`, executes after response start. Declare public domain failures with
+  `stream_raises=[...]`; Canon emits a terminal `canon.problem` frame and closes
+  the stream. Normal exhaustion emits `canon.complete`.
 - **Connection failures:** disconnects remain transport errors.
 
-`raises=` documents HTTP contracts. It does not move generator execution, catch
-stream exceptions, or convert them to events. There is no `stream_raises` API.
+`raises=` documents HTTP admission contracts; it does not move generator
+execution before response start. `stream_raises=` is the separate processing
+contract and uses errors from the same registry. Generated iterators yield only
+business events, raise `ProblemError` for terminal problems, and distinguish
+completion from unexpected EOF (`TransportError`). Undeclared processing errors
+produce a safe internal problem. See [canonical error bindings](problems.md).
 
 ## Compatibility regression checks
 
