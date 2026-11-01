@@ -2,13 +2,6 @@ version = 1
 revision = 3
 requires-python = ">=3.12, <3.15"
 
-[manifest]
-members = [
-    "canon-workspace",
-    "fastapi-canon",
-    "fastapi-canon-reference",
-]
-
 [[package]]
 name = "aioice"
 version = "0.10.2"
@@ -201,57 +194,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/bd/67/4898a44ea4f3f8e213b0954ec0aa0a16971d62a6212d6ea3931e97115b99/build-1.6.1.tar.gz", hash = "sha256:51cc11666391ab6f092070437ac747002ff46f3e4113a3622177ee6b488bfc53", size = 113427, upload-time = "2026-09-10T07:56:00.417Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ad/9b/9fb3585dabcd73a1b2a6267f63f62649347c9e6d072c9fde365b105abb2c/build-1.6.1-py3-none-any.whl", hash = "sha256:ecd351a4be9d35a9eaaba244a7687143c9c7d4aea6ac964e7e7ddab20cbcf4e7", size = 31179, upload-time = "2026-09-10T07:55:59.148Z" },
-]
-
-[[package]]
-name = "canon-workspace"
-version = "0.0.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "fastapi-canon", extra = ["aiortc", "codegen", "otel", "sse", "webrtc", "websockets"] },
-    { name = "fastapi-canon-reference" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "build" },
-    { name = "httpx" },
-    { name = "httpx2" },
-    { name = "packaging" },
-    { name = "pylint" },
-    { name = "pyright" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-    { name = "smelt-cli" },
-    { name = "twine" },
-    { name = "uvicorn" },
-    { name = "websockets" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "fastapi-canon", extras = ["aiortc", "codegen", "otel", "sse", "websockets", "webrtc"], editable = "packages/fastapi-canon" },
-    { name = "fastapi-canon-reference", editable = "examples/reference-service" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "build", specifier = ">=1.2" },
-    { name = "httpx", specifier = ">=0.28" },
-    { name = "httpx2", specifier = ">=2.13.1,<3" },
-    { name = "packaging", specifier = ">=25" },
-    { name = "pylint", specifier = ">=4,<5" },
-    { name = "pyright", specifier = "==1.1.414" },
-    { name = "pytest", specifier = ">=8.4.2" },
-    { name = "pytest-asyncio", specifier = ">=1" },
-    { name = "pytest-cov", specifier = ">=6" },
-    { name = "ruff", specifier = ">=0.12" },
-    { name = "smelt-cli", specifier = "==0.3.0" },
-    { name = "twine", specifier = ">=7,<8" },
-    { name = "uvicorn", specifier = ">=0.38" },
-    { name = "websockets", specifier = ">=15" },
 ]
 
 [[package]]
@@ -647,7 +589,7 @@ wheels = [
 [[package]]
 name = "fastapi-canon"
 version = "0.11.0"
-source = { editable = "packages/fastapi-canon" }
+source = { editable = "." }
 dependencies = [
     { name = "dishka" },
     { name = "fastapi" },
@@ -685,16 +627,28 @@ websockets = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "build" },
+    { name = "fastapi-canon", extra = ["aiortc", "codegen", "otel", "sse", "webrtc", "websockets"] },
+    { name = "fastapi-canon-reference", extra = ["otel"] },
     { name = "httpx" },
     { name = "httpx2" },
     { name = "jsonschema" },
     { name = "mypy" },
     { name = "openapi-spec-validator" },
     { name = "opentelemetry-sdk" },
+    { name = "packaging" },
     { name = "pre-commit" },
+    { name = "pylint" },
+    { name = "pyright" },
     { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "smelt-cli" },
+    { name = "twine" },
     { name = "types-jsonschema" },
+    { name = "uvicorn" },
+    { name = "websockets" },
 ]
 
 [package.metadata]
@@ -722,16 +676,28 @@ provides-extras = ["otel", "sse", "websockets", "webrtc", "aiortc", "codegen"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "httpx2", specifier = ">=2.12.0" },
+    { name = "build", specifier = ">=1.2" },
+    { name = "fastapi-canon", extras = ["aiortc", "codegen", "otel", "sse", "websockets", "webrtc"], specifier = "==0.11.0" },
+    { name = "fastapi-canon-reference", extras = ["otel"], editable = "examples/reference-service" },
+    { name = "httpx", specifier = ">=0.28" },
+    { name = "httpx2", specifier = ">=2.13.1,<3" },
     { name = "jsonschema", specifier = ">=4.23" },
     { name = "mypy", specifier = ">=1.15" },
     { name = "openapi-spec-validator", specifier = ">=0.7.1" },
     { name = "opentelemetry-sdk", specifier = ">=1.40,<2" },
+    { name = "packaging", specifier = ">=25" },
     { name = "pre-commit", specifier = ">=4.3" },
-    { name = "pytest", specifier = ">=8.3" },
-    { name = "ruff", specifier = ">=0.11" },
+    { name = "pylint", specifier = ">=4,<5" },
+    { name = "pyright", specifier = "==1.1.414" },
+    { name = "pytest", specifier = ">=8.4.2" },
+    { name = "pytest-asyncio", specifier = ">=1" },
+    { name = "pytest-cov", specifier = ">=6" },
+    { name = "ruff", specifier = ">=0.12" },
+    { name = "smelt-cli", specifier = "==0.3.0" },
+    { name = "twine", specifier = ">=7,<8" },
     { name = "types-jsonschema", specifier = ">=4.26" },
+    { name = "uvicorn", specifier = ">=0.38" },
+    { name = "websockets", specifier = ">=15" },
 ]
 
 [[package]]
@@ -760,29 +726,13 @@ otel = [
     { name = "sqlalchemy", extra = ["asyncio"] },
 ]
 
-[package.dev-dependencies]
-dev = [
-    { name = "fastapi-canon", extra = ["otel"] },
-    { name = "httpx" },
-    { name = "httpx2" },
-    { name = "mypy" },
-    { name = "opentelemetry-exporter-otlp-proto-http" },
-    { name = "opentelemetry-instrumentation-httpx" },
-    { name = "opentelemetry-instrumentation-sqlalchemy" },
-    { name = "opentelemetry-sdk" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "ruff" },
-    { name = "sqlalchemy", extra = ["asyncio"] },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "aiosqlite", specifier = ">=0.21" },
     { name = "dishka", specifier = ">=1.6" },
     { name = "fastapi", specifier = ">=0.115" },
-    { name = "fastapi-canon", editable = "packages/fastapi-canon" },
-    { name = "fastapi-canon", extras = ["otel"], marker = "extra == 'otel'", editable = "packages/fastapi-canon" },
+    { name = "fastapi-canon", specifier = ">=0.11,<0.12" },
+    { name = "fastapi-canon", extras = ["otel"], marker = "extra == 'otel'", specifier = ">=0.11,<0.12" },
     { name = "httpx2", marker = "extra == 'otel'", specifier = ">=2.12,<3" },
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'otel'", specifier = ">=1.40,<2" },
     { name = "opentelemetry-instrumentation-httpx", marker = "extra == 'otel'", specifier = ">=0.65b0,<1" },
@@ -798,7 +748,7 @@ provides-extras = ["otel"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "fastapi-canon", extras = ["otel"], editable = "packages/fastapi-canon" },
+    { name = "fastapi-canon", extras = ["otel"], specifier = ">=0.11,<0.12" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "httpx2", specifier = ">=2.12,<3" },
     { name = "mypy", specifier = ">=1.15" },

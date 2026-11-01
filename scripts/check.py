@@ -6,25 +6,13 @@ import sys
 import tomllib
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-MEMBERS = (
-    ROOT / "packages/fastapi-canon",
-    ROOT / "packages/fastapi-streams",
-    ROOT / "packages/fastapi-rpckit",
-    ROOT / "examples/reference-service",
-    ROOT / "packages/fastapi-webrtc",
-)
-WEBRTC = MEMBERS[4]
-SOURCES = {
-    MEMBERS[1]: MEMBERS[0] / "fastapi_canon/integrations/sse",
-    MEMBERS[2]: MEMBERS[0] / "fastapi_canon/integrations/websockets",
-    WEBRTC: MEMBERS[0] / "fastapi_canon/integrations/webrtc",
-}
-WEBRTC_CLIENT = ("--output", "examples/practice/client", "--check")
+_ROOT = Path(__file__).resolve().parents[1]
+_REFERENCE = _ROOT / "examples/reference-service"
+_TRANSPORTS = ("sse", "websockets", "webrtc")
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Run Canon workspace quality gates")
+def _main() -> None:
+    parser = argparse.ArgumentParser(description="Run Canon quality gates")
     parser.add_argument(
         "gate",
         choices=("all", "architecture", "lint", "types", "test", "clients", "browser"),
@@ -38,10 +26,10 @@ def main() -> None:
     for gate in gates:
         if gate == "architecture":
             _run(
-                ROOT,
+                _ROOT,
                 "uv",
                 "run",
-                "--locked",
+                "--frozen",
                 "smelt",
                 "check",
                 "--config",
@@ -51,48 +39,49 @@ def main() -> None:
                 python=False,
             )
         elif gate == "lint":
-            _run(ROOT, "scripts/check_documentation.py")
-            for root in (ROOT, *MEMBERS):
-                targets = (
-                    ("scripts", "tests", "examples/stack_service.py")
-                    if root == ROOT
-                    else (".",)
+            _run(_ROOT, "scripts/check_documentation.py")
+            # Moving configs can leave stale import classifications in Ruff's cache.
+            _run(_ROOT, "-m", "ruff", "check", "--no-cache", ".")
+            _run(_ROOT, "-m", "ruff", "format", "--no-cache", "--check", ".")
+            for transport in _TRANSPORTS:
+                source = f"fastapi_canon/integrations/{transport}"
+                config = ("--config", f"tooling/{transport}.ruff.toml")
+                _run(_ROOT, "-m", "ruff", "check", "--no-cache", *config, source)
+                _run(
+                    _ROOT,
+                    "-m",
+                    "ruff",
+                    "format",
+                    "--no-cache",
+                    "--check",
+                    *config,
+                    source,
                 )
-                _run(root, "-m", "ruff", "check", *targets)
-                _run(root, "-m", "ruff", "format", "--check", *targets)
-                if root in SOURCES:
-                    config = ("--config", str(root / "pyproject.toml"))
-                    _run(root, "-m", "ruff", "check", *config, str(SOURCES[root]))
-                    _run(
-                        root,
-                        "-m",
-                        "ruff",
-                        "format",
-                        *config,
-                        "--check",
-                        str(SOURCES[root]),
-                    )
         elif gate == "types":
-            _run(MEMBERS[0], "-m", "mypy")
-            _run(MEMBERS[1], "-m", "pyright", "--pythonpath", sys.executable)
-            _run(MEMBERS[1], "-m", "pylint", str(SOURCES[MEMBERS[1]]))
-            # Verify the installed public package; editable path discovery differs
-            # between Pyright and Python, especially in a Windows workspace.
+            _run(_ROOT, "-m", "mypy")
             _run(
-                ROOT,
-                "uv",
-                "build",
-                "--package",
-                "fastapi-canon",
-                "--out-dir",
-                str(ROOT / "dist/typecheck"),
-                python=False,
+                _ROOT,
+                "-m",
+                "pyright",
+                "--project",
+                "tooling/sse.pyright.json",
+                "--pythonpath",
+                sys.executable,
             )
-            metadata = tomllib.loads((MEMBERS[0] / "pyproject.toml").read_text("utf-8"))
-            version = metadata["project"]["version"]
-            (wheel,) = (ROOT / "dist/typecheck").glob(f"fastapi_canon-{version}-*.whl")
             _run(
-                MEMBERS[2],
+                _ROOT,
+                "-m",
+                "pylint",
+                "--rcfile",
+                "tooling/sse.toml",
+                "fastapi_canon/integrations/sse",
+            )
+            _run(_ROOT, "uv", "build", "--out-dir", "dist/typecheck", python=False)
+            metadata = tomllib.loads((_ROOT / "pyproject.toml").read_text("utf-8"))
+            version = metadata["project"]["version"]
+            (wheel,) = (_ROOT / "dist/typecheck").glob(f"fastapi_canon-{version}-*.whl")
+            _run(
+                _ROOT / "dist/typecheck",
                 "uv",
                 "run",
                 "--isolated",
@@ -105,60 +94,63 @@ def main() -> None:
                 "--with",
                 "pyright==1.1.414",
                 "python",
-                "scripts/verify_types.py",
+                str(_ROOT / "scripts/websockets/verify_types.py"),
                 python=False,
             )
-            _run(MEMBERS[3], "-m", "mypy", "src", "tests")
-            _run(WEBRTC, "-m", "mypy")
+            _run(_REFERENCE, "-m", "mypy", "src", "tests")
+            _run(_ROOT, "-m", "mypy", "--config-file", "tooling/webrtc.toml")
         elif gate == "test":
-            for root in (*MEMBERS, ROOT):
-                coverage = ("--cov",) if root == WEBRTC else ()
-                _run(root, "-m", "pytest", "-q", *coverage)
+            _run(
+                _ROOT,
+                "-m",
+                "pytest",
+                "-q",
+                "--cov=fastapi_canon.integrations.webrtc",
+                "--cov-branch",
+                "--cov-fail-under=85",
+            )
+            _run(_REFERENCE, "-m", "pytest", "-q")
         elif gate == "clients":
-            for config in (
-                "examples/generated_clients/rpcgen.toml",
-                "examples/socket_protocol/rpcgen.toml",
-                "examples/typed_socket/rpcgen.toml",
-            ):
+            for name in ("generated_clients", "socket_protocol", "typed_socket"):
                 _run(
-                    MEMBERS[2],
+                    _ROOT,
                     "-m",
                     "fastapi_canon.integrations.websockets.codegen.cli",
                     "generate",
                     "--config",
-                    config,
+                    f"examples/websockets/{name}/rpcgen.toml",
                     "--check",
                 )
-            _run(MEMBERS[1], "scripts/codegen.py", "--check")
+            _run(_ROOT, "scripts/sse/codegen.py", "--check")
             cli = ("-m", "fastapi_canon.integrations.webrtc.codegen.cli")
-            contract = "examples/practice/contract.json"
+            contract = "examples/webrtc/practice/contract.json"
             _run(
-                WEBRTC,
+                _ROOT,
                 *cli,
                 "contract",
                 "--app",
-                "examples.practice.app:app",
+                "examples.webrtc.practice.app:app",
                 "--output",
                 contract,
                 "--check",
             )
             _run(
-                WEBRTC,
+                _ROOT,
                 *cli,
                 "generate",
                 "--contract",
                 contract,
                 "--client-name",
                 "PracticeRtcClient",
-                *WEBRTC_CLIENT,
+                "--output",
+                "examples/webrtc/practice/client",
+                "--check",
             )
-            for member in (MEMBERS[1], WEBRTC):
-                for task in ("typecheck", "test:coverage"):
-                    _run(member, _pnpm(), "run", task, python=False)
+            for task in ("typecheck", "test:coverage"):
+                _run(_ROOT, _pnpm(), "run", task, python=False)
         elif gate == "browser":
-            # Real Chromium sessions against the aiortc engine.
             environment = {**os.environ, "FASTAPI_WEBRTC_PYTHON": sys.executable}
-            _run(WEBRTC, _pnpm(), "run", "test:browser", python=False, env=environment)
+            _run(_ROOT, _pnpm(), "run", "test:browser", python=False, env=environment)
 
 
 def _pnpm() -> str:
@@ -171,15 +163,12 @@ def _pnpm() -> str:
 
 
 def _run(
-    root: Path,
-    *arguments: str,
-    python: bool = True,
-    env: dict[str, str] | None = None,
+    root: Path, *arguments: str, python: bool = True, env: dict[str, str] | None = None
 ) -> None:
     command = [sys.executable, *arguments] if python else list(arguments)
-    print(f"[{root.relative_to(ROOT) or '.'}] {' '.join(command)}", flush=True)
+    print(f"[{root.relative_to(_ROOT)}] {' '.join(command)}", flush=True)
     subprocess.run(command, cwd=root, check=True, env=env)
 
 
 if __name__ == "__main__":
-    main()
+    _main()

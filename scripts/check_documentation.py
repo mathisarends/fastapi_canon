@@ -3,15 +3,13 @@ import re
 import tomllib
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+_ROOT = Path(__file__).resolve().parents[1]
 
 
-def check_documentation(root: Path = ROOT) -> list[str]:
+def _check_documentation(root: Path = _ROOT) -> list[str]:
     """Check active installation examples, leaving historical records intact."""
     errors: list[str] = []
-    canon = tomllib.loads(
-        (root / "packages/fastapi-canon/pyproject.toml").read_text("utf-8")
-    )
+    canon = tomllib.loads((root / "pyproject.toml").read_text("utf-8"))
     legacy = {"fastapi-streams", "fastapi-rpckit", "fastapi-webrtc"}
     for dependencies in (
         canon["project"]["dependencies"],
@@ -19,9 +17,13 @@ def check_documentation(root: Path = ROOT) -> list[str]:
     ):
         if any(re.split(r"[\[<>=]", value)[0] in legacy for value in dependencies):
             errors.append("Canon dependencies must not install legacy distributions")
-    for folder in ("docs", "packages", "examples", "guides"):
+    for folder in ("docs", "examples", "guides"):
         for path in (root / folder).rglob("*.md"):
-            if path.name == "CHANGELOG.md" or "node_modules" in path.parts:
+            if (
+                path.name == "CHANGELOG.md"
+                or "history" in path.parts
+                or "node_modules" in path.parts
+            ):
                 continue
             text = path.read_text("utf-8")
             if re.search(
@@ -39,8 +41,8 @@ def check_documentation(root: Path = ROOT) -> list[str]:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--root", type=Path, default=ROOT)
-    failures = check_documentation(parser.parse_args().root)
+    parser.add_argument("--root", type=Path, default=_ROOT)
+    failures = _check_documentation(parser.parse_args().root)
     for failure in failures:
         print(failure)
     raise SystemExit(bool(failures))

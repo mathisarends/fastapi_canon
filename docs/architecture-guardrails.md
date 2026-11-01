@@ -1,15 +1,15 @@
 # Architecture and test guardrails
 
-The root `smelt.yml` is the executable policy for the current Canon workspace.
+The root `smelt.yml` is the executable policy for the Canon library and repository tooling.
 `smelt-cli==0.3.0` is pinned in the root development group and `uv.lock`; the
 unrelated `smelt` distribution is not this tool. `.smelt.schema.json` supplies
 editor completion for the pinned version. CI and the local hook both use this
-locked workspace installation rather than installing another Smelt version.
+locked root installation rather than installing another Smelt version.
 
 ## Run the policy
 
 ```console
-uv sync --locked --all-packages --all-groups
+uv sync --locked --all-groups
 uv run --locked smelt context fastapi_canon.error.registry
 uv run --locked smelt check --config smelt.yml --changed --fail-on warning
 uv run --locked smelt check --config smelt.yml --show-hints --format concise --fail-on warning
@@ -30,8 +30,9 @@ The policy covers Canon's complete Python source and the reference application.
 Every discovered production module needs an architecture role or a reasoned
 exclusion. Runtime templates and generated/demo artifacts are excluded because
 the existing generator-drift, installed-artifact and consumer suites check them.
-The retained transport directories remain separate pytest invocations, as
-described in [contributing](contributing.md).
+Library suites share one root pytest invocation with qualified imports, as
+described in [contributing](contributing.md). Repository scripts also have an
+explicit tooling role; they are not runtime dependencies of the package.
 
 | Responsibility | Policy |
 | --- | --- |
@@ -86,14 +87,16 @@ than expanding the error facade solely to remove hints.
 
 ## Tests
 
-Canon's focused tests mirror its source directly under the workspace member's
-`tests/` root. For example, `fastapi_canon/error/registry.py` maps to
-`tests/error/test_registry.py`. Topic suffixes are supported, such as
-`tests/error/test_openapi_http_responses.py`. Package-level tests use
+Canon's focused tests mirror its source independently under `tests/unit`,
+`tests/integration` and `tests/contract`. For example,
+`fastapi_canon/error/registry.py` maps to `tests/unit/error/test_registry.py`.
+Topic suffixes are supported, such as
+`tests/contract/error/test_openapi_http_responses.py`. Package-level tests use
 `test_fastapi_canon.py`. Pytest uses importlib mode and mypy uses explicit package
-bases so repeated module names do not require empty package-marker files.
+bases. Qualified fixture imports and the root test package marker prevent namespace
+collisions while allowing repeated test filenames.
 
-Cross-feature acceptance tests and the retained transport suites are deliberately
+Cross-feature acceptance tests and the transport scenario suites are deliberately
 unmirrored; their existing directory layouts are documented explicitly in the
 policy. They still receive the test-quality checks. Tests need explicit outcomes,
 nonempty generated-output evidence and bounded waits/processes. Smelt 0.3.0 follows
@@ -134,5 +137,5 @@ The YAML configuration remains `version: 1`. JSON check/error reports now use
 `schema_version: 2`; resolve `expected.usage_scope_index` through the report's
 `usage_scopes` array. Coverage is compact by default; use `--show-coverage` for
 the complete inventory, policies, Python targets and ordering barriers. This
-workspace has no custom Smelt JSON parser to migrate. See the
+repository has no custom Smelt JSON parser to migrate. See the
 [0.3.0 upgrade guide](https://github.com/mathisarends/smelt/blob/v0.3.0/docs/upgrading.md).

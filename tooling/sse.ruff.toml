@@ -1,0 +1,5 @@
+target-version = "py312"
+line-length = 88
+extend-exclude = ["../examples/sse/agent_runs/generated_python", "../tests/fixtures/sse/generated_python"]
+[lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]

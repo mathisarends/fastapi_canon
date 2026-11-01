@@ -62,7 +62,7 @@ def generated_http_sdk(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Pat
 @pytest.fixture(scope="module")
 def browser_http_sdk(generated_http_sdk: Path) -> tuple[str, Path]:
     node = shutil.which("node")
-    compiler = ROOT / "packages/fastapi-streams/node_modules/typescript/bin/tsc"
+    compiler = ROOT / "node_modules/typescript/bin/tsc"
     if node is None or not compiler.is_file():
         pytest.skip("Run pnpm install --frozen-lockfile --ignore-scripts")
     usage = generated_http_sdk / "usage.ts"

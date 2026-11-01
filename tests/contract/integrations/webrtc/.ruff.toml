@@ -1,0 +1,1 @@
+extend = "../../../../tooling/webrtc.ruff.toml"

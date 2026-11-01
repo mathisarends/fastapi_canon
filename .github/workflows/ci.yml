@@ -1,4 +1,4 @@
-name: Canon workspace
+name: Canon
 
 on:
   push:
@@ -45,13 +45,13 @@ jobs:
         with:
           version: '0.9.2'
           enable-cache: true
-      - run: uv sync --locked --all-packages --all-groups --python ${{ matrix.python }}
+      - run: uv sync --locked --all-groups --python ${{ matrix.python }}
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: uv run --locked python scripts/check.py all
       - if: matrix.os == 'ubuntu-latest' && matrix.python == '3.14'
         name: WebRTC sessions in Chromium
         run: |
-          pnpm --dir packages/fastapi-webrtc exec playwright install --with-deps chromium
+          pnpm exec playwright install --with-deps chromium
           uv run --locked python scripts/check.py browser
       - if: matrix.os == 'ubuntu-latest' && matrix.python == '3.14'
         run: uv run --locked python scripts/check_distributions.py

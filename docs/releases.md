@@ -1,7 +1,8 @@
 # Canon releases
 
-Release the unified `fastapi-canon` distribution from `mathisarends/fastapi_canon`. The workspace
-and reference service are not publication targets. `release.toml` maps package
+Release the unified `fastapi-canon` distribution from `mathisarends/fastapi_canon`.
+The root project is the sole publication target; the reference service is an
+installable example. `release.toml` maps package
 names, directories, modules and tag prefixes; `scripts/release.py` validates them.
 Published versions and their GitHub/PyPI assets are listed in the
 [README](../README.md#current-releases). Package changelogs contain migration notes;
@@ -28,7 +29,7 @@ notes agree.
 This release replaces `observe()` with feature-owned `instrument()` declarations
 and includes the generated Python RPC client fix, shared pnpm tooling and expanded
 core/SDK guides.
-See the [0.11.0 changelog](../packages/fastapi-canon/CHANGELOG.md#0110---2026-11-01)
+See the [0.11.0 changelog](../CHANGELOG.md#0110---2026-11-01)
 for migration steps, including client regeneration.
 
 Canon 0.10.0 was published on 2026-11-01 from
@@ -81,10 +82,10 @@ assets are verified.
 
 | Package | Version | Migration |
 | --- | --- | --- |
-| Canon | 0.11.0 | Move provider-level `observe()` declarations to feature-owned `instrument()` declarations and regenerate Python RPC clients. Follow the [0.11.0 notes](../packages/fastapi-canon/CHANGELOG.md#0110---2026-11-01). Upgrades from the separate distributions also require the [0.10.0 notes](../packages/fastapi-canon/CHANGELOG.md#0100---2026-11-01) and included [0.9.0 migrations](../packages/fastapi-canon/CHANGELOG.md#090---unreleased). |
-| WebRTC | 0.3.0 | Use public enum members, keyword-only engine/channel options and `DescriptionType`; handle lazy type aliases in introspection tools. See the [migration notes](../packages/fastapi-webrtc/CHANGELOG.md#030---2026-10-24). |
-| Streams | 0.5.0 | Regenerate clients. SDK-owned generated Python clients bound the connect time to 10 seconds; pass `RequestOptions(timeout=None)` or inject `httpx.AsyncClient(timeout=None)` to keep it unbounded. See the [Streams 0.5.0 notes](../packages/fastapi-streams/CHANGELOG.md#050---2026-10-25). |
-| RPCKit | 0.4.1 | None; wire output and generated clients are unchanged apart from the manifest generator version. See the [RPCKit 0.4.1 notes](../packages/fastapi-rpckit/CHANGELOG.md#041---2026-10-25). |
+| Canon | 0.11.0 | Move provider-level `observe()` declarations to feature-owned `instrument()` declarations and regenerate Python RPC clients. Follow the [0.11.0 notes](../CHANGELOG.md#0110---2026-11-01). Upgrades from the separate distributions also require the [0.10.0 notes](../CHANGELOG.md#0100---2026-11-01) and included [0.9.0 migrations](../CHANGELOG.md#090---unreleased). |
+| WebRTC | 0.3.0 | Use public enum members, keyword-only engine/channel options and `DescriptionType`; handle lazy type aliases in introspection tools. See the [migration notes](history/fastapi-webrtc.md#030---2026-10-24). |
+| Streams | 0.5.0 | Regenerate clients. SDK-owned generated Python clients bound the connect time to 10 seconds; pass `RequestOptions(timeout=None)` or inject `httpx.AsyncClient(timeout=None)` to keep it unbounded. See the [Streams 0.5.0 notes](history/fastapi-streams.md#050---2026-10-25). |
+| RPCKit | 0.4.1 | None; wire output and generated clients are unchanged apart from the manifest generator version. See the [RPCKit 0.4.1 notes](history/fastapi-rpckit.md#041---2026-10-25). |
 
 The earlier Canon 0.8.1 and transport publications used separate distributions.
 Their consolidation ships in Canon 0.10.0 without internal distribution pins.
@@ -94,19 +95,19 @@ Their consolidation ships in Canon 0.10.0 without internal distribution pins.
 The 2026-10-20 consumer integration batch addressed feedback for Canon 0.5.5,
 WebRTC 0.1.0 and RPCKit 0.3.0:
 
-- [Canon admission errors](../packages/fastapi-canon/docs/webrtc.md) reuse named
+- [Canon admission errors](webrtc.md) reuse named
   errors, validate registry membership and export declared dependency/factory
   failures in session contracts. HTTP denials happen before peer allocation;
   accepted sessions retain WebRTC protocol errors.
-- [Remote engine bindings and leases](../packages/fastapi-webrtc/examples/remote_video/README.md)
+- [Remote engine bindings and leases](../examples/webrtc/remote_video/README.md)
   keep each viewer's resources independent, including cancellation and rejected
   second viewers. The example documents native error mapping and partial stats.
-- [Browser video health](../packages/fastapi-webrtc/docs/media-health.md) observes
+- [Browser video health](integrations/webrtc/media-health.md) observes
   decoded or compositor frames with optional first-frame and stall deadlines.
   Applications retain control of playback and fallback. The optional
-  [HTTP ticket recipe](../packages/fastapi-webrtc/docs/admission-tickets.md) provides
+  [HTTP ticket recipe](integrations/webrtc/admission-tickets.md) provides
   readable admission errors before signaling.
-- [RPCKit factory typing](../packages/fastapi-rpckit/CHANGELOG.md#040---2026-10-20)
+- [RPCKit factory typing](history/fastapi-rpckit.md#040---2026-10-20)
   removes the URL-parameter and backend subprotocol mismatches. Regenerate clients
   before removing consumer generator overrides.
 
@@ -117,7 +118,7 @@ deployed TURN/NAT, database concurrency and proxy validation remain separate wor
 
 Canon 0.10.0 includes the unpublished 0.9.0 package consolidation and optional
 native OpenTelemetry integration, plus canonical error bindings and common SDK
-generation. See the [migration guide](../packages/fastapi-canon/docs/package-migration.md).
+generation. See the [migration guide](package-migration.md).
 Only Canon is an active release target; the old feature directories retain
 tests, examples and historical changelogs. Source metadata alone does not establish
 a publication; the verified 0.10.0 publication is recorded above.
@@ -145,7 +146,7 @@ patch zero for declared breaking changes.
    Canon and its feature modules share `fastapi_canon/_version.py`.
 2. Update root pins, Canon's feature dependency ranges and the
    reference service's Canon range as needed. Run `uv lock` at the root.
-3. Regenerate clients through their generators. Run the workspace, browser,
+3. Regenerate clients through their generators. Run the repository, browser,
    current/minimum wheel and installed CLI checks in [contributing](contributing.md).
 4. Commit/merge to `main` and wait for the complete `ci.yml` push run on that exact
    commit. Then dispatch the selected package's dry run.

@@ -18,13 +18,13 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel, ConfigDict
 from starlette.websockets import WebSocketDisconnect
 
-MODULES = {
+_MODULES = {
     "fastapi-canon": "fastapi_canon",
     "sse": "fastapi_canon.integrations.sse",
     "websockets": "fastapi_canon.integrations.websockets",
     "webrtc": "fastapi_canon.integrations.webrtc",
 }
-STACK = {"fastapi-canon", "sse", "websockets"}
+_STACK = {"fastapi-canon", "sse", "websockets"}
 
 
 class Event(BaseModel):
@@ -41,13 +41,13 @@ class SocketOutput(BaseModel):
     value: int
 
 
-def main() -> None:
+def _main() -> None:
     selected = set(sys.argv[1:])
     assert importlib.util.find_spec("rpckit") is None
     assert importlib.util.find_spec("fastapi_wsrpc") is None
     for legacy in ("fastapi_streams", "fastapi_rpckit", "fastapi_webrtc"):
         assert importlib.util.find_spec(legacy) is None
-    for name, module in MODULES.items():
+    for name, module in _MODULES.items():
         if name in selected:
             installed = importlib.import_module(module)
             assert Path(installed.__file__).resolve().is_relative_to(Path(sys.prefix))
@@ -172,7 +172,7 @@ def main() -> None:
         _webrtc_codegen(app)
     if "websockets" in selected and importlib.util.find_spec("jinja2"):
         _rpc_codegen(rpc)
-    if selected >= STACK:
+    if selected >= _STACK:
         # Run the same composition/lifecycle regression against installed wheels.
 
         example = runpy.run_path(
@@ -307,8 +307,7 @@ def _cli(name: str) -> None:
 def _offline_sse_codegen() -> None:
     """Generate from a saved contract, including with codegen-only dependencies."""
     contract = (
-        Path(__file__).resolve().parents[1]
-        / "packages/fastapi-streams/tests/fixtures/models.openapi.json"
+        Path(__file__).resolve().parents[1] / "tests/fixtures/sse/models.openapi.json"
     )
     with tempfile.TemporaryDirectory(prefix="canon-offline-") as temporary:
         for language in ("python", "typescript"):
@@ -571,8 +570,7 @@ def _rpc_codegen(rpc) -> None:
             sys.path.remove(temporary)
         node = shutil.which("node")
         compiler = (
-            Path(__file__).resolve().parents[1]
-            / "packages/fastapi-streams/node_modules/typescript/bin/tsc"
+            Path(__file__).resolve().parents[1] / "node_modules/typescript/bin/tsc"
         )
         assert node and compiler.is_file(), (
             "Run pnpm install --frozen-lockfile --ignore-scripts first"
@@ -699,6 +697,6 @@ def _shared_problem_check() -> None:
 if __name__ == "__main__":
     faulthandler.dump_traceback_later(90, exit=True)
     try:
-        main()
+        _main()
     finally:
         faulthandler.cancel_dump_traceback_later()

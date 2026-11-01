@@ -84,7 +84,7 @@ Bundle the actual FastAPI dependencies with the errors they can raise. Use
 cover all included feature routers, including nested routers. Local `raises=`
 adds resource-specific errors. Keep `route_class=DishkaRoute` where endpoints
 are declared; a composition policy does not retrofit endpoint injection. See
-[router policies](../packages/fastapi-canon/README.md#router-policies).
+[router policies](../docs/composition.md#router-policies).
 
 ```python
 task_not_found = Error(
@@ -115,5 +115,5 @@ and [runtime/contract tests](../examples/reference-service/tests/test_api.py).
 For an optional source check of explicit application exceptions against route
 `raises`, run `python -m fastapi_canon.check_error_contracts src`. This complements contract
 validation and reports unsupported paths, including abstract ports, as incomplete.
-See [error-contract checking](../packages/fastapi-canon/docs/error-checking.md) for
+See [error-contract checking](../docs/error-checking.md) for
 supported patterns and opt-in CI failure modes.

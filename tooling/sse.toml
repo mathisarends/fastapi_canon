@@ -1,0 +1,23 @@
+[tool.pylint.main]
+py-version = "3.12"
+ignore-paths = [".*/sse/codegen/templates/.*"]
+
+[tool.pylint.messages_control]
+# Ruff owns formatting and style; Pylint checks errors and warnings.
+disable = ["C", "R"]
+
+[tool.pylint.reports]
+score = false
+
+
+[tool.coverage.run]
+branch = true
+source = [
+  "fastapi_canon.integrations.sse",
+  "examples.sse.agent_runs.generated_python.runtime",
+]
+omit = ["*/codegen/templates/*"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 85

@@ -12,10 +12,14 @@ import tempfile
 from pathlib import Path
 from time import perf_counter
 
-from fastapi_canon.checks.contracts import _Checker
-from fastapi_canon.checks.source import _Source
+from fastapi_canon.checks.contracts import (  # smelt: ignore[SMT107] -- Timing phases.
+    _Checker,
+)
+from fastapi_canon.checks.source import (  # smelt: ignore[SMT107] -- Timing phases.
+    _Source,
+)
 
-ROOT = Path(__file__).resolve().parents[1]
+_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _project(root: Path, features: int, routes: int, depth: int) -> None:
@@ -137,7 +141,7 @@ def _measure(root: Path, rounds: int, profile: Path | None) -> dict:
     }
 
 
-def main() -> None:
+def _main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--features", type=int, default=100)
     parser.add_argument("--routes-per-feature", type=int, default=10)
@@ -151,7 +155,7 @@ def main() -> None:
         parser.error(
             "features, routes and rounds must be positive; depth must be nonnegative"
         )
-    (ROOT / "dist").mkdir(exist_ok=True)
+    (_ROOT / "dist").mkdir(exist_ok=True)
     results = {
         "python": sys.version,
         "platform": platform.platform(),
@@ -161,12 +165,12 @@ def main() -> None:
         "depth": args.depth,
         "scenarios": {
             "reference": _measure(
-                ROOT / "examples/reference-service/src", args.rounds, None
+                _ROOT / "examples/reference-service/src", args.rounds, None
             )
         },
     }
     with tempfile.TemporaryDirectory(
-        prefix="canon-check-benchmark-", dir=ROOT / "dist"
+        prefix="canon-check-benchmark-", dir=_ROOT / "dist"
     ) as temporary:
         root = Path(temporary)
         _project(root, args.features, args.routes_per_feature, args.depth)
@@ -182,4 +186,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    _main()

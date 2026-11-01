@@ -4,7 +4,7 @@
 contracts in a common plan, model graph and error runtime.
 The generated public API follows domain names; protocol clients live under
 `internal/`. See the [decision record](../CANONICALIZATION_DECISIONS.md) and
-[server problem guide](../packages/fastapi-canon/docs/problems.md).
+[server problem guide](problems.md).
 
 ## Contents
 
@@ -32,19 +32,19 @@ a second handwritten client model. `raises=` describes HTTP admission errors,
 while `stream_raises=` describes terminal failures after the stream starts. The
 generated iterator yields business events, consumes `canon.complete`, and raises
 `ProblemError` for `canon.problem`. EOF without completion is a `TransportError`.
-See [stream contracts](../packages/fastapi-canon/docs/streams.md).
+See [stream contracts](streams.md).
 
 RPC exports parameter/result models, errors and session metadata from the service
 contract. Its generated methods preserve the declared call, notification,
 subscription or session shape. A domain method can use HTTP while its neighboring
 method uses RPC; neither needs a transport prefix in the public SDK. Connection,
 cancellation and socket/media lifecycles remain explicit where their behavior
-matters. See [RPC clients](../packages/fastapi-rpckit/docs/clients.md).
+matters. See [RPC clients](integrations/websockets/clients.md).
 
 One target plans all selected sources together. Model identities and resolved
 problem type URIs let HTTP, SSE and RPC share public DTOs and one error runtime.
 Use `--check --diff` in CI to detect contract or generated-file drift. The
-[source error checker](../packages/fastapi-canon/docs/error-checking.md) separately
+[source error checker](error-checking.md) separately
 checks supported HTTP error mappings and declarations before export.
 
 ## Configuration
@@ -186,8 +186,8 @@ async with ApiClient("https://api.example.com") as client:
         show_problem(error.problem)
 ```
 
-Run the [complete example configuration](../packages/fastapi-canon/examples/canonical_errors/fastapi-canon.toml)
-with `fastapi-canon generate --config packages/fastapi-canon/examples/canonical_errors/fastapi-canon.toml`.
+Run the [complete example configuration](../examples/canonical_errors/fastapi-canon.toml)
+with `fastapi-canon generate --config examples/canonical_errors/fastapi-canon.toml`.
 Its generated output goes into the example's ignored `dist/` directory.
 
 TypeScript output contains `index.ts`, `client.ts`, `models.ts`, `errors.ts`, and

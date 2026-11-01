@@ -1,21 +1,14 @@
-# uv workspace
+# uv workspaces for applications
 
-The prepared Canon 0.10.0 source has one publishable workspace member,
-`packages/fastapi-canon`, plus the development-only reference service. The former
-transport package directories retain tests/tooling and are not workspace members.
-All transport implementations ship in the Canon wheel.
+Canon itself is a single root package, not a workspace. See the
+[repository architecture](../docs/architecture.md) for this checkout. The following
+conventions apply when a consuming application needs multiple real distributions.
 
 Use a uv workspace when one repository contains multiple genuine Python distributions that belong together and need local package resolution. A backend, an agent runtime, an LLM integration package, and a standalone token utility are plausible members. Domain, application, infrastructure, presentation, and individual feature slices of one service are not.
 
 Prefer flat, named members at the repository root, as in `backend/`, `agent/`, `llm/`, and `tokens/`. Do not introduce generic `services/` and `packages/` directories merely to classify workspace members. Add an intermediate grouping only when the repository has enough members that the grouping conveys durable ownership or lifecycle information.
 
-The Canon repository keeps its library source in `packages/fastapi-canon`
-and demonstration applications in `examples/`. The former transport package
-directories retain tests, guides and tooling during consolidation; they are not
-independently published members. The root is a non-published coordination
-project. See the [workspace inventory](../README.md#workspace).
-
-The root owns workspace membership and the single shared `uv.lock`. Each member
+In a workspace, the root owns membership and the single shared `uv.lock`. Each member
 owns its runtime dependencies, optional command entry points, and build metadata.
 Prefer a `src/` package for new projects and match directory, distribution, and
 import names where practical. Existing libraries may keep their established flat

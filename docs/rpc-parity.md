@@ -8,8 +8,8 @@ preserved the predecessor's runtime, schemas, templates and tests from commit
 Existing `x-rpckit-*` extensions, `.rpcgen` manifests and `rpckit.*` telemetry
 names are intentional compatibility points. Subsequent releases have source and
 generated-client breaking changes, including the 0.3.0 socket API changes and
-removal of server-to-client RPC. Follow the package [migration guide](../packages/fastapi-rpckit/docs/migration.md)
-and [changelog](../packages/fastapi-rpckit/CHANGELOG.md) rather than assuming the
+removal of server-to-client RPC. Follow the package [migration guide](integrations/websockets/migration.md)
+and [changelog](history/fastapi-rpckit.md) rather than assuming the
 current API is identical to the imported predecessor.
 
 ## Regression scope
@@ -28,7 +28,7 @@ Cara's recorded contract snapshot came from gateway commit
 Contract/SDK checks do not start or migrate the application.
 
 Repeat against an exported consumer contract using an actual installed wheel.
-From the workspace root, install the Streams TypeScript tooling first, build
+From the repository root, install the Streams TypeScript tooling first, build
 Canon and replace `VERSION` with the built package version:
 
 ```console
@@ -49,7 +49,7 @@ older isolated install of a rebuilt development wheel with the same filename.
    namespace replacement can leave references to removed modules.
 2. Apply all intervening changelog migrations for request IDs, middleware,
    transports, sockets and removed server-to-client RPC. Use the single Canon version and migrate feature imports as documented
-   in the [package migration guide](../packages/fastapi-canon/docs/package-migration.md).
+   in the [package migration guide](package-migration.md).
 3. Regenerate committed SDKs and run the application's mounting, authentication,
    Dishka, subscription and voice/media tests.
 
