@@ -1,8 +1,9 @@
 # Canonical errors
 
 Define a domain exception once, map its public problem once, and declare that
-same `Error` on HTTP, SSE, and RPC handlers. Canon 0.10.0 prepares these bindings
-and their Python/TypeScript generated-client support; it is not a publication.
+same `Error` on HTTP, SSE, and RPC handlers. These bindings and their
+Python/TypeScript generated-client support are implemented in Canon. See
+[release status](../../../docs/releases.md) for published and prepared versions.
 The complete executable example is in
 [`examples/canonical_errors/app.py`](../examples/canonical_errors/app.py).
 
@@ -183,6 +184,14 @@ SDK; catch the exported error classes instead of modifying generated registries.
 Python stream problems are validated against the operation's declared models.
 TypeScript follows the generator's existing static model validation policy;
 standard problem members and stream control messages are checked at runtime.
+
+The [source checker](error-checking.md) can additionally find missing HTTP
+registry mappings (`CAN002`) and `raises=` entries (`CAN001`) along supported
+explicit source paths. Run `fastapi-canon check errors src --strict` in CI;
+add `--require-complete` to fail for unresolved paths or an empty supported scan.
+It reports incomplete analysis as `CAN003` and currently excludes SSE/RPC/WebRTC
+handlers. Runtime mapping, document validation and source analysis cover distinct
+parts of the contract.
 
 ```typescript
 import { createClient, ProblemError } from "./generated";

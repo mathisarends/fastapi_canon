@@ -4,10 +4,12 @@ Run the source checker to find application exceptions missing from a direct
 `CanonRouter` operation's `raises=` declaration:
 
 ```console
-python -m fastapi_canon.check_error_contracts src
+fastapi-canon check errors src
 ```
 
 Pass Python import roots: for `src/app/features/...`, use `src`, not `src/app`.
+The equivalent module command is
+`python -m fastapi_canon.check_error_contracts src`.
 Multiple roots are accepted when they contain different modules. In this
 workspace, run:
 
@@ -61,6 +63,17 @@ their types and constants, and the report objects are private implementation det
 the documented JSON fields are the machine-readable interface.
 
 ## Findings and CI
+
+The [README walkthrough](../../../README.md#check-that-errors-are-mapped-and-declared)
+provides a minimal example: `get_project` calls `require_project`, which raises
+`ProjectMissing`. Remove the operation's `raises=[project_missing]` and run
+`fastapi-canon check errors src --strict --require-complete`: it reports `CAN001`
+and exits one. Remove that exception's registry mapping instead and it reports
+`CAN002`. Restore both to obtain zero gaps for that supported HTTP path.
+
+The stream and RPC additions in the walkthrough remain outside this check's
+scope. A successful check covers supported HTTP source paths, not all transports
+or arbitrary runtime exceptions.
 
 Given a service method that raises `TaskNotFound`, an endpoint calling that method
 must declare its mapped `task_not_found` error, either locally or on its router.
