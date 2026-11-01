@@ -2,7 +2,7 @@
 
 All notable changes to `fastapi-canon` are documented in this file.
 
-## 0.11.0 - Unreleased
+## Unreleased
 
 ### Development
 
@@ -11,6 +11,11 @@ All notable changes to `fastapi-canon` are documented in this file.
   projects. Run development commands from the root after `uv sync --frozen
   --all-groups` and `pnpm install --frozen-lockfile --ignore-scripts`. Public imports,
   extras and wire contracts are unchanged.
+
+## 0.11.0 - 2026-11-01
+
+This release replaces provider-level telemetry declarations with feature-owned
+instrumentation and includes the generated Python RPC client fix below.
 
 ### Breaking changes
 
@@ -32,6 +37,16 @@ All notable changes to `fastapi-canon` are documented in this file.
   decorators allow one feature/provider instance to be reused by enabled and
   disabled applications without sharing instrumentation state.
 
+### Changed
+
+- Expand the README and guides with core HTTP contracts, generated domain SDKs,
+  shared problem handling and source error-contract checking examples.
+- Workspace TypeScript tooling uses the root-pinned pnpm version and one shared
+  `pnpm-lock.yaml`. For source development, use Node.js 24 and run
+  `pnpm install --frozen-lockfile --ignore-scripts` at the workspace root; replace
+  package-local npm commands with the pnpm commands in the contributing guide.
+  Published Python runtime dependencies are unchanged.
+
 ### Fixed
 
 - Generated Python RPC clients keep their undocumented error dispatch tables
@@ -39,6 +54,8 @@ All notable changes to `fastapi-canon` are documented in this file.
   Regenerate clients to remove Smelt SMT319/SMT320 findings. Declare application
   errors in the service contract; dispatch tables are not consumer extension
   points. Error class exports and wire behavior are unchanged.
+- The publication job installs the shared TypeScript tooling before verifying
+  public-index installs, so generated-client compilation can run after upload.
 
 ## 0.10.0 - 2026-11-01
 

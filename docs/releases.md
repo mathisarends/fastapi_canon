@@ -12,9 +12,25 @@ historical runs, tags and assets linked below remain in their original repositor
 
 ## Current versions
 
-The source tree prepares Canon 0.11.0 (unreleased) for the breaking telemetry
-declaration migration. See the [0.11.0 changelog](../CHANGELOG.md#0110---unreleased).
-The published release below remains unchanged.
+Canon **0.11.0** was published on 2026-11-01 from
+[verified source `2773b56`](https://github.com/mathisarends/fastapi_canon/commit/2773b56498fad05ac9e1f1163ee33241b6d70eff),
+after [exact-source CI](https://github.com/mathisarends/fastapi_canon/actions/runs/41346976457)
+and the [release dry run](https://github.com/mathisarends/fastapi_canon/actions/runs/41347623801).
+The [publication run](https://github.com/mathisarends/fastapi_canon/actions/runs/41348067349)
+passed both eleven-combination wheel matrices, installed CLI/client checks and
+all six public-index installation combinations. Its GitHub finalization job was
+rerun once on the original run after the PyPI API briefly reported an incomplete
+release; no files were rebuilt or replaced. The
+[GitHub Release](https://github.com/mathisarends/fastapi_canon/releases/tag/fastapi-canon-v0.11.0)
+contains the original wheel, sdist and manifest; its tag points to the verified source.
+Downloaded GitHub assets, PyPI hashes, the manifest and changelog-derived release
+notes agree.
+
+This release replaces `observe()` with feature-owned `instrument()` declarations
+and includes the generated Python RPC client fix, shared pnpm tooling and expanded
+core/SDK guides.
+See the [0.11.0 changelog](../CHANGELOG.md#0110---2026-11-01)
+for migration steps, including client regeneration.
 
 Canon 0.10.0 was published on 2026-11-01 from
 [verified source `4d9ce18`](https://github.com/mathisarends/fastapi_canon/commit/4d9ce1842b350a9bf867d512cc89aafc4b44d53b),
@@ -66,7 +82,7 @@ assets are verified.
 
 | Package | Version | Migration |
 | --- | --- | --- |
-| Canon | 0.10.0 | Replace the separate transport distributions with Canon extras, update imports/CLI paths, and regenerate clients. Follow the [0.10.0 notes](../CHANGELOG.md#0100---2026-11-01) and included [0.9.0 migrations](../CHANGELOG.md#090---unreleased). |
+| Canon | 0.11.0 | Move provider-level `observe()` declarations to feature-owned `instrument()` declarations and regenerate Python RPC clients. Follow the [0.11.0 notes](../CHANGELOG.md#0110---2026-11-01). Upgrades from the separate distributions also require the [0.10.0 notes](../CHANGELOG.md#0100---2026-11-01) and included [0.9.0 migrations](../CHANGELOG.md#090---unreleased). |
 | WebRTC | 0.3.0 | Use public enum members, keyword-only engine/channel options and `DescriptionType`; handle lazy type aliases in introspection tools. See the [migration notes](history/fastapi-webrtc.md#030---2026-10-24). |
 | Streams | 0.5.0 | Regenerate clients. SDK-owned generated Python clients bound the connect time to 10 seconds; pass `RequestOptions(timeout=None)` or inject `httpx.AsyncClient(timeout=None)` to keep it unbounded. See the [Streams 0.5.0 notes](history/fastapi-streams.md#050---2026-10-25). |
 | RPCKit | 0.4.1 | None; wire output and generated clients are unchanged apart from the manifest generator version. See the [RPCKit 0.4.1 notes](history/fastapi-rpckit.md#041---2026-10-25). |

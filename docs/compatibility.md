@@ -4,10 +4,18 @@
 
 | Package | Published |
 | --- | --- |
-| `fastapi-canon` | 0.10.0 |
+| `fastapi-canon` | 0.11.0 |
 | `fastapi-streams` | 0.5.0 |
 | `fastapi-rpckit` | 0.4.1 |
 | `fastapi-webrtc` | 0.3.0 |
+
+**Canon 0.11.0** was published on 2026-11-01 with the same Python and runtime
+dependency ranges as 0.10.0. Its telemetry API requires migration from
+provider-level `observe()` to `Feature(instrumentation=[instrument(...)])`.
+Regenerate Python RPC clients to receive the private dispatch-table fix; their
+error exports and wire behavior are unchanged. See the
+[0.11.0 migration notes](../CHANGELOG.md#0110---2026-11-01)
+and [verified publication record](releases.md#current-versions).
 
 Published versions and assets are linked in the [README](../README.md#current-releases).
 Canon 0.10.0 was published on 2026-11-01. It includes the unpublished 0.9.0
@@ -47,6 +55,16 @@ Canon core, each optional extra and both extras together. A fresh Windows/Python
 HTTP/SSE/RPC/WebRTC routing and generated RPC SDK execution and compilation.
 
 ## Verification scope
+
+The published 0.11.0 source passed exact-commit CI on Linux/Python 3.12–3.14 and
+Windows/Python 3.14, including workspace lint, type, test and generated-client
+gates. Chromium/aiortc checks passed on Linux/Python 3.14. The original release
+wheel passed all eleven feature/tool combinations with current dependencies on
+Python 3.14 and minimum direct dependencies on Python 3.12, plus installed
+SSE/WebRTC CLI checks. All six public-index installation combinations passed
+before GitHub finalization. PyPI hashes, downloaded GitHub assets, the original
+manifest, release notes and tag source are verified; see the
+[publication record](releases.md#current-versions).
 
 The published 0.10.0 source passed exact-commit CI on Linux/Python 3.12–3.14 and
 Windows/Python 3.14, including the repository lint, type, test and generated-client
