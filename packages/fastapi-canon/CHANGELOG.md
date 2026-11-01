@@ -2,7 +2,27 @@
 
 All notable changes to `fastapi-canon` are documented in this file.
 
-## Unreleased
+## 0.11.0 - Unreleased
+
+### Breaking changes
+
+- Remove `fastapi_canon.integrations.opentelemetry.observe` without an alias.
+  Replace Provider class declarations with `Feature(instrumentation=[
+  instrument(Port, expected=(ExpectedError,)), ...])`, importing `instrument`
+  from the same integration. Remove telemetry-only providers/features; spans now
+  use the feature declaring their instrumentation as `canon.feature`. For named
+  Dishka bindings, pass `component="name"` to `instrument`. Composition creates
+  decorators only when telemetry is enabled; the original providers remain
+  usable directly in Dishka containers.
+
+### Added
+
+- Instrument asynchronous `__call__` use cases, including inherited methods,
+  with the same span, metric, exclusion, exception-privacy and cancellation
+  contracts as public async port methods. Span names use `UseCase.__call__`.
+- Immutable instrumentation declarations and application-local generated
+  decorators allow one feature/provider instance to be reused by enabled and
+  disabled applications without sharing instrumentation state.
 
 ### Fixed
 

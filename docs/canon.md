@@ -61,14 +61,14 @@ represent another PyPI distribution.
 | SSE with Canon HTTP contracts | `fastapi_canon.integrations.sse.CanonStreamRouter` | [SSE contracts](../packages/fastapi-canon/docs/streams.md) |
 | WebSocket RPC, messages and binary streams | `fastapi_canon.integrations.websockets.RpcChannel`, `RpcService`, `RpcRoutes`, `RpcSocket` | [WebSockets](../packages/fastapi-rpckit/docs/README.md) |
 | WebRTC with Canon admission errors | `fastapi_canon.integrations.webrtc.CanonWebRtcRouter`, `Session` | [WebRTC admission](../packages/fastapi-canon/docs/webrtc.md) |
-| Telemetry declarations | `fastapi_canon.integrations.opentelemetry.Telemetry`, `observe` | [Telemetry](../packages/fastapi-canon/docs/telemetry.md) |
+| Telemetry declarations | `fastapi_canon.integrations.opentelemetry.Telemetry`, `instrument` | [Telemetry](../packages/fastapi-canon/docs/telemetry.md) |
 | Isolated trace assertions | `fastapi_canon.testing.telemetry.SpanCapture` | [Telemetry testing](../packages/fastapi-canon/docs/telemetry.md) |
 
 Typical application imports are explicit:
 
 ```python
 from fastapi_canon import CanonRouter, Composition, Feature
-from fastapi_canon.integrations.opentelemetry import Telemetry, observe
+from fastapi_canon.integrations.opentelemetry import Telemetry, instrument
 from fastapi_canon.integrations.sse import CanonStreamRouter
 from fastapi_canon.integrations.websockets import RpcChannel, RpcRoutes, RpcService
 from fastapi_canon.integrations.webrtc import CanonWebRtcRouter, Session
@@ -97,8 +97,10 @@ response or connection is accepted. Once streaming or protocol communication
 starts, failures follow that transport's declared protocol. JSON-RPC envelopes,
 raw/binary sockets and `fastapi-webrtc.v1` retain their existing wire behavior.
 
-Telemetry is explicit at the composition boundary. `observe(Port)` is declared
-beside its Dishka binding. `Telemetry.rpc_middleware()` explicitly bridges the
+Telemetry is explicit at the composition boundary. `instrument(Port)` is declared
+in `Feature.instrumentation`, including for async `__call__` use cases. Composition
+creates its Dishka decorators only when telemetry is enabled, leaving providers
+usable independently. `Telemetry.rpc_middleware()` explicitly bridges the
 selected providers into a WebSocket service. Optional features do not create
 exporters or own application SDK providers.
 

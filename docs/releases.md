@@ -11,6 +11,10 @@ historical runs, tags and assets linked below remain in their original repositor
 
 ## Current versions
 
+The source tree prepares Canon 0.11.0 (unreleased) for the breaking telemetry
+declaration migration. See the [0.11.0 changelog](../packages/fastapi-canon/CHANGELOG.md#0110---unreleased).
+The published release below remains unchanged.
+
 Canon 0.10.0 was published on 2026-11-01 from
 [verified source `4d9ce18`](https://github.com/mathisarends/fastapi_canon/commit/4d9ce1842b350a9bf867d512cc89aafc4b44d53b),
 after [exact-source CI](https://github.com/mathisarends/fastapi_canon/actions/runs/41311732023)

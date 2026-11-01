@@ -4,10 +4,11 @@ import sys
 import textwrap
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
+from dataclasses import FrozenInstanceError
 from uuid import UUID, uuid4
 
 import pytest
-from dishka import FromDishka, Provider, Scope, provide
+from dishka import FromDishka, Provider, Scope, make_async_container, provide
 from dishka.integrations.fastapi import inject
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
@@ -17,6 +18,7 @@ from opentelemetry.sdk.metrics.export import Histogram, InMemoryMetricReader
 from opentelemetry.trace import SpanKind, StatusCode
 from starlette.types import Scope as ASGIScope
 
+import fastapi_canon.integrations.opentelemetry as telemetry_api
 from fastapi_canon import (
     CanonRouter,
     Composition,
@@ -25,7 +27,7 @@ from fastapi_canon import (
     FeatureConfigurationError,
 )
 from fastapi_canon.error import Error, ErrorRegistry
-from fastapi_canon.integrations.opentelemetry import Telemetry, observe
+from fastapi_canon.integrations.opentelemetry import Telemetry, instrument
 from fastapi_canon.testing.telemetry import SpanCapture
 
 
@@ -63,6 +65,51 @@ class Service:
         return await self.repository.get(key, fail=fail)
 
 
+class CallableServiceBase:
+    def __init__(self, repository: Repository) -> None:
+        self.repository = repository
+
+    async def __call__(self, key: UUID, fail: str = "") -> str:
+        return await self.repository.get(key, fail=fail)
+
+
+class CallableService(CallableServiceBase):
+    pass
+
+
+def callable_application(options: Telemetry) -> FastAPI:
+    class Dependencies(Provider):
+        repository = provide(MemoryRepository, provides=Repository, scope=Scope.REQUEST)
+        service = provide(CallableService, scope=Scope.REQUEST)
+
+    router = CanonRouter(
+        error_registry=ErrorRegistry(
+            type_base="https://example.test/problems",
+            errors=[Error(Missing, status=404, code="missing", title="Missing")],
+        )
+    )
+
+    @router.get("/callable/{key}")
+    @inject
+    async def get_item(
+        key: UUID, service: FromDishka[CallableService], fail: str = ""
+    ) -> str:
+        return await service(key, fail=fail)
+
+    return Composition(
+        Feature(
+            name="items",
+            providers=[Dependencies],
+            routers=[router],
+            instrumentation=[
+                instrument(Repository, expected=(Missing,)),
+                instrument(CallableService, expected=(Missing,)),
+            ],
+        ),
+        telemetry=options,
+    ).apply(FastAPI())
+
+
 def application(options: Telemetry | None, *, expected: bool = True) -> FastAPI:
     class Dependencies(Provider):
         @provide(scope=Scope.REQUEST)
@@ -72,10 +119,6 @@ def application(options: Telemetry | None, *, expected: bool = True) -> FastAPI:
             closed.append(repository)
 
         service = provide(Service, scope=Scope.REQUEST)
-        repository_telemetry = observe(
-            Repository, expected=[Missing] if expected else []
-        )
-        service_telemetry = observe(Service, expected=[Missing] if expected else [])
 
     closed: list[Repository] = []
     errors = ErrorRegistry(
@@ -101,6 +144,10 @@ def application(options: Telemetry | None, *, expected: bool = True) -> FastAPI:
         name="items",
         providers=[Dependencies],
         routers=[router],
+        instrumentation=[
+            instrument(Repository, expected=[Missing] if expected else []),
+            instrument(Service, expected=[Missing] if expected else []),
+        ],
     )
     composition = Composition(
         feature,
@@ -285,6 +332,172 @@ def test_disabled_metadata_keeps_original_instances() -> None:
     assert isinstance(app.state.closed[0], MemoryRepository)
 
 
+def test_instrumentation_is_immutable_and_copied_by_feature() -> None:
+    expected: list[type[Exception]] = [Missing]
+    spec = instrument(Repository, expected=expected)
+    declarations = [spec]
+    feature = Feature(name="items", instrumentation=declarations)
+    expected.clear()
+    declarations.clear()
+
+    assert spec.expected == (Missing,)
+    assert feature.instrumentation == (spec,)
+    with pytest.raises(FrozenInstanceError):
+        spec.component = "other"  # type: ignore[misc]
+    assert not hasattr(telemetry_api, "observe")
+
+
+def test_feature_reuse_keeps_providers_and_app_telemetry_isolated() -> None:
+    original = MemoryRepository()
+    provider = Provider()
+    provider.provide(lambda: original, provides=Repository, scope=Scope.APP)
+    feature = Feature(
+        name="items", providers=[provider], instrumentation=[instrument(Repository)]
+    )
+
+    with SpanCapture() as first, SpanCapture() as second:
+        first_app = Composition(
+            feature, telemetry=Telemetry(tracer_provider=first.provider)
+        ).apply(FastAPI())
+        second_app = Composition(
+            feature, telemetry=Telemetry(tracer_provider=second.provider)
+        ).apply(FastAPI())
+        disabled = Composition(feature).apply(FastAPI())
+
+        async def resolve() -> None:
+            direct = make_async_container(provider)
+            containers = (
+                first_app.state.dishka_container,
+                second_app.state.dishka_container,
+                disabled.state.dishka_container,
+                direct,
+            )
+            try:
+                first_repository = await containers[0].get(Repository)
+                second_repository = await containers[1].get(Repository)
+                assert first_repository is not second_repository
+                key = uuid4()
+                assert await first_repository.get(key) == str(key)
+                assert len(first.spans) == 1 and not second.spans
+                assert await second_repository.get(key) == str(key)
+                assert await containers[2].get(Repository) is original
+                assert await direct.get(Repository) is original
+                assert not provider.decorators
+            finally:
+                for container in containers:
+                    await container.close()
+
+        asyncio.run(asyncio.wait_for(resolve(), timeout=5))
+        first_span = first.one("Repository.get")
+        second_span = second.one("Repository.get")
+        assert first_span.attributes is not None
+        assert second_span.attributes is not None
+        assert first_span.attributes["canon.feature"] == "items"
+        assert second_span.attributes["canon.feature"] == "items"
+        assert len(first.spans) == len(second.spans) == 1
+
+
+def test_inherited_async_call_preserves_result_and_parentage() -> None:
+    with SpanCapture() as capture:
+        app = callable_application(Telemetry(tracer_provider=capture.provider))
+        key = uuid4()
+        with TestClient(app) as client:
+            response = client.get(f"/callable/{key}")
+        assert response.status_code == 200 and response.json() == str(key)
+        capture.assert_tree(
+            "GET /callable/{key}",
+            [("fastapi.endpoint", [("CallableService.__call__", ["Repository.get"])])],
+        )
+        span = capture.one("CallableService.__call__")
+        assert span.attributes is not None
+        assert span.attributes["canon.feature"] == "items"
+        assert span.attributes["code.function.name"] == "CallableService.__call__"
+
+
+@pytest.mark.parametrize(
+    ("fail", "status", "event", "span_status"),
+    [
+        ("expected", 404, "canon.port.expected_exception", StatusCode.UNSET),
+        ("unexpected", 500, "exception", StatusCode.ERROR),
+    ],
+)
+def test_async_call_keeps_exception_classification_and_privacy(
+    fail: str, status: int, event: str, span_status: StatusCode
+) -> None:
+    with SpanCapture() as capture:
+        app = callable_application(Telemetry(tracer_provider=capture.provider))
+        with TestClient(app, raise_server_exceptions=False) as client:
+            assert client.get(f"/callable/{uuid4()}?fail={fail}").status_code == status
+        span = capture.one("CallableService.__call__")
+        assert span.status.status_code is span_status
+        assert len(span.events) == 1 and span.events[0].name == event
+        assert span.events[0].attributes == {
+            "exception.type": "Missing" if fail == "expected" else "ValueError"
+        }
+        assert "private" not in str(span.attributes) + str(span.events)
+        assert span.attributes is not None
+        assert ("error.type" in span.attributes) == (fail == "unexpected")
+
+
+def test_async_call_cancellation_propagates_without_error() -> None:
+    with SpanCapture() as capture:
+        app = callable_application(Telemetry(tracer_provider=capture.provider))
+
+        async def cancel() -> None:
+            async with app.state.dishka_container() as request:
+                service = await request.get(CallableService)
+                with pytest.raises(asyncio.CancelledError):
+                    await service(uuid4(), fail="cancel")
+
+        with TestClient(app) as client:
+            assert client.portal is not None
+            client.portal.call(asyncio.wait_for, cancel(), 5)
+        span = capture.one("CallableService.__call__")
+        assert span.status.status_code is StatusCode.UNSET and not span.events
+
+
+@pytest.mark.parametrize("exclude", [False, True])
+def test_async_call_metrics_only_and_request_exclusion(exclude: bool) -> None:
+    reader = InMemoryMetricReader()
+    meter = MeterProvider(metric_readers=[reader])
+    try:
+        with SpanCapture() as capture:
+            app = callable_application(
+                Telemetry(
+                    tracer_provider=capture.provider,
+                    meter_provider=meter,
+                    tracing=False,
+                    metrics=False,
+                    logs=False,
+                    port_metrics=True,
+                    exclude=lambda scope: exclude,
+                )
+            )
+            with TestClient(app) as client:
+                assert client.get(f"/callable/{uuid4()}").status_code == 200
+            assert not capture.spans
+            data = reader.get_metrics_data()
+            if exclude:
+                assert data is None
+            else:
+                assert data is not None
+                histogram = next(
+                    metric
+                    for resource in data.resource_metrics
+                    for scope in resource.scope_metrics
+                    for metric in scope.metrics
+                    if metric.name == "canon.port.duration"
+                )
+                assert isinstance(histogram.data, Histogram)
+                assert {
+                    point.attributes["code.function.name"]: point.count
+                    for point in histogram.data.data_points
+                    if point.attributes is not None
+                } == {"CallableService.__call__": 1, "Repository.get": 1}
+    finally:
+        meter.shutdown()
+
+
 def test_composition_guards(monkeypatch: pytest.MonkeyPatch) -> None:
     app = FastAPI()
     monkeypatch.delattr(app, "_telemetry")
@@ -303,28 +516,46 @@ def test_composition_guards(monkeypatch: pytest.MonkeyPatch) -> None:
         Composition(telemetry=first).apply(started)
 
 
-def test_invalid_observations_and_duplicate_registration() -> None:
+def test_invalid_instrumentation() -> None:
     class SyncPort:
         def run(self) -> str:
             return "sync"
 
     with pytest.raises(FeatureConfigurationError, match="public async methods"):
-        observe(SyncPort)
+        instrument(SyncPort)
     with pytest.raises(FeatureConfigurationError, match="port must be a class"):
-        observe(object())  # type: ignore[arg-type]
+        instrument(object())  # type: ignore[arg-type]
     with pytest.raises(FeatureConfigurationError, match="Exception subclasses"):
-        observe(Repository, expected=[str])  # type: ignore[list-item]
+        instrument(Repository, expected=[str])  # type: ignore[list-item]
+    with pytest.raises(FeatureConfigurationError, match="component must be a string"):
+        instrument(Repository, component=None)  # type: ignore[arg-type]
+    with pytest.raises(
+        FeatureConfigurationError, match=r"instrumentation.*Instrumentation"
+    ):
+        Feature(name="invalid", instrumentation=[Repository])  # type: ignore[list-item]
 
-    class Duplicate(Provider):
-        repository = provide(MemoryRepository, provides=Repository, scope=Scope.REQUEST)
-        first = observe(Repository)
-        second = observe(Repository)
 
+@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize("across_features", [False, True])
+def test_duplicate_instrumentation_is_rejected(
+    enabled: bool, across_features: bool
+) -> None:
+    features = (
+        (
+            Feature(name="first", instrumentation=[instrument(Repository)]),
+            Feature(name="second", instrumentation=[instrument(Repository)]),
+        )
+        if across_features
+        else (
+            Feature(
+                name="duplicate",
+                instrumentation=[instrument(Repository), instrument(Repository)],
+            ),
+        )
+    )
     app = FastAPI()
-    with pytest.raises(FeatureConfigurationError, match="observed more than once"):
-        Composition(
-            Feature(name="duplicate", providers=[Duplicate]), telemetry=Telemetry()
-        ).apply(app)
+    with pytest.raises(FeatureConfigurationError, match="instrumented more than once"):
+        Composition(*features, telemetry=Telemetry() if enabled else None).apply(app)
     assert not app.user_middleware
 
 
@@ -387,11 +618,13 @@ def test_provider_scopes_caching_and_original_cleanup() -> None:
             yield original
             closed.append(original)
 
-        repository_telemetry = observe(Repository)
-
     with SpanCapture() as capture:
         app = Composition(
-            Feature(name="app", providers=[Dependencies]),
+            Feature(
+                name="app",
+                providers=[Dependencies],
+                instrumentation=[instrument(Repository)],
+            ),
             telemetry=Telemetry(tracer_provider=capture.provider),
         ).apply(FastAPI())
 
@@ -400,7 +633,7 @@ def test_provider_scopes_caching_and_original_cleanup() -> None:
             first = await container.get(Repository)
             assert await container.get(Repository) is first
             await first.get(uuid4())
-            assert first is not first._instance
+            assert type(first) is not MemoryRepository
 
         with TestClient(app) as client:
             assert client.portal is not None
@@ -517,12 +750,19 @@ def test_native_auto_export_is_disabled(monkeypatch: pytest.MonkeyPatch) -> None
 def test_named_components_keep_feature_ownership() -> None:
     class Dependencies(Provider):
         repository = provide(MemoryRepository, provides=Repository, scope=Scope.APP)
-        repository_telemetry = observe(Repository)
 
     with SpanCapture() as capture:
         app = Composition(
-            Feature(name="default", providers=[Dependencies]),
-            Feature(name="named", providers=[lambda: Dependencies(component="named")]),
+            Feature(
+                name="default",
+                providers=[Dependencies],
+                instrumentation=[instrument(Repository)],
+            ),
+            Feature(
+                name="named",
+                providers=[lambda: Dependencies(component="named")],
+                instrumentation=[instrument(Repository, component="named")],
+            ),
             telemetry=Telemetry(tracer_provider=capture.provider),
         ).apply(FastAPI())
 
@@ -556,13 +796,14 @@ def test_declarations_and_disabled_composition_import_no_otel_runtime() -> None:
         for name in tuple(sys.modules):
             if name.startswith("opentelemetry"):
                 del sys.modules[name]
-        from fastapi_canon.integrations.opentelemetry import Telemetry, observe
+        from fastapi_canon.integrations.opentelemetry import Telemetry, instrument
         class Port:
             async def run(self): pass
         class Dependencies(Provider):
             port = provide(Port, scope=Scope.REQUEST)
-            port_telemetry = observe(Port)
-        Composition(Feature(name="test", providers=[Dependencies])).apply(FastAPI())
+        Composition(Feature(
+            name="test", providers=[Dependencies], instrumentation=[instrument(Port)]
+        )).apply(FastAPI())
         assert not any(name.startswith("opentelemetry") for name in sys.modules)
         try:
             Composition(telemetry=Telemetry()).apply(FastAPI())
